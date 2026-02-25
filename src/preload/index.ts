@@ -1,0 +1,303 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import { electronAPI } from '@electron-toolkit/preload'
+
+const renameAPI = {
+  renameFiles: (files: string[], mode: string, options: any) => {
+    return ipcRenderer.invoke('rename-files', { files, mode, options })
+  },
+  getFileInfo: (filePaths: string[]) => {
+    return ipcRenderer.invoke('get-file-info', filePaths)
+  },
+  selectFilesAndFolders: () => {
+    return ipcRenderer.invoke('select-files-folders')
+  }
+}
+
+const capswriterAPI = {
+  startServer: () => {
+    return ipcRenderer.invoke('capswriter-start-server')
+  },
+  startClient: () => {
+    return ipcRenderer.invoke('capswriter-start-client')
+  },
+  stopServer: () => {
+    return ipcRenderer.invoke('capswriter-stop-server')
+  },
+  stopClient: () => {
+    return ipcRenderer.invoke('capswriter-stop-client')
+  },
+  getStatus: () => {
+    return ipcRenderer.invoke('capswriter-get-status')
+  },
+  startAll: () => {
+    return ipcRenderer.invoke('capswriter-start-all')
+  },
+  stopAll: () => {
+    return ipcRenderer.invoke('capswriter-stop-all')
+  }
+}
+
+const quickInstallerAPI = {
+  installSoftware: (softwareList: { id: string; name: string; source: string }[]) => {
+    return ipcRenderer.invoke('quick-installer-install', softwareList)
+  },
+  onInstallLog: (callback: (data: { type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'; message: string }) => void) => {
+    const handler = (_event: any, data: { type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'; message: string }) => callback(data)
+    ipcRenderer.on('quick-installer-log', handler)
+    return () => {
+      ipcRenderer.removeListener('quick-installer-log', handler)
+    }
+  },
+  onInstallProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => {
+    const handler = (_event: any, data: { current: number; total: number; currentName: string }) => callback(data)
+    ipcRenderer.on('quick-installer-progress', handler)
+    return () => {
+      ipcRenderer.removeListener('quick-installer-progress', handler)
+    }
+  },
+  onInstallComplete: (callback: (data: { success: boolean; message: string }) => void) => {
+    const handler = (_event: any, data: { success: boolean; message: string }) => callback(data)
+    ipcRenderer.on('quick-installer-complete', handler)
+    return () => {
+      ipcRenderer.removeListener('quick-installer-complete', handler)
+    }
+  }
+}
+
+const autoClickerAPI = {
+  start: (config: { interval: number; button: string }) => {
+    return ipcRenderer.invoke('autoclicker-start', config)
+  },
+  stop: () => {
+    return ipcRenderer.invoke('autoclicker-stop')
+  },
+  getStatus: () => {
+    return ipcRenderer.invoke('autoclicker-status')
+  }
+}
+
+const autoStartAPI = {
+  getStatus: () => {
+    return ipcRenderer.invoke('autostart-get-status')
+  },
+  set: (enabled: boolean) => {
+    return ipcRenderer.invoke('autostart-set', enabled)
+  }
+}
+
+const systemConfigAPI = {
+  getSystemConfig: () => {
+    return ipcRenderer.invoke('get-system-config')
+  }
+}
+
+const screenSaverAPI = {
+  start: () => {
+    return ipcRenderer.invoke('start-screen-saver')
+  }
+}
+
+const webActivatorAPI = {
+  getWindowList: () => {
+    return ipcRenderer.invoke('web-activator-get-window-list')
+  },
+  toggleWindow: (config: { titlePattern: string; browserType?: string; shortcut?: string }) => {
+    return ipcRenderer.invoke('web-activator-toggle-window', config)
+  },
+  registerShortcuts: (configs: Array<{ id: string; name: string; titlePattern: string; browserType?: string; shortcut: string }>) => {
+    return ipcRenderer.invoke('web-activator-register-shortcuts', configs)
+  },
+  onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => {
+    const handler = (_event: any, data: { id: string; action: string }) => callback(data)
+    ipcRenderer.on('web-activator-shortcut-triggered', handler)
+    return () => {
+      ipcRenderer.removeListener('web-activator-shortcut-triggered', handler)
+    }
+  }
+}
+
+interface ClipboardItem {
+  id: string
+  type: 'text' | 'image'
+  content: string
+  preview?: string
+  timestamp: number
+  pinned: boolean
+}
+
+const clipboardAPI = {
+  getHistory: () => {
+    ipcRenderer.send('get-clipboard-history')
+  },
+  deleteItem: (id: string) => {
+    ipcRenderer.send('delete-clipboard-item', id)
+  },
+  togglePin: (id: string) => {
+    ipcRenderer.send('toggle-clipboard-pin', id)
+  },
+  clearHistory: () => {
+    ipcRenderer.send('clear-clipboard-history')
+  },
+  copyImage: (dataUrl: string) => {
+    ipcRenderer.send('copy-image-to-clipboard', dataUrl)
+  },
+  onChange: (callback: (item: ClipboardItem) => void) => {
+    const handler = (_event: any, item: ClipboardItem) => callback(item)
+    ipcRenderer.on('clipboard-change', handler)
+    return () => {
+      ipcRenderer.removeListener('clipboard-change', handler)
+    }
+  },
+  onHistory: (callback: (history: ClipboardItem[]) => void) => {
+    const handler = (_event: any, history: ClipboardItem[]) => callback(history)
+    ipcRenderer.on('clipboard-history', handler)
+    return () => {
+      ipcRenderer.removeListener('clipboard-history', handler)
+    }
+  }
+}
+
+const screenRecorderAPI = {
+  selectOutput: () => {
+    return ipcRenderer.invoke('screen-recorder-select-output')
+  },
+  startRecording: (config: { outputPath: string; format: string; fps?: number; quality?: string }) => {
+    return ipcRenderer.invoke('screen-recorder-start', config)
+  },
+  stopRecording: () => {
+    return ipcRenderer.invoke('screen-recorder-stop')
+  },
+  getStatus: () => {
+    return ipcRenderer.invoke('screen-recorder-status')
+  },
+  onStarted: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('screen-recorder-started', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-started', handler)
+    }
+  },
+  onProgress: (callback: (data: { timemark: string }) => void) => {
+    const handler = (_event: any, data: { timemark: string }) => callback(data)
+    ipcRenderer.on('screen-recorder-progress', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-progress', handler)
+    }
+  },
+  onStopped: (callback: (data: { success: boolean; outputPath?: string; error?: string }) => void) => {
+    const handler = (_event: any, data: { success: boolean; outputPath?: string; error?: string }) => callback(data)
+    ipcRenderer.on('screen-recorder-stopped', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-stopped', handler)
+    }
+  }
+}
+
+const windowAPI = {
+  minimize: () => {
+    return ipcRenderer.invoke('window-minimize')
+  },
+  maximize: () => {
+    return ipcRenderer.invoke('window-maximize')
+  },
+  close: () => {
+    return ipcRenderer.invoke('window-close')
+  },
+  isMaximized: () => {
+    return ipcRenderer.invoke('window-is-maximized')
+  }
+}
+
+const floatBallAPI = {
+  move: (x: number, y: number) => {
+    ipcRenderer.send('floatball-move', { x, y })
+  },
+  resize: (width: number, height: number) => {
+    ipcRenderer.send('floatball-resize', { width, height })
+  },
+  startDrag: (filePath: string) => {
+    ipcRenderer.send('ondragstart', filePath)
+  }
+}
+
+const screenOverlayAPI = {
+  start: () => {
+    return ipcRenderer.invoke('screen-overlay-start')
+  },
+  close: () => {
+    return ipcRenderer.invoke('screen-overlay-close')
+  }
+}
+
+const colorPickerAPI = {
+  start: () => {
+    return ipcRenderer.invoke('color-picker:start')
+  },
+  stop: () => {
+    return ipcRenderer.invoke('color-picker:stop')
+  },
+  onColor: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
+    const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
+    ipcRenderer.on('color-picker:color', handler)
+    return () => {
+      ipcRenderer.removeListener('color-picker:color', handler)
+    }
+  },
+  onSelected: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
+    const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
+    ipcRenderer.on('color-picker:selected', handler)
+    return () => {
+      ipcRenderer.removeListener('color-picker:selected', handler)
+    }
+  },
+  onCanceled: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('color-picker:canceled', handler)
+    return () => {
+      ipcRenderer.removeListener('color-picker:canceled', handler)
+    }
+  }
+}
+
+if (process.contextIsolated) {
+  try {
+    contextBridge.exposeInMainWorld('electron', {
+      ...electronAPI,
+      rename: renameAPI,
+      capswriter: capswriterAPI,
+      quickInstaller: quickInstallerAPI,
+      autoClicker: autoClickerAPI,
+      autoStart: autoStartAPI,
+      systemConfig: systemConfigAPI,
+      screenSaver: screenSaverAPI,
+      webActivator: webActivatorAPI,
+      clipboard: clipboardAPI,
+      screenRecorder: screenRecorderAPI,
+      window: windowAPI,
+      floatBall: floatBallAPI,
+      screenOverlay: screenOverlayAPI,
+      colorPicker: colorPickerAPI
+    })
+  } catch (error) {
+    console.error(error)
+  }
+} else {
+  // @ts-ignore
+  window.electron = {
+    ...electronAPI,
+    rename: renameAPI,
+    capswriter: capswriterAPI,
+    quickInstaller: quickInstallerAPI,
+    autoClicker: autoClickerAPI,
+    autoStart: autoStartAPI,
+    systemConfig: systemConfigAPI,
+    screenSaver: screenSaverAPI,
+    webActivator: webActivatorAPI,
+    clipboard: clipboardAPI,
+    screenRecorder: screenRecorderAPI,
+    window: windowAPI,
+    floatBall: floatBallAPI,
+    screenOverlay: screenOverlayAPI,
+    colorPicker: colorPickerAPI
+  }
+}

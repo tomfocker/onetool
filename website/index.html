@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>onetool - 高颜值本地小工具箱</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="header">
+        <nav class="nav">
+            <div class="nav-brand">
+                <div class="nav-logo">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    </svg>
+                </div>
+                <span class="nav-title">onetool</span>
+            </div>
+            <div class="nav-links">
+                <a href="#features" class="nav-link">功能</a>
+                <a href="#tools" class="nav-link">工具</a>
+                <a href="#download" class="nav-link">下载</a>
+            </div>
+            <a href="https://github.com" class="btn btn-primary" target="_blank">GitHub</a>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <span class="badge-dot"></span>
+                    v1.0.0 正式发布
+                </div>
+                <h1 class="hero-title">
+                    高颜值本地
+                    <span class="hero-gradient">小工具箱</span>
+                </h1>
+                <p class="hero-description">
+                    一个基于 Electron + React + Tailwind CSS 构建的现代化本地工具箱应用，<br>
+                    包含 15+ 实用工具，所有功能本地运行，保护你的隐私。
+                </p>
+                <div class="hero-buttons">
+                    <a href="#download" class="btn btn-primary btn-large">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7,10 12,15 17,10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        立即下载
+                    </a>
+                    <a href="#tools" class="btn btn-secondary btn-large">
+                        查看工具
+                    </a>
+                </div>
+            </div>
+            <div class="hero-visual">
+                <div class="hero-mockup">
+                    <div class="mockup-header">
+                        <div class="mockup-dots">
+                            <span class="mockup-dot red"></span>
+                            <span class="mockup-dot yellow"></span>
+                            <span class="mockup-dot green"></span>
+                        </div>
+                    </div>
+                    <div class="mockup-body">
+                        <div class="mockup-sidebar">
+                            <div class="mockup-logo">
+                                <div class="mockup-logo-icon"></div>
+                                <div class="mockup-logo-text">
+                                    <div class="mockup-text-line w-16"></div>
+                                    <div class="mockup-text-line w-10"></div>
+                                </div>
+                            </div>
+                            <div class="mockup-nav">
+                                <div class="mockup-nav-item active"></div>
+                                <div class="mockup-nav-item"></div>
+                                <div class="mockup-nav-item"></div>
+                                <div class="mockup-nav-item"></div>
+                                <div class="mockup-nav-item"></div>
+                            </div>
+                        </div>
+                        <div class="mockup-main">
+                            <div class="mockup-header-bar">
+                                <div class="mockup-search"></div>
+                            </div>
+                            <div class="mockup-content">
+                                <div class="mockup-stats">
+                                    <div class="mockup-stat"></div>
+                                    <div class="mockup-stat"></div>
+                                    <div class="mockup-stat"></div>
+                                    <div class="mockup-stat"></div>
+                                </div>
+                                <div class="mockup-grid">
+                                    <div class="mockup-card"></div>
+                                    <div class="mockup-card"></div>
+                                    <div class="mockup-card"></div>
+                                    <div class="mockup-card"></div>
+                                    <div class="mockup-card"></div>
+                                    <div class="mockup-card"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="features">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">为什么选择 onetool</h2>
+                    <p class="section-description">
+                        简洁、高效、安全，满足你日常的各种需求
+                    </p>
+                </div>
+                <div class="features-grid">
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <polygon points="10,8 16,12 10,16 10,8"></polygon>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">现代化界面</h3>
+                        <p class="feature-description">
+                            深色主题，玻璃质感设计，带来舒适的视觉体验
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">15+ 实用工具</h3>
+                        <p class="feature-description">
+                            涵盖系统、文件、多媒体、网络、效率等多个类别
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                                <line x1="8" y1="21" x2="16" y2="21"></line>
+                                <line x1="12" y1="17" x2="12" y2="21"></line>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">跨平台支持</h3>
+                        <p class="feature-description">
+                            完美支持 Windows、macOS、Linux 三大操作系统
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">本地运行</h3>
+                        <p class="feature-description">
+                            所有工具本地执行，无需联网，保护你的隐私安全
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="22,12 18,12 15,21 9,3 6,12 2,12"></polyline>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">高性能</h3>
+                        <p class="feature-description">
+                            基于 Electron + Vite，快速响应，流畅使用
+                        </p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon">
+                            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                                <rect x="9" y="11" width="6" height="6"></rect>
+                            </svg>
+                        </div>
+                        <h3 class="feature-title">开源免费</h3>
+                        <p class="feature-description">
+                            完全开源，永久免费，欢迎贡献代码
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tools" class="tools">
+            <div class="container">
+                <div class="section-header">
+                    <h2 class="section-title">15+ 实用工具</h2>
+                    <p class="section-description">
+                        满足你日常工作和生活的各种需求
+                    </p>
+                </div>
+                
+                <div class="tool-category">
+                    <h3 class="tool-category-title">系统工具</h3>
+                    <div class="tool-grid">
+                        <div class="tool-card">
+                            <div class="tool-icon">⚡</div>
+                            <h4 class="tool-name">极速装机</h4>
+                            <p class="tool-desc">一键安装常用软件，支持 winget 静默批量安装</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🔍</div>
+                            <h4 class="tool-name">配置检测</h4>
+                            <p class="tool-desc">检测电脑硬件配置信息，一键生成配置报告</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tool-category">
+                    <h3 class="tool-category-title">文件处理</h3>
+                    <div class="tool-grid">
+                        <div class="tool-card">
+                            <div class="tool-icon">📝</div>
+                            <h4 class="tool-name">批量重命名</h4>
+                            <p class="tool-desc">批量重命名文件，支持序号、替换、前后缀等模式</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">📦</div>
+                            <h4 class="tool-name">文件暂存悬浮球</h4>
+                            <p class="tool-desc">高颜值文件暂存工具，支持拖入拖出文件</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tool-category">
+                    <h3 class="tool-category-title">多媒体</h3>
+                    <div class="tool-grid">
+                        <div class="tool-card">
+                            <div class="tool-icon">🖼️</div>
+                            <h4 class="tool-name">图片处理</h4>
+                            <p class="tool-desc">批量图片格式转换、压缩、调整大小</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🎨</div>
+                            <h4 class="tool-name">取色器</h4>
+                            <p class="tool-desc">屏幕取色工具，支持多种颜色格式</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🎬</div>
+                            <h4 class="tool-name">屏幕录制</h4>
+                            <p class="tool-desc">录制屏幕操作，支持 MP4、GIF、WebM 多种格式</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tool-category">
+                    <h3 class="tool-category-title">网络工具</h3>
+                    <div class="tool-grid">
+                        <div class="tool-card">
+                            <div class="tool-icon">🌐</div>
+                            <h4 class="tool-name">网页激活器</h4>
+                            <p class="tool-desc">自动激活网页元素，支持自定义规则</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">📡</div>
+                            <h4 class="tool-name">网络雷达</h4>
+                            <p class="tool-desc">实时监测网络延迟与速度，支持常用网站延迟测试</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="tool-category">
+                    <h3 class="tool-category-title">效率工具</h3>
+                    <div class="tool-grid">
+                        <div class="tool-card">
+                            <div class="tool-icon">🖱️</div>
+                            <h4 class="tool-name">鼠标连点器</h4>
+                            <p class="tool-desc">自动鼠标点击，支持自定义间隔和按键</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🎤</div>
+                            <h4 class="tool-name">CapsWriter 语音</h4>
+                            <p class="tool-desc">离线语音转文字工具，支持语音输入和语音命令</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">📋</div>
+                            <h4 class="tool-name">剪贴板管理</h4>
+                            <p class="tool-desc">管理剪贴板历史记录，支持文本和图片，置顶收藏</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">📱</div>
+                            <h4 class="tool-name">二维码生成</h4>
+                            <p class="tool-desc">生成自定义二维码，支持添加 Logo 和样式调整</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🕐</div>
+                            <h4 class="tool-name">翻页时钟</h4>
+                            <p class="tool-desc">全屏翻页时钟屏保，适合桌面展示</p>
+                        </div>
+                        <div class="tool-card">
+                            <div class="tool-icon">🌍</div>
+                            <h4 class="tool-name">沉浸式截屏翻译</h4>
+                            <p class="tool-desc">全屏透明遮罩框选，OCR 识别加翻译，玻璃质感设计</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="download" class="download">
+            <div class="container">
+                <div class="download-content">
+                    <h2 class="download-title">立即开始使用 onetool</h2>
+                    <p class="download-description">
+                        下载最新版本，体验 15+ 实用工具带来的便利
+                    </p>
+                    <div class="download-buttons">
+                        <a href="#" class="download-btn windows">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+                            </svg>
+                            <div class="download-btn-text">
+                                <div class="download-btn-platform">Windows</div>
+                                <div class="download-btn-info">.zip 格式</div>
+                            </div>
+                        </a>
+                        <a href="#" class="download-btn mac">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.81-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
+                            </svg>
+                            <div class="download-btn-text">
+                                <div class="download-btn-platform">macOS</div>
+                                <div class="download-btn-info">.dmg 格式</div>
+                            </div>
+                        </a>
+                        <a href="#" class="download-btn linux">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                                <path d="M12.504 0c-.155 0-.311.001-.465.003-.495.011-.906.104-1.223.275-.315.17-.562.407-.735.708-.174.302-.268.657-.283 1.067-.01.254-.007.492-.007.72v.082c-.335.084-.665.197-.988.341-.322.145-.632.318-.928.52-.296.201-.573.432-.829.692-.255.26-.486.549-.69.865-.205.317-.38.663-.522 1.036-.143.374-.257.773-.341 1.196-.085.423-.135.868-.149 1.333v.237c0 .227.005.445.013.656.024.639.133 1.174.326 1.604.193.431.471.78.833 1.047.362.268.801.449 1.316.542.162.029.33.049.503.059.174.01.352.015.534.015h.048c.183 0 .363-.005.538-.015.176-.01.345-.03.509-.059.514-.093.953-.274 1.316-.542.362-.267.64-.616.833-1.047.193-.43.302-.965.326-1.604.008-.211.013-.429.013-.656v-.237c-.014-.465-.064-.91-.149-1.333-.084-.423-.198-.822-.341-1.196-.142-.373-.317-.719-.522-1.036-.204-.316-.435-.605-.69-.865-.256-.26-.533-.491-.829-.692-.296-.202-.606-.375-.928-.52-.323-.144-.653-.257-.988-.341V2.773c0-.228.003-.466.007-.72.015-.41.109-.765.283-1.067.173-.301.42-.538.735-.708.317-.171.728-.264 1.223-.275.154-.002.31-.003.465-.003h.001c.155 0 .311.001.465.003.495.011.906.104 1.223.275.315.17.562.407.735.708.174.302.268.657.283 1.067.01.254.007.492.007.72v.082c.335.084.665.197.988.341.322.145.632.318.928.52.296.201.573.432.829.692.255.26.486.549.69.865.205.317.38.663.522 1.036.143.374.257.773.341 1.196.085.423.135.868.149 1.333v.237c0 .227-.005.445-.013.656-.024.639-.133 1.174-.326 1.604-.193.431-.471.78-.833 1.047-.362.268-.801.449-1.316.542-.162.029-.33.049-.503.059-.174.01-.352.015-.534.015h-.048c-.183 0-.363-.005-.538-.015-.176-.01-.345-.03-.509-.059-.514-.093-.953-.274-1.316-.542-.362-.267-.64-.616-.833-1.047-.193-.43-.302-.965-.326-1.604-.008-.211-.013-.429-.013-.656v-.237c-.014-.465-.064-.91-.149-1.333-.084-.423-.198-.822-.341-1.196-.142-.373-.317-.719-.522-1.036-.204-.316-.435-.605-.69-.865-.256-.26-.533-.491-.829-.692-.296-.202-.606-.375-.928-.52-.323-.144-.653-.257-.988-.341V2.773c0-.228.003-.466.007-.72.015-.41.109-.765.283-1.067.173-.301.42-.538.735-.708.317-.171.728-.264 1.223-.275.154-.002.31-.003.465-.003h.001z"/>
+                            </svg>
+                            <div class="download-btn-text">
+                                <div class="download-btn-platform">Linux</div>
+                                <div class="download-btn-info">.AppImage 格式</div>
+                            </div>
+                        </a>
+                    </div>
+                    <div class="download-note">
+                        <a href="https://github.com" class="download-link" target="_blank">
+                            或在 GitHub 上查看源代码 →
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="footer-logo">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                        </svg>
+                    </div>
+                    <span class="footer-title">onetool</span>
+                </div>
+                <div class="footer-links">
+                    <a href="#features" class="footer-link">功能</a>
+                    <a href="#tools" class="footer-link">工具</a>
+                    <a href="#download" class="footer-link">下载</a>
+                    <a href="https://github.com" class="footer-link" target="_blank">GitHub</a>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p class="footer-copyright">
+                    © 2025 八骏马. MIT License.
+                </p>
+                <p class="footer-author">
+                    Bilibili: <a href="https://space.bilibili.com/35149135" target="_blank">八骏马</a>
+                </p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+# UI Design System Rules
+- 本项目全局采用苹果/Vercel风格的极简玻璃质感（Glassmorphism）设计。
+- 所有的面板、卡片和区块必须采用无边框设计（移除 border），并应用毛玻璃效果（半透明背景色 + backdrop-blur）。
+- 必须保持较大的全局圆角（大圆角风格），并配合柔和的弥散阴影（shadow-sm 或 shadow-md）。
+- 避免使用大面积的高饱和度纯色色块，尽量使用带透明度的柔和色彩。
+- 所有的按钮、卡片在交互时（Hover、Active状态），必须包含平滑的 CSS 过渡动画（加入 transition-all duration-300）。
+- 优先使用 Lucide React 图标来代替繁琐的文字说明，保持界面极简。
