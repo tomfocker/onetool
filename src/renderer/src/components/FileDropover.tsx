@@ -26,9 +26,8 @@ export const FileDropover: React.FC = () => {
   const floatBallRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
   const startPosRef = useRef({ x: 0, y: 0 })
-  const windowPosRef = useRef({ x: 100, y: 100 })
   const animationFrameRef = useRef<number | null>(null)
-  const pendingPositionRef = useRef<{ x: number; y: number } | null>(null)
+  const pendingDeltaRef = useRef<{ dx: number; dy: number } | null>(null)
 
   useEffect(() => {
     const electron = window.electron as any
@@ -46,12 +45,12 @@ export const FileDropover: React.FC = () => {
   }, [isExpanded])
 
   const moveWindow = useCallback(() => {
-    if (pendingPositionRef.current) {
+    if (pendingDeltaRef.current) {
       const electron = window.electron as any
       if (electron?.floatBall) {
-        electron.floatBall.move(pendingPositionRef.current.x, pendingPositionRef.current.y)
+        electron.floatBall.move(pendingDeltaRef.current.dx, pendingDeltaRef.current.dy)
       }
-      pendingPositionRef.current = null
+      pendingDeltaRef.current = null
     }
     animationFrameRef.current = null
   }, [])
@@ -64,21 +63,23 @@ export const FileDropover: React.FC = () => {
     e.preventDefault()
     e.stopPropagation()
     isDraggingRef.current = true
-    startPosRef.current = { x: e.clientX, y: e.clientY }
+    startPosRef.current = { x: e.screenX, y: e.screenY }
   }
 
   const handleMouseMove = (e: React.MouseEvent) => {
     if (!isDraggingRef.current) return
     
-    const dx = e.clientX - startPosRef.current.x
-    const dy = e.clientY - startPosRef.current.y
+    const dx = e.screenX - startPosRef.current.x
+    const dy = e.screenY - startPosRef.current.y
     
-    windowPosRef.current.x += dx
-    windowPosRef.current.y += dy
+    startPosRef.current = { x: e.screenX, y: e.screenY }
     
-    startPosRef.current = { x: e.clientX, y: e.clientY }
-    
-    pendingPositionRef.current = { x: windowPosRef.current.x, y: windowPosRef.current.y }
+    if (pendingDeltaRef.current) {
+      pendingDeltaRef.current.dx += dx
+      pendingDeltaRef.current.dy += dy
+    } else {
+      pendingDeltaRef.current = { dx, dy }
+    }
     
     if (!animationFrameRef.current) {
       animationFrameRef.current = requestAnimationFrame(moveWindow)
@@ -155,6 +156,15 @@ export const FileDropover: React.FC = () => {
     setStoredFiles([])
   }
 
+  const handleCloseFloatBall = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    const electron = window.electron as any
+    if (electron?.floatBall) {
+      electron.floatBall.close()
+    }
+  }
+
   return (
     <div
       ref={floatBallRef}
@@ -176,16 +186,62 @@ export const FileDropover: React.FC = () => {
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
         >
-          <div className={`p-3 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-400 backdrop-blur-sm border border-white/20 dark:border-white/10 shadow-soft-sm transition-all duration-500 ease-apple ${
-            isDraggingOver ? 'scale-110 shadow-soft' : 'hover:scale-105 hover:shadow-soft'
+          <div className={`w-full h-full rounded-full overflow-hidden relative transition-all duration-500 ease-apple ${
+            isDraggingOver ? 'scale-110' : 'hover:scale-105'
           }`}>
-            <Inbox className="w-6 h-6 text-white" />
+            <div className="absolute inset-0 bg-gradient-to-br from-slate-900/90 to-slate-800/90" />
+            
+            <div 
+              className="absolute -top-4 -left-4 w-24 h-24 rounded-full"
+              style={{
+                background: 'radial-gradient(circle, rgba(0,255,255,0.8) 0%, rgba(0,255,255,0) 70%)',
+                filter: 'blur(8px)',
+                animation: 'orbit1 8s ease-in-out infinite'
+              }}
+            />
+            
+            <div 
+              className="absolute -bottom-4 -right-4 w-24 h-24 rounded-full"
+              style={{
+                background: 'radial-gradient(circle, rgba(255,0,255,0.8) 0%, rgba(255,0,255,0) 70%)',
+                filter: 'blur(8px)',
+                animation: 'orbit2 10s ease-in-out infinite'
+              }}
+            />
+            
+            <div 
+              className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-20 h-20 rounded-full"
+              style={{
+                background: 'radial-gradient(circle, rgba(100,149,237,0.7) 0%, rgba(100,149,237,0) 70%)',
+                filter: 'blur(10px)',
+                animation: 'pulse 6s ease-in-out infinite'
+              }}
+            />
+            
+            <div 
+              className="absolute inset-0 flex items-center justify-center"
+              style={{
+                background: 'radial-gradient(circle at center, rgba(255,255,255,0.1) 0%, transparent 70%)'
+              }}
+            >
+              <div className="w-8 h-8 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
+                <Inbox className="w-4 h-4 text-white/90" />
+              </div>
+            </div>
           </div>
+          
           {storedFiles.length > 0 && (
             <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-md">
               {storedFiles.length}
             </div>
           )}
+          
+          <button
+            onClick={handleCloseFloatBall}
+            className="absolute -top-2 -right-2 w-6 h-6 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-all duration-200 opacity-0 hover:opacity-100 no-drag"
+          >
+            <X className="w-3 h-3 text-white/90" />
+          </button>
         </div>
       ) : (
         <div className="absolute inset-0 bg-white/70 dark:bg-[#2a2d35]/90 backdrop-blur-xl rounded-2xl border border-white/30 dark:border-white/10 shadow-xl flex flex-col overflow-hidden">
@@ -270,6 +326,25 @@ export const FileDropover: React.FC = () => {
           )}
         </div>
       )}
+      
+      <style>{`
+        @keyframes orbit1 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(10px, 5px) scale(1.1); }
+          66% { transform: translate(-5px, 10px) scale(0.9); }
+        }
+        
+        @keyframes orbit2 {
+          0%, 100% { transform: translate(0, 0) scale(1); }
+          33% { transform: translate(-8px, -5px) scale(0.9); }
+          66% { transform: translate(5px, -8px) scale(1.1); }
+        }
+        
+        @keyframes pulse {
+          0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.7; }
+          50% { transform: translate(-50%, -50%) scale(1.2); opacity: 1; }
+        }
+      `}</style>
     </div>
   )
 }

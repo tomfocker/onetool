@@ -73,6 +73,9 @@ const autoClickerAPI = {
   },
   getStatus: () => {
     return ipcRenderer.invoke('autoclicker-status')
+  },
+  updateConfig: (config: any) => {
+    return ipcRenderer.invoke('autoclicker-update-config', config)
   }
 }
 
