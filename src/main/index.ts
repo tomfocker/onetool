@@ -725,226 +725,155 @@ function execCommand(cmd: string): Promise<string> {
 
 function execPowerShell(script: string): Promise<string> {
   return new Promise((resolve) => {
-    const escapedScript = script.replace(/"/g, '\\"')
-    const fullCmd = `powershell -NoProfile -Command "${escapedScript}"`
-    exec(fullCmd, { encoding: 'utf8', maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-      if (error) {
-        console.error('PowerShell error:', script, error.message)
+    const ps = spawn('powershell.exe', ['-NoProfile', '-Command', '-'], {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      windowsHide: true
+    })
+
+    const stdoutChunks: Buffer[] = []
+    const stderrChunks: Buffer[] = []
+
+    ps.stdout.on('data', (chunk) => stdoutChunks.push(chunk))
+    ps.stderr.on('data', (chunk) => stderrChunks.push(chunk))
+
+    ps.on('close', (code) => {
+      const stdout = Buffer.concat(stdoutChunks).toString('utf8').trim()
+      if (code !== 0 && !stdout) {
+        const stderr = Buffer.concat(stderrChunks).toString('utf8')
+        console.error(`PS Error: ${stderr}`)
         resolve('')
       } else {
-        resolve(stdout.trim())
+        resolve(stdout)
       }
     })
+
+    ps.stdin.write(`[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; ${script}`)
+    ps.stdin.end()
   })
 }
 
 ipcMain.handle('get-system-config', async () => {
   try {
-    const cpuName = await execPowerShell('(Get-CimInstance Win32_Processor).Name')
-    const cpuCores = await execPowerShell('(Get-CimInstance Win32_Processor).NumberOfCores')
-    const cpuThreads = await execPowerShell('(Get-CimInstance Win32_Processor).NumberOfLogicalProcessors')
-    
-    const boardManufacturer = await execPowerShell('(Get-CimInstance Win32_BaseBoard).Manufacturer')
-    const boardProduct = await execPowerShell('(Get-CimInstance Win32_BaseBoard).Product')
-    const motherboard = (boardManufacturer && boardProduct) 
-      ? `${boardManufacturer} ${boardProduct}`.trim() 
-      : '未知'
+    const hwScript = `
+$ErrorActionPreference = 'SilentlyContinue'
 
-    const memoryCapacity = await execPowerShell('(Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property Capacity -Sum).Sum')
-    const memorySpeed = await execPowerShell('(Get-CimInstance Win32_PhysicalMemory)[0].Speed')
-    const memoryModules = await execPowerShell('(Get-CimInstance Win32_PhysicalMemory).Count')
-    const memoryManufacturer = await execPowerShell("(Get-CimInstance Win32_PhysicalMemory)[0].Manufacturer")
-    const memoryPartNumber = await execPowerShell("(Get-CimInstance Win32_PhysicalMemory)[0].PartNumber")
+# CPU
+$cpu = (Get-WmiObject Win32_Processor | Select-Object -First 1).Name
+
+# Motherboard (Double check)
+$mb_raw = Get-WmiObject Win32_BaseBoard | Select-Object -First 1
+$mb = "$($mb_raw.Manufacturer) $($mb_raw.Product)".Trim()
+if (!$mb -or $mb -eq " ") { $mb = (Get-CimInstance Win32_BaseBoard | % { "$($_.Manufacturer) $($_.Product)" }) }
+
+# RAM (格式: 容量|条数|频率|厂商)
+$mem_objs = Get-WmiObject Win32_PhysicalMemory
+$total_bytes = 0
+foreach($m in $mem_objs) { $total_bytes += [long]$m.Capacity }
+$ram_gb = [Math]::Round($total_bytes / 1GB)
+$ram_speed = ($mem_objs | Select-Object -First 1).ConfiguredClockSpeed
+$ram_manu = ($mem_objs | Select-Object -First 1).Manufacturer
+$ram = "$($ram_gb)GB|$($mem_objs.Count)|$($ram_speed)|$($ram_manu)"
+
+# GPU (Formatted list)
+$gpus = (Get-WmiObject Win32_VideoController | ForEach-Object { $_.Name }) | Select-Object -Unique
+$gpu_str = $gpus -join "\n"
+
+# Disk (Formatted list)
+$disks = (Get-WmiObject Win32_DiskDrive | ForEach-Object { "$($_.Model) ($([Math]::Round($_.Size / 1GB))GB)" })
+$disk_str = $disks -join "\n"
+
+# Monitor (极致普适性探测)
+$mon_list = @()
+try {
+    # 优先：获取物理参数
+    $params = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorBasicDisplayParams
+    # 优先：获取硬件固件报告的型号
+    $ids = Get-WmiObject -Namespace root\\wmi -Class WmiMonitorID
     
-    let memoryInfo = '未知'
-    if (memoryCapacity) {
-      const totalGB = Math.round(parseInt(memoryCapacity) / (1024 * 1024 * 1024))
-      const speed = memorySpeed || '未知'
-      const manufacturer = memoryManufacturer ? memoryManufacturer.trim() : ''
-      const partNumber = memoryPartNumber ? memoryPartNumber.trim() : ''
-      const brand = manufacturer || partNumber || ''
-      memoryInfo = `${totalGB}GB ${speed}MHz (${memoryModules || 1}条)${brand ? ' ' + brand : ''}`
+    for ($i=0; $i -lt $ids.Count; $i++) {
+        $m = $ids[$i]
+        # 尝试解码物理名称 (Unicode 或 ASCII)
+        $n_bytes = [byte[]]($m.UserFriendlyName -filter {$_ -ne 0})
+        $name = if ($n_bytes) { [System.Text.Encoding]::ASCII.GetString($n_bytes).Trim() } else { "" }
+        if (!$name -and $n_bytes) { $name = [System.Text.Encoding]::Unicode.GetString($n_bytes).Trim() }
+        
+        $m_bytes = [byte[]]($m.ManufacturerName -filter {$_ -ne 0})
+        $manu = if ($m_bytes) { [System.Text.Encoding]::ASCII.GetString($m_bytes).Trim() } else { "Unknown" }
+        
+        # 尝试匹配该实例的分辨率
+        $p = $params | Where-Object { $_.InstanceName -eq $m.InstanceName }
+        if (!$p -and $params.Count -gt $i) { $p = $params[$i] } # 索引兜底
+        $native = if ($p) { "$($p.HorizontalActivePixels)x$($p.VerticalActivePixels)" } else { "" }
+        
+        if ($manu -ne "Unknown" -or $name) {
+            $mon_list += "$manu|$name|$native"
+        }
+    }
+} catch {}
+
+# 备选：如果 WmiMonitorID 全军覆没，使用 PnPEntity
+if ($mon_list.Count -eq 0) {
+    try {
+        $pnp_mons = Get-WmiObject Win32_PnPEntity | Where-Object { $_.Service -eq "monitor" }
+        foreach ($pm in $pnp_mons) {
+            $manu = "Unknown"
+            if ($pm.DeviceID -match "DISPLAY\\\\([A-Z]{3})") { $manu = $matches[1] }
+            $model = if ($pm.Name -match "\\((.*)\\)") { $matches[1] } else { $pm.Name }
+            $mon_list += "$manu|$model|"
+        }
+    } catch {}
+}
+$mon_str = $mon_list -join "\`n"
+
+# OS
+$os = (Get-WmiObject Win32_OperatingSystem | Select-Object -First 1).Caption
+
+$info = @{ cpu=$cpu; mb=$mb; ram=$ram; gpu=$gpu_str; disk=$disk_str; mon=$mon_str; os=$os }
+Write-Output "---HW_JSON_START---"
+$info | ConvertTo-Json -Compress
+Write-Output "---HW_JSON_END---"
+`
+    const rawResult = await execPowerShell(hwScript)
+    let data: any = {}
+    
+    const match = rawResult.match(/---HW_JSON_START---(.*?)---HW_JSON_END---/s)
+    if (match && match[1]) {
+      try {
+        data = JSON.parse(match[1].trim())
+      } catch (e) {
+        console.error('JSON Parse Error:', e)
+      }
     }
 
-    const gpuNames = await execPowerShell("(Get-CimInstance Win32_VideoController).Name -join ' / '")
-    const gpu = gpuNames || '未知'
-
-    let monitor = '未知'
+    // 显示器最终对齐 (优先使用 PowerShell 采集的物理层数据)
+    let monitorValue = ''
     try {
-      const { screen } = require('electron')
-      const displays = screen.getAllDisplays()
-      console.log('Electron displays:', displays?.length, displays)
-      if (displays && displays.length > 0) {
-        monitor = displays.map(d => {
-          const width = d.bounds.width
-          const height = d.bounds.height
-          const scale = d.scaleFactor
-          const rotation = d.rotation
-          const rotText = rotation === 90 ? ' ↻' : rotation === 270 ? ' ↺' : rotation === 180 ? ' ↷' : ''
-          return `${width}x${height}${rotText} (${scale}x缩放)`
-        }).join(' / ')
+      const monLines = data.mon ? data.mon.split(/[\r\n]+/).filter((l: string) => l.includes('|')) : []
+      if (monLines.length > 0) {
+        monitorValue = monLines.join('\n')
+      } else {
+        // 彻底失效才回退到 Electron
+        const { screen } = require('electron')
+        monitorValue = screen.getAllDisplays().map((d, i) => `Unknown|Display ${i}|${Math.round(d.bounds.width * d.scaleFactor)}x${Math.round(d.bounds.height * d.scaleFactor)}`).join('\n')
       }
     } catch (e) {
-      console.error('Electron screen API error:', e)
+      monitorValue = data.mon || 'Unknown'
     }
-    
-    if (monitor === '未知') {
-      try {
-        const monitorData = await execCommand('wmic desktopmonitor get Name,ScreenWidth,ScreenHeight /format:list')
-        if (monitorData) {
-          const lines = monitorData.split('\n').filter((l: string) => l.trim())
-          const monitors: string[] = []
-          let currentName = ''
-          let currentWidth = ''
-          let currentHeight = ''
-          for (const line of lines) {
-            if (line.startsWith('Name=')) currentName = line.substring(5).trim()
-            else if (line.startsWith('ScreenWidth=')) currentWidth = line.substring(12).trim()
-            else if (line.startsWith('ScreenHeight=')) {
-              currentHeight = line.substring(13).trim()
-              if (currentWidth && currentHeight) {
-                monitors.push(`${currentWidth}x${currentHeight}`)
-              }
-              currentName = ''
-              currentWidth = ''
-              currentHeight = ''
-            }
-          }
-          if (monitors.length > 0) monitor = monitors.join(' / ')
-        }
-      } catch (e) {
-        console.error('WMIC monitor error:', e)
-      }
-    }
-    
-    if (monitor === '未知') {
-      try {
-        const monitorData = await execPowerShell(`
-          Add-Type -AssemblyName System.Windows.Forms
-          [System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
-            "$($_.Bounds.Width)x$($_.Bounds.Height)"
-          } | Join-String -Separator ' / '
-        `)
-        if (monitorData) monitor = monitorData
-      } catch (e) {
-        console.error('WinForms monitor error:', e)
-      }
-    }
-
-    let disk = '未知'
-    try {
-      const diskData = await execCommand('wmic diskdrive get Model,Size,MediaType,InterfaceType /format:list')
-      if (diskData) {
-        const lines = diskData.split('\n').filter((l: string) => l.trim())
-        const disks: string[] = []
-        let currentModel = ''
-        let currentSize = ''
-        let currentType = ''
-        let currentInterface = ''
-        for (const line of lines) {
-          if (line.startsWith('Model=')) currentModel = line.substring(6).trim()
-          else if (line.startsWith('Size=')) currentSize = line.substring(5).trim()
-          else if (line.startsWith('MediaType=')) currentType = line.substring(10).trim()
-          else if (line.startsWith('InterfaceType=')) {
-            currentInterface = line.substring(14).trim()
-            if (currentModel && currentSize) {
-              const sizeGB = Math.round(parseInt(currentSize) / (1024 * 1024 * 1024))
-              const typeInfo = currentType || 'Unknown'
-              const interfaceInfo = currentInterface || ''
-              disks.push(`${currentModel} (${sizeGB}GB ${typeInfo} ${interfaceInfo})`.trim())
-            }
-            currentModel = ''
-            currentSize = ''
-            currentType = ''
-            currentInterface = ''
-          }
-        }
-        if (disks.length > 0) disk = disks.join(' / ')
-      }
-    } catch (e) {
-      console.error('WMIC disk error:', e)
-    }
-    
-    if (disk === '未知') {
-      try {
-        const diskData = await execPowerShell(`
-          Get-PhysicalDisk | ForEach-Object { 
-            $diskName = $_.FriendlyName
-            $diskSize = [math]::Round($_.Size/1GB)
-            $diskType = $_.MediaType
-            $diskBus = $_.BusType
-            "$diskName (" + $diskSize + "GB " + $diskType + " " + $diskBus + ")"
-          } | Join-String -Separator ' / '
-        `)
-        if (diskData) disk = diskData
-      } catch (e) {
-        console.error('PowerShell disk error:', e)
-      }
-    }
-    
-    if (disk === '未知') {
-      try {
-        const diskData = await execCommand('wmic logicaldisk get Size,FreeSpace,Caption,VolumeName /format:list')
-        if (diskData) {
-          const lines = diskData.split('\n').filter((l: string) => l.trim())
-          const disks: string[] = []
-          let currentCaption = ''
-          let currentSize = ''
-          let currentFree = ''
-          let currentName = ''
-          for (const line of lines) {
-            if (line.startsWith('Caption=')) currentCaption = line.substring(8).trim()
-            else if (line.startsWith('Size=')) currentSize = line.substring(5).trim()
-            else if (line.startsWith('FreeSpace=')) currentFree = line.substring(10).trim()
-            else if (line.startsWith('VolumeName=')) {
-              currentName = line.substring(11).trim()
-              if (currentCaption && currentSize) {
-                const sizeGB = Math.round(parseInt(currentSize) / (1024 * 1024 * 1024))
-                const freeGB = currentFree ? Math.round(parseInt(currentFree) / (1024 * 1024 * 1024)) : 0
-                disks.push(`${currentCaption} ${currentName} (${sizeGB}GB, ${freeGB}GB可用)`)
-              }
-              currentCaption = ''
-              currentSize = ''
-              currentFree = ''
-              currentName = ''
-            }
-          }
-          if (disks.length > 0) disk = disks.join(' / ')
-        }
-      } catch (e) {
-        console.error('Logical disk error:', e)
-      }
-    }
-
-    const audioInfo = await execPowerShell("(Get-CimInstance Win32_SoundDevice).Name -join ' / '")
-    const audio = audioInfo || '未知'
-
-    const networkInfo = await execPowerShell("(Get-CimInstance Win32_NetworkAdapter | Where-Object { $_.NetEnabled -eq $true }).Name -join ' / '")
-    const network = networkInfo || '未知'
-
-    const osCaption = await execPowerShell("(Get-CimInstance Win32_OperatingSystem).Caption")
 
     return {
       success: true,
       config: {
-        cpu: `${cpuName || '未知'} (${cpuCores || '?'}核${cpuThreads || '?'}线程)`,
-        motherboard: motherboard,
-        memory: memoryInfo,
-        gpu: gpu,
-        monitor: monitor,
-        disk: disk,
-        audio: audio,
-        network: network,
-        os: osCaption || '未知'
+        cpu: data.cpu || 'Unknown Processor',
+        motherboard: data.mb || 'Unknown Motherboard',
+        memory: data.ram || '',
+        gpu: data.gpu || 'Unknown GPU',
+        monitor: monitorValue,
+        disk: data.disk || 'Unknown Storage',
+        os: data.os || 'Windows'
       }
     }
   } catch (error) {
-    console.error('Get system config error:', error)
-    return {
-      success: false,
-      error: (error as Error).message,
-      config: null
-    }
+    return { success: false, error: (error as Error).message, config: null }
   }
 })
 
@@ -1387,12 +1316,6 @@ function calculateCRC32(data: number[]): number {
 }
 
 function createWindow(): void {
-  const mainWindowState = windowStateKeeper({
-    defaultWidth: 1200,
-    defaultHeight: 800,
-    file: 'window-state.json'
-  })
-
   const iconPath = app.isPackaged 
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(__dirname, '../../resources/icon.png')
@@ -1403,10 +1326,10 @@ function createWindow(): void {
   }
 
   mainWindow = new BrowserWindow({
-    x: mainWindowState.x,
-    y: mainWindowState.y,
-    width: mainWindowState.width,
-    height: mainWindowState.height,
+    width: 1200,
+    height: 800,
+    center: true,
+    resizable: true,
     show: false,
     frame: false,
     autoHideMenuBar: true,
@@ -1417,17 +1340,13 @@ function createWindow(): void {
     }
   })
 
-  mainWindowState.manage(mainWindow)
-
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
   })
 
   mainWindow.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault()
-      mainWindow?.hide()
-    }
+    // 移除隐藏逻辑，改为直接退出以方便调试
+    app.quit()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -1997,7 +1916,7 @@ app.whenReady().then(() => {
   })
 
   createWindow()
-  createTray()
+  // createTray() // 暂时禁用托盘功能以便调试
   createFloatBallWindow()
   loadClipboardHistory()
   startClipboardWatcher()

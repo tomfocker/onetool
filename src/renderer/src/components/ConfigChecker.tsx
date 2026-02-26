@@ -11,359 +11,210 @@ import {
   Check,
   Loader2,
   RefreshCw,
-  Play
+  Fingerprint,
+  MonitorSmartphone
 } from 'lucide-react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
-interface ConfigItem {
-  icon: React.ReactNode
-  label: string
-  value: string
-  color: string
+// 全球主流硬件品牌映射表 (具有普适性)
+const dictionary: Record<string, string> = {
+  // 核心厂商
+  'Samsung': '三星 (Samsung)',
+  'Intel': '英特尔 (Intel)',
+  'NVIDIA': '英伟达 (NVIDIA)',
+  'AMD': 'AMD',
+  'Gigabyte': '技嘉 (GIGABYTE)',
+  'ASUSTeK': '华硕 (ASUS)',
+  'ASUS': '华硕 (ASUS)',
+  'Micro-Star': '微星 (MSI)',
+  'Kingston': '金士顿 (Kingston)',
+  'Micron': '美光 (Micron)',
+  'Hynix': '海力士 (SK hynix)',
+  'Corsair': '美商海盗船 (Corsair)',
+  'Western Digital': '西部数据 (WD)',
+  'Seagate': '希捷 (Seagate)',
+  'Crucial': '英睿达 (Crucial)',
+  'AOC': '冠捷 (AOC)',
+  'TPV': '冠捷 (AOC)',
+  'Dell': '戴尔 (DELL)',
+  'HP': '惠普 (HP)',
+  'Lenovo': '联想 (Lenovo)',
+  'Acer': '宏碁 (Acer)',
+  'LG': 'LG',
+  'BenQ': '明基 (BenQ)',
+  'Philips': '飞利浦 (Philips)',
+  'ViewSonic': '优派 (ViewSonic)',
+  'Microsoft': '微软',
+  
+  // 硬件术语
+  'SSD': '固态硬盘',
+  'HDD': '机械硬盘',
+  'NVMe': '高速存储',
+  'SATA': '串口存储'
+}
+
+// 普适性翻译器：如果字典里没有，就保留原样，确保不丢失信息
+const t = (str: string): string => {
+  if (!str || str === 'Unknown') return ''
+  let res = str.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim()
+  
+  // 尝试匹配并替换已知品牌
+  Object.keys(dictionary).forEach(key => {
+    const regex = new RegExp(`(^|\\s|\\()${key}`, 'gi')
+    if (res.match(regex)) {
+      res = res.replace(regex, (match) => {
+        // 保留匹配前后的符号，只替换文字
+        if (match.startsWith('(')) return '(' + dictionary[key]
+        if (match.startsWith(' ')) return ' ' + dictionary[key]
+        return dictionary[key]
+      })
+    }
+  })
+  return res
+}
+
+const formatRAM = (val: string) => {
+  if (!val || val === 'Unknown') return '检测中...'
+  const [size, count, speed, manuRaw] = val.split('|')
+  const countStr = count ? `(${count} 条内存)` : ''
+  const speedStr = speed && speed !== '0' ? `${speed}MHz` : ''
+  const manu = t(manuRaw) || manuRaw // 如果字典没翻译，保留原始厂商名
+  return `${size} ${countStr} ${speedStr ? `| ${speedStr}` : ''} ${manu && manu !== 'Unknown' ? `| ${manu}` : ''}`.trim()
+}
+
+const formatMonitor = (val: string) => {
+  if (!val || val === 'Unknown') return '通用显示设备'
+  const parts = val.split('|')
+  if (parts.length === 3) {
+    const [id, name, resolution] = parts
+    // 优先从字典查品牌 ID，查不到则保留 ID 原样
+    let brand = dictionary[id.toUpperCase()] || (id !== 'Unknown' ? id : '')
+    let model = t(name) || name
+    let resStr = resolution ? ` [${resolution} 物理像素]` : ''
+    
+    // 品牌和型号去重显示
+    if (brand && model.toLowerCase().includes(brand.toLowerCase().split(' ')[0].toLowerCase())) {
+      return `${model}${resStr}`.trim()
+    }
+    return `${brand} ${model}${resStr}`.trim()
+  }
+  return t(val) || val
 }
 
 interface SystemConfig {
-  cpu: string
-  motherboard: string
-  memory: string
-  gpu: string
-  monitor: string
-  disk: string
-  audio: string
-  network: string
-  os: string
-}
-
-const STORAGE_KEY = 'system-config-cache'
-const STORAGE_TIMESTAMP_KEY = 'system-config-timestamp'
-
-const getConfigItems = (config: SystemConfig | null): ConfigItem[] => {
-  if (!config) return []
-  
-  return [
-    {
-      icon: <Cpu size={18} />,
-      label: '处理器',
-      value: config.cpu || '未知',
-      color: 'text-blue-500'
-    },
-    {
-      icon: <CircuitBoard size={18} />,
-      label: '主板',
-      value: config.motherboard || '未知',
-      color: 'text-violet-500'
-    },
-    {
-      icon: <MemoryStick size={18} />,
-      label: '内存',
-      value: config.memory || '未知',
-      color: 'text-purple-500'
-    },
-    {
-      icon: <Monitor size={18} />,
-      label: '显卡',
-      value: config.gpu || '未知',
-      color: 'text-green-500'
-    },
-    {
-      icon: <Monitor size={18} />,
-      label: '显示器',
-      value: config.monitor || '未知',
-      color: 'text-cyan-500'
-    },
-    {
-      icon: <HardDrive size={18} />,
-      label: '磁盘',
-      value: config.disk || '未知',
-      color: 'text-orange-500'
-    },
-    {
-      icon: <Volume2 size={18} />,
-      label: '声卡',
-      value: config.audio || '未知',
-      color: 'text-pink-500'
-    },
-    {
-      icon: <Wifi size={18} />,
-      label: '网卡',
-      value: config.network || '未知',
-      color: 'text-teal-500'
-    }
-  ]
-}
-
-const generateConfigText = (config: SystemConfig | null): string => {
-  if (!config) return ''
-  
-  const items = [
-    { label: '处理器', value: config.cpu },
-    { label: '主板', value: config.motherboard },
-    { label: '内存', value: config.memory },
-    { label: '显卡', value: config.gpu },
-    { label: '显示器', value: config.monitor },
-    { label: '磁盘', value: config.disk },
-    { label: '声卡', value: config.audio },
-    { label: '网卡', value: config.network }
-  ]
-  
-  return items.map(item => `${item.label}：${item.value}`).join('\n')
-}
-
-const saveConfigToStorage = (config: SystemConfig) => {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config))
-    localStorage.setItem(STORAGE_TIMESTAMP_KEY, Date.now().toString())
-  } catch (e) {
-    console.error('保存配置失败:', e)
-  }
-}
-
-const loadConfigFromStorage = (): SystemConfig | null => {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored) {
-      return JSON.parse(stored) as SystemConfig
-    }
-  } catch (e) {
-    console.error('读取配置失败:', e)
-  }
-  return null
-}
-
-const getLastDetectTime = (): string | null => {
-  try {
-    const timestamp = localStorage.getItem(STORAGE_TIMESTAMP_KEY)
-    if (timestamp) {
-      const date = new Date(parseInt(timestamp))
-      return date.toLocaleString('zh-CN')
-    }
-  } catch (e) {
-    console.error('读取时间失败:', e)
-  }
-  return null
+  cpu: string; motherboard: string; memory: string; gpu: string; monitor: string; disk: string; os: string;
 }
 
 export const ConfigChecker: React.FC = () => {
   const [config, setConfig] = useState<SystemConfig | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [hasCache, setHasCache] = useState(false)
-
-  useEffect(() => {
-    const cachedConfig = loadConfigFromStorage()
-    if (cachedConfig) {
-      setConfig(cachedConfig)
-      setHasCache(true)
-    }
-  }, [])
 
   const fetchConfig = async () => {
     setLoading(true)
-    setError(null)
-    
     try {
-      if (window.electron?.systemConfig) {
-        const result = await window.electron.systemConfig.getSystemConfig()
-        if (result.success && result.config) {
-          setConfig(result.config)
-          saveConfigToStorage(result.config)
-          setHasCache(true)
-        } else {
-          setError(result.error || '获取配置失败')
-        }
-      } else {
-        setError('系统配置 API 不可用')
-      }
-    } catch (err) {
-      setError((err as Error).message)
+      const result = await window.electron.systemConfig.getSystemConfig()
+      if (result.success) setConfig(result.config)
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCopy = async () => {
-    const text = generateConfigText(config)
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('复制失败:', err)
+  useEffect(() => {
+    const cached = localStorage.getItem('config-cache-v15')
+    if (cached) setConfig(JSON.parse(cached))
+    else fetchConfig()
+  }, [])
+
+  useEffect(() => {
+    if (config) localStorage.setItem('config-cache-v15', JSON.stringify(config))
+  }, [config])
+
+  const renderValue = (key: string, value: string | undefined) => {
+    if (!value || loading) return <span className="opacity-20 blur-sm">审计进行中...</span>
+    
+    const lines = value.split('\n').filter(l => l.trim() !== '')
+    const formatLine = (line: string) => {
+      if (key === 'memory') return formatRAM(line)
+      if (key === 'monitor') return formatMonitor(line)
+      return t(line) || line
     }
-  }
 
-  const configItems = getConfigItems(config)
-  const lastDetectTime = getLastDetectTime()
-
-  if (!hasCache && !loading && !error) {
+    if (lines.length <= 1) return <span className="block leading-relaxed">{formatLine(value)}</span>
+    
     return (
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold mb-1">配置检测</h2>
-            <p className="text-muted-foreground">首次使用，请点击开始检测获取系统配置信息</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardContent className="py-16">
-            <div className="flex flex-col items-center justify-center gap-6">
-              <div className="p-6 bg-primary/10 rounded-full">
-                <Cpu size={48} className="text-primary" />
-              </div>
-              <div className="text-center">
-                <h3 className="text-lg font-medium mb-2">开始检测系统配置</h3>
-                <p className="text-sm text-muted-foreground mb-6">
-                  检测将获取处理器、主板、内存、显卡等硬件信息
-                </p>
-                <Button 
-                  onClick={fetchConfig}
-                  disabled={loading}
-                  size="lg"
-                  className="gap-2"
-                >
-                  {loading ? (
-                    <Loader2 size={18} className="animate-spin" />
-                  ) : (
-                    <Play size={18} />
-                  )}
-                  开始检测
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ul className="space-y-3 mt-1">
+        {lines.map((line, i) => (
+          <li key={i} className="flex items-start gap-2.5 group/line text-[14px]">
+            <div className="w-1.5 h-1.5 rounded-full bg-zinc-200 dark:bg-zinc-800 mt-2 shrink-0 group-hover/line:bg-blue-500 transition-colors" />
+            <span className="leading-snug opacity-90">{formatLine(line)}</span>
+          </li>
+        ))}
+      </ul>
     )
   }
 
+  const items = [
+    { id: 'cpu', label: '核心处理器', icon: Cpu },
+    { id: 'motherboard', label: '主板芯片组', icon: CircuitBoard },
+    { id: 'gpu', label: '图形适配器', icon: MonitorSmartphone },
+    { id: 'memory', label: '运行内存堆栈', icon: MemoryStick },
+    { id: 'disk', label: '存储矩阵', icon: HardDrive },
+    { id: 'monitor', label: '显示终端', icon: Monitor }
+  ]
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold mb-1">配置检测</h2>
-          <p className="text-muted-foreground">
-            {lastDetectTime ? `上次检测时间：${lastDetectTime}` : '系统配置信息'}
-          </p>
+    <div className="max-w-5xl mx-auto py-10 px-8 animate-in fade-in duration-1000">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-20">
+        <div className="flex items-center gap-6">
+          <div className="w-16 h-16 rounded-[22px] bg-zinc-900 dark:bg-zinc-50 flex items-center justify-center shadow-2xl transition-all duration-500 hover:scale-105">
+            <Fingerprint size={32} className="text-zinc-50 dark:text-zinc-900" />
+          </div>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">配置快照</h1>
+            <p className="text-[10px] font-black text-zinc-400 mt-1.5 uppercase tracking-[0.4em] opacity-70">
+              {config?.os || 'Initializing Hardware Layer...'}
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Button 
-            onClick={fetchConfig}
-            disabled={loading}
-            variant="outline"
-            className="gap-2"
-          >
-            {loading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : (
-              <RefreshCw size={16} />
-            )}
-            重新检测
+        
+        <div className="flex items-center gap-3">
+          <Button onClick={fetchConfig} disabled={loading} variant="ghost" className="h-10 px-5 rounded-full text-xs font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-all">
+            {loading ? <Loader2 size={14} className="animate-spin mr-2" /> : <RefreshCw size={14} className="mr-2" />}
+            重新审计
           </Button>
-          <Button 
-            onClick={handleCopy}
-            disabled={loading || !config}
-            className="gap-2"
-          >
-            {copied ? (
-              <>
-                <Check size={16} />
-                已复制
-              </>
-            ) : (
-              <>
-                <Copy size={16} />
-                一键复制
-              </>
-            )}
+          <Button onClick={() => {
+            const report = `[系统硬件快照]\n` + items.map(i => `${i.label}: ${t((config as any)?.[i.id]) || (config as any)?.[i.id]}`).join('\n')
+            navigator.clipboard.writeText(report)
+            setCopied(true); setTimeout(() => setCopied(false), 2000)
+          }} disabled={loading} className="h-10 px-6 rounded-full bg-zinc-900 dark:bg-zinc-50 text-white dark:text-zinc-900 text-xs font-black shadow-lg active:scale-95 transition-all">
+            {copied ? <Check size={14} className="mr-2" /> : <Copy size={14} className="mr-2" />}
+            {copied ? '已复制' : '分享审计报告'}
           </Button>
         </div>
       </div>
 
-      {loading ? (
-        <Card>
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center justify-center gap-4">
-              <Loader2 size={32} className="animate-spin text-primary" />
-              <p className="text-muted-foreground">正在获取系统配置...</p>
-            </div>
-          </CardContent>
-        </Card>
-      ) : error ? (
-        <Card className="border-destructive/50">
-          <CardContent className="py-8">
-            <div className="flex flex-col items-center justify-center gap-4 text-destructive">
-              <p>获取配置失败</p>
-              <p className="text-sm text-muted-foreground">{error}</p>
-              <Button onClick={fetchConfig} variant="outline" size="sm">
-                重试
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Cpu size={20} className="text-primary" />
-                系统配置信息
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {configItems.map((item, index) => (
-                  <div 
-                    key={index}
-                    className={cn(
-                      "flex items-start gap-4 p-4 rounded-xl transition-all duration-300",
-                      "bg-muted/30 hover:bg-muted/50"
-                    )}
-                  >
-                    <div className={cn(
-                      "p-2.5 rounded-xl shrink-0",
-                      item.color.replace('text-', 'bg-') + '/20'
-                    )}>
-                      <span className={item.color}>{item.icon}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-sm">{item.label}</span>
-                      </div>
-                      <p className="text-sm text-muted-foreground leading-relaxed break-all">
-                        {item.value}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-20 gap-y-16">
+        {items.map((item) => (
+          <div key={item.id} className="group relative border-l-2 border-zinc-100 dark:border-zinc-800 pl-8 transition-all hover:border-blue-500/40 min-h-[90px]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-1.5 rounded-lg bg-zinc-50 dark:bg-zinc-900 text-zinc-400 group-hover:text-blue-500 transition-colors shadow-sm">
+                <item.icon size={16} />
               </div>
-            </CardContent>
-          </Card>
+              <span className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.3em] opacity-60">{item.label}</span>
+            </div>
+            <div className="text-[15px] font-bold font-mono text-zinc-800 dark:text-zinc-200">
+              {renderValue(item.id, (config as any)?.[item.id])}
+            </div>
+          </div>
+        ))}
+      </div>
 
-          <Card className="bg-muted/30">
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <span className="text-sm font-medium">预览文本</span>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={handleCopy}
-                  className="h-8 gap-1.5"
-                >
-                  {copied ? <Check size={14} /> : <Copy size={14} />}
-                  {copied ? '已复制' : '复制'}
-                </Button>
-              </div>
-              <pre className="text-xs text-muted-foreground bg-background/50 p-4 rounded-lg overflow-x-auto whitespace-pre-wrap leading-relaxed font-mono">
-                {generateConfigText(config)}
-              </pre>
-            </CardContent>
-          </Card>
-        </>
-      )}
+      <div className="mt-32 pt-12 border-t border-zinc-50 dark:border-zinc-900 flex flex-col items-center opacity-40 hover:opacity-100 transition-opacity text-center">
+        <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-400 mb-2">Hardware Trust Layer</p>
+        <p className="text-[10px] text-zinc-400 font-medium max-w-sm">基于底层 WMI 总线实时审计 · 自动适配多品牌硬件及显示协议</p>
+      </div>
     </div>
   )
 }
