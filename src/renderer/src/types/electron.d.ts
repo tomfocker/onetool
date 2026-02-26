@@ -198,11 +198,10 @@ declare global {
         close: () => Promise<{ success: boolean; error?: string }>
       }
       colorPicker: {
-        start: () => Promise<{ success: boolean; error?: string }>
-        stop: () => Promise<{ success: boolean }>
-        onColor: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
-        onSelected: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
-        onCanceled: (callback: () => void) => () => void
+        enable: () => Promise<{ success: boolean }>
+        disable: () => Promise<{ success: boolean }>
+        pick: () => Promise<{ success: boolean; color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }; error?: string }>
+        onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
       }
     }
   }

@@ -230,31 +230,20 @@ const screenOverlayAPI = {
 }
 
 const colorPickerAPI = {
-  start: () => {
-    return ipcRenderer.invoke('color-picker:start')
+  enable: () => {
+    return ipcRenderer.invoke('color-picker:enable')
   },
-  stop: () => {
-    return ipcRenderer.invoke('color-picker:stop')
+  disable: () => {
+    return ipcRenderer.invoke('color-picker:disable')
   },
-  onColor: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
+  pick: () => {
+    return ipcRenderer.invoke('color-picker:pick')
+  },
+  onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
     const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
-    ipcRenderer.on('color-picker:color', handler)
+    ipcRenderer.on('color-picker:update', handler)
     return () => {
-      ipcRenderer.removeListener('color-picker:color', handler)
-    }
-  },
-  onSelected: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
-    const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
-    ipcRenderer.on('color-picker:selected', handler)
-    return () => {
-      ipcRenderer.removeListener('color-picker:selected', handler)
-    }
-  },
-  onCanceled: (callback: () => void) => {
-    const handler = () => callback()
-    ipcRenderer.on('color-picker:canceled', handler)
-    return () => {
-      ipcRenderer.removeListener('color-picker:canceled', handler)
+      ipcRenderer.removeListener('color-picker:update', handler)
     }
   }
 }

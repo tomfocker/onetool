@@ -16,6 +16,7 @@ import { ImageProcessorTool } from '@/tools/ImageProcessorTool'
 import NetworkRadarTool from '@/tools/NetworkRadarTool'
 import ClipboardManager from '@/tools/ClipboardManager'
 import { QRCodeTool } from '@/tools/QRCodeTool'
+import { ColorPickerTool } from '@/tools/ColorPickerTool'
 import { ScreenRecorderTool } from '@/tools/ScreenRecorderTool'
 import { FileDropoverTool } from '@/tools/FileDropoverTool'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
@@ -64,6 +65,8 @@ function AppContent(): React.JSX.Element {
         return <ClipboardManager />
       case 'qr-generator':
         return <QRCodeTool />
+      case 'color-picker':
+        return <ColorPickerTool />
       case 'screen-recorder':
         return <ScreenRecorderTool />
       case 'file-dropover':

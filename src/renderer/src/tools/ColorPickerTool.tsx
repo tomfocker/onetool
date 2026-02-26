@@ -61,7 +61,6 @@ const getContrastColor = (hex: string): string => {
 }
 
 export const ColorPickerTool: React.FC = () => {
-  const [isPicking, setIsPicking] = useState(false)
   const [currentColor, setCurrentColor] = useState<ColorInfo>({
     hex: '#808080',
     rgb: { r: 128, g: 128, b: 128 },
@@ -70,6 +69,7 @@ export const ColorPickerTool: React.FC = () => {
   const [colorHistory, setColorHistory] = useState<ColorHistoryItem[]>([])
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
   const [manualHexInput, setManualHexInput] = useState('')
+  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('colorPickerHistory')
@@ -85,24 +85,16 @@ export const ColorPickerTool: React.FC = () => {
   useEffect(() => {
     if (!window.electron?.colorPicker) return
 
-    const unsubscribeColor = window.electron.colorPicker.onColor((data) => {
+    const unsubscribeUpdate = window.electron.colorPicker.onUpdate((data) => {
       updateColorFromData(data)
+      setMousePosition({ x: data.x, y: data.y })
     })
 
-    const unsubscribeSelected = window.electron.colorPicker.onSelected((data) => {
-      updateColorFromData(data)
-      saveToHistory(data.hex)
-      setIsPicking(false)
-    })
-
-    const unsubscribeCanceled = window.electron.colorPicker.onCanceled(() => {
-      setIsPicking(false)
-    })
+    window.electron.colorPicker.enable()
 
     return () => {
-      unsubscribeColor()
-      unsubscribeSelected()
-      unsubscribeCanceled()
+      unsubscribeUpdate()
+      window.electron.colorPicker.disable()
     }
   }, [])
 
@@ -124,25 +116,23 @@ export const ColorPickerTool: React.FC = () => {
     })
   }, [])
 
-  const startPicking = useCallback(async () => {
-    if (!window.electron?.colorPicker?.start) {
-      console.error('Color picker API not available')
+  const pickCurrentColor = useCallback(async () => {
+    if (!window.electron?.colorPicker?.pick) {
+      saveToHistory(currentColor.hex)
       return
     }
 
-    setIsPicking(true)
-
     try {
-      const result = await window.electron.colorPicker.start()
-      if (!result.success) {
-        console.error('Failed to start color picker:', result.error)
-        setIsPicking(false)
+      const result = await window.electron.colorPicker.pick()
+      if (result.success && result.color) {
+        updateColorFromData(result.color)
+        saveToHistory(result.color.hex)
       }
     } catch (error) {
-      console.error('Failed to start color picker:', error)
-      setIsPicking(false)
+      console.error('Failed to pick color:', error)
+      saveToHistory(currentColor.hex)
     }
-  }, [])
+  }, [currentColor, saveToHistory, updateColorFromData])
 
   const copyToClipboard = useCallback(async (text: string, format: string) => {
     try {
@@ -198,7 +188,10 @@ export const ColorPickerTool: React.FC = () => {
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
             屏幕取色器
           </h1>
-          <p className="text-muted-foreground">点击取色按钮，然后在屏幕任意位置点击获取颜色</p>
+          <p className="text-muted-foreground">移动鼠标即可实时取色，点击"拾取颜色"保存到历史记录</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            鼠标位置: X={mousePosition.x}, Y={mousePosition.y}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -231,40 +224,18 @@ export const ColorPickerTool: React.FC = () => {
               </div>
 
               <button
-                onClick={startPicking}
-                disabled={isPicking}
-                className={`
+                onClick={pickCurrentColor}
+                className="
                   w-full py-4 rounded-xl font-semibold text-lg transition-all duration-300
-                  flex items-center justify-center gap-3 relative overflow-hidden
-                  ${isPicking 
-                    ? 'bg-purple-600/50 cursor-wait' 
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 hover:shadow-lg hover:shadow-purple-500/25 active:scale-[0.98]'
-                  }
-                `}
+                  flex items-center justify-center gap-3
+                  bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 hover:shadow-lg hover:shadow-purple-500/25 active:scale-[0.98]
+                "
               >
-                {isPicking ? (
-                  <>
-                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                    <svg className="w-6 h-6 animate-spin relative z-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span className="relative z-10">取色中...点击屏幕任意位置</span>
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
-                    </svg>
-                    <span>开始取色</span>
-                  </>
-                )}
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                <span>拾取颜色</span>
               </button>
-
-              {isPicking && (
-                <p className="text-center text-muted-foreground text-sm mt-3">
-                  按 <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">ESC</kbd> 取消
-                </p>
-              )}
             </div>
 
             <div className="bg-card rounded-2xl p-6 border border-white/10 shadow-lg">
@@ -331,7 +302,7 @@ export const ColorPickerTool: React.FC = () => {
                         </svg>
                       ) : (
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
                       )}
                     </div>
@@ -364,7 +335,7 @@ export const ColorPickerTool: React.FC = () => {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
                   </svg>
                   <p>暂无历史记录</p>
-                  <p className="text-sm mt-1">取色后会自动保存在这里</p>
+                  <p className="text-sm mt-1">点击"拾取颜色"后会自动保存在这里</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-5 gap-2">
@@ -403,15 +374,15 @@ export const ColorPickerTool: React.FC = () => {
               <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center mb-3">
                 <span className="text-purple-400 font-bold">1</span>
               </div>
-              <h3 className="font-medium mb-1">开始取色</h3>
-              <p className="text-sm text-muted-foreground">点击"开始取色"按钮，屏幕会出现透明覆盖层</p>
+              <h3 className="font-medium mb-1">移动鼠标</h3>
+              <p className="text-sm text-muted-foreground">移动鼠标即可实时显示鼠标位置的颜色</p>
             </div>
             <div className="p-4 bg-background/50 rounded-xl border border-white/5">
               <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center mb-3">
                 <span className="text-purple-400 font-bold">2</span>
               </div>
-              <h3 className="font-medium mb-1">选择颜色</h3>
-              <p className="text-sm text-muted-foreground">移动鼠标预览颜色，点击确认选择</p>
+              <h3 className="font-medium mb-1">保存颜色</h3>
+              <p className="text-sm text-muted-foreground">点击"拾取颜色"按钮保存当前颜色到历史记录</p>
             </div>
             <div className="p-4 bg-background/50 rounded-xl border border-white/5">
               <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center mb-3">

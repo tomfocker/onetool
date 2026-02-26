@@ -1590,298 +1590,148 @@ ipcMain.handle('screen-recorder-status', async () => {
   }
 })
 
-let colorPickerWindow: BrowserWindow | null = null
+let colorPickerTimer: NodeJS.Timeout | null = null
+let colorPickerActive = false
+let lastColorPickerX = -1
+let lastColorPickerY = -1
+let lastColorR = -1
+let lastColorG = -1
+let lastColorB = -1
 
-ipcMain.handle('color-picker:start', async () => {
-  try {
-    if (colorPickerWindow) {
-      colorPickerWindow.close()
-      colorPickerWindow = null
+const getMouseAndColor = async (): Promise<{ x: number; y: number; r: number; g: number; b: number } | null> => {
+  const script = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class ColorPicker {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct POINT {
+    public int X;
+    public int Y;
+  }
+  [DllImport("user32.dll")]
+  public static extern bool GetCursorPos(out POINT lpPoint);
+  [DllImport("user32.dll")]
+  public static extern IntPtr GetDC(IntPtr hwnd);
+  [DllImport("gdi32.dll")]
+  public static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
+  [DllImport("user32.dll")]
+  public static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
+}
+"@
+$point = New-Object ColorPicker+POINT
+[ColorPicker]::GetCursorPos([ref]$point) | Out-Null
+$dc = [ColorPicker]::GetDC([IntPtr]::Zero)
+$color = [ColorPicker]::GetPixel($dc, $point.X, $point.Y)
+[ColorPicker]::ReleaseDC([IntPtr]::Zero, $dc) | Out-Null
+$r = ($color -band 0xFF)
+$g = (($color -shr 8) -band 0xFF)
+$b = (($color -shr 16) -band 0xFF)
+"$($point.X),$($point.Y),$r,$g,$b"
+`
+  const result = await execPowerShell(script)
+  const parts = result.trim().split(',')
+  if (parts.length >= 5) {
+    return {
+      x: parseInt(parts[0]),
+      y: parseInt(parts[1]),
+      r: parseInt(parts[2]),
+      g: parseInt(parts[3]),
+      b: parseInt(parts[4])
     }
+  }
+  return null
+}
 
-    const { screen } = require('electron')
-    const displays = screen.getAllDisplays()
-    let totalWidth = 0
-    let totalHeight = 0
+const startColorPicker = () => {
+  if (colorPickerTimer) return
+  
+  colorPickerActive = true
+  colorPickerTimer = setInterval(async () => {
+    if (!colorPickerActive || !mainWindow) return
     
-    displays.forEach(display => {
-      const right = display.bounds.x + display.bounds.width
-      const bottom = display.bounds.y + display.bounds.height
-      if (right > totalWidth) totalWidth = right
-      if (bottom > totalHeight) totalHeight = bottom
-    })
-
-    colorPickerWindow = new BrowserWindow({
-      width: totalWidth,
-      height: totalHeight,
-      x: 0,
-      y: 0,
-      transparent: true,
-      frame: false,
-      alwaysOnTop: true,
-      skipTaskbar: true,
-      resizable: false,
-      focusable: true,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
+    try {
+      const data = await getMouseAndColor()
+      if (!data) return
+      
+      if (data.x === lastColorPickerX && data.y === lastColorPickerY) {
+        return
       }
-    })
+      
+      if (data.r === lastColorR && data.g === lastColorG && data.b === lastColorB) {
+        lastColorPickerX = data.x
+        lastColorPickerY = data.y
+        return
+      }
+      
+      lastColorPickerX = data.x
+      lastColorPickerY = data.y
+      lastColorR = data.r
+      lastColorG = data.g
+      lastColorB = data.b
+      
+      const hex = `#${data.r.toString(16).padStart(2, '0')}${data.g.toString(16).padStart(2, '0')}${data.b.toString(16).padStart(2, '0')}`
+      const rgb = `RGB(${data.r}, ${data.g}, ${data.b})`
+      
+      mainWindow.webContents.send('color-picker:update', {
+        hex,
+        r: data.r,
+        g: data.g,
+        b: data.b,
+        rgb,
+        x: data.x,
+        y: data.y
+      })
+    } catch (error) {
+      console.error('Color picker error:', error)
+    }
+  }, 100)
+}
 
-    colorPickerWindow.setIgnoreMouseEvents(false)
-    colorPickerWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+const stopColorPicker = () => {
+  if (colorPickerTimer) {
+    clearInterval(colorPickerTimer)
+    colorPickerTimer = null
+  }
+  colorPickerActive = false
+}
+
+ipcMain.handle('color-picker:enable', async () => {
+  startColorPicker()
+  return { success: true }
+})
+
+ipcMain.handle('color-picker:disable', async () => {
+  stopColorPicker()
+  return { success: true }
+})
+
+ipcMain.handle('color-picker:pick', async () => {
+  try {
+    const data = await getMouseAndColor()
+    if (!data) {
+      return { success: false, error: 'Failed to get color' }
+    }
     
-    colorPickerWindow.loadURL(`data:text/html,
-      <html>
-        <head>
-          <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            html, body { 
-              width: 100%; 
-              height: 100%; 
-              cursor: crosshair;
-              background: transparent;
-              overflow: hidden;
-            }
-            #info {
-              position: fixed;
-              padding: 12px 16px;
-              background: rgba(0, 0, 0, 0.85);
-              color: white;
-              border-radius: 10px;
-              font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-              font-size: 14px;
-              pointer-events: none;
-              white-space: nowrap;
-              display: none;
-              z-index: 9999;
-              box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-              border: 1px solid rgba(255,255,255,0.1);
-              backdrop-filter: blur(10px);
-            }
-            #preview {
-              display: inline-block;
-              width: 28px;
-              height: 28px;
-              border: 2px solid rgba(255,255,255,0.9);
-              border-radius: 6px;
-              vertical-align: middle;
-              margin-right: 12px;
-              box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            }
-            #hex {
-              vertical-align: middle;
-              font-weight: 600;
-              font-family: 'Consolas', 'Monaco', monospace;
-              font-size: 15px;
-            }
-            #rgb {
-              display: block;
-              margin-top: 6px;
-              font-size: 12px;
-              opacity: 0.8;
-              margin-left: 40px;
-            }
-            #tip {
-              position: fixed;
-              bottom: 30px;
-              left: 50%;
-              transform: translateX(-50%);
-              padding: 10px 20px;
-              background: rgba(0, 0, 0, 0.75);
-              color: rgba(255,255,255,0.9);
-              border-radius: 25px;
-              font-family: 'Segoe UI', -apple-system, sans-serif;
-              font-size: 13px;
-              backdrop-filter: blur(10px);
-              border: 1px solid rgba(255,255,255,0.1);
-            }
-          </style>
-        </head>
-        <body>
-          <div id="info">
-            <span id="preview"></span>
-            <span id="hex">#000000</span>
-            <span id="rgb">RGB(0, 0, 0)</span>
-          </div>
-          <div id="tip">按 ESC 取消 | 点击确认选择</div>
-          <script>
-            const { ipcRenderer } = require('electron');
-            
-            let currentColor = '#000000';
-            let currentRgb = 'RGB(0, 0, 0)';
-            let isPicking = true;
-            let lastX = 0, lastY = 0;
-            let throttleTimer = null;
-            
-            document.body.addEventListener('mousemove', (e) => {
-              if (!isPicking) return;
-              
-              lastX = e.screenX;
-              lastY = e.screenY;
-              
-              if (!throttleTimer) {
-                throttleTimer = setTimeout(() => {
-                  throttleTimer = null;
-                  ipcRenderer.send('color-picker:move', { x: lastX, y: lastY });
-                }, 30);
-              }
-              
-              const info = document.getElementById('info');
-              const preview = document.getElementById('preview');
-              const hex = document.getElementById('hex');
-              const rgb = document.getElementById('rgb');
-              
-              preview.style.backgroundColor = currentColor;
-              hex.textContent = currentColor.toUpperCase();
-              rgb.textContent = currentRgb;
-              info.style.display = 'block';
-              
-              let infoX = e.clientX + 25;
-              let infoY = e.clientY + 25;
-              
-              if (infoX + 220 > window.innerWidth) {
-                infoX = e.clientX - 200;
-              }
-              if (infoY + 80 > window.innerHeight) {
-                infoY = e.clientY - 90;
-              }
-              
-              info.style.left = infoX + 'px';
-              info.style.top = infoY + 'px';
-            });
-            
-            document.body.addEventListener('click', (e) => {
-              if (!isPicking) return;
-              isPicking = false;
-              ipcRenderer.send('color-picker:select', { x: e.screenX, y: e.screenY, color: currentColor });
-            });
-            
-            document.body.addEventListener('keydown', (e) => {
-              if (e.key === 'Escape') {
-                isPicking = false;
-                ipcRenderer.send('color-picker:cancel');
-              }
-            });
-            
-            ipcRenderer.on('color-update', (event, data) => {
-              currentColor = data.hex;
-              currentRgb = data.rgb;
-            });
-          </script>
-        </body>
-      </html>
-    `)
-
-    colorPickerWindow.on('closed', () => {
-      colorPickerWindow = null
-    })
-
-    return { success: true }
+    const hex = `#${data.r.toString(16).padStart(2, '0')}${data.g.toString(16).padStart(2, '0')}${data.b.toString(16).padStart(2, '0')}`
+    const rgb = `RGB(${data.r}, ${data.g}, ${data.b})`
+    
+    return {
+      success: true,
+      color: {
+        hex,
+        r: data.r,
+        g: data.g,
+        b: data.b,
+        rgb,
+        x: data.x,
+        y: data.y
+      }
+    }
   } catch (error) {
-    console.error('Start color picker error:', error)
+    console.error('Pick color error:', error)
     return { success: false, error: (error as Error).message }
   }
-})
-
-ipcMain.on('color-picker:move', async (_event, { x, y }) => {
-  try {
-    const script = `
-Add-Type @"
-  using System;
-  using System.Runtime.InteropServices;
-  public class CPAPI {
-    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hwnd);
-    [DllImport("gdi32.dll")] public static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
-    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
-  }
-"@
-$dc = [CPAPI]::GetDC([IntPtr]::Zero)
-$color = [CPAPI]::GetPixel($dc, ${x}, ${y})
-[CPAPI]::ReleaseDC([IntPtr]::Zero, $dc) | Out-Null
-$r = ($color -band 0xFF)
-$g = (($color -shr 8) -band 0xFF)
-$b = (($color -shr 16) -band 0xFF)
-"{0},{1},{2},{3:X2}{4:X2}{5:X2}" -f $r, $g, $b, $r, $g, $b
-`
-    const result = await execPowerShell(script)
-    const parts = result.trim().split(',')
-    if (parts.length >= 4) {
-      const r = parseInt(parts[0])
-      const g = parseInt(parts[1])
-      const b = parseInt(parts[2])
-      const hex = `#${parts[3].toLowerCase()}`
-      const rgb = `RGB(${r}, ${g}, ${b})`
-      
-      if (colorPickerWindow) {
-        colorPickerWindow.webContents.send('color-update', { hex, rgb, r, g, b })
-      }
-      if (mainWindow) {
-        mainWindow.webContents.send('color-picker:color', { hex, rgb, r, g, b, x, y })
-      }
-    }
-  } catch (error) {
-    console.error('Color picker move error:', error)
-  }
-})
-
-ipcMain.on('color-picker:select', async (_event, { x, y }) => {
-  try {
-    const script = `
-Add-Type @"
-  using System;
-  using System.Runtime.InteropServices;
-  public class CPAPI {
-    [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr hwnd);
-    [DllImport("gdi32.dll")] public static extern uint GetPixel(IntPtr hdc, int nXPos, int nYPos);
-    [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr hwnd, IntPtr hdc);
-  }
-"@
-$dc = [CPAPI]::GetDC([IntPtr]::Zero)
-$color = [CPAPI]::GetPixel($dc, ${x}, ${y})
-[CPAPI]::ReleaseDC([IntPtr]::Zero, $dc) | Out-Null
-$r = ($color -band 0xFF)
-$g = (($color -shr 8) -band 0xFF)
-$b = (($color -shr 16) -band 0xFF)
-"{0},{1},{2},{3:X2}{4:X2}{5:X2}" -f $r, $g, $b, $r, $g, $b
-`
-    const result = await execPowerShell(script)
-    const parts = result.trim().split(',')
-    if (parts.length >= 4 && mainWindow) {
-      const r = parseInt(parts[0])
-      const g = parseInt(parts[1])
-      const b = parseInt(parts[2])
-      const hex = `#${parts[3].toLowerCase()}`
-      const rgb = `RGB(${r}, ${g}, ${b})`
-      
-      mainWindow.webContents.send('color-picker:selected', { hex, rgb, r, g, b, x, y })
-    }
-  } catch (error) {
-    console.error('Color picker select error:', error)
-  }
-  
-  if (colorPickerWindow) {
-    colorPickerWindow.close()
-    colorPickerWindow = null
-  }
-})
-
-ipcMain.on('color-picker:cancel', () => {
-  if (colorPickerWindow) {
-    colorPickerWindow.close()
-    colorPickerWindow = null
-  }
-  if (mainWindow) {
-    mainWindow.webContents.send('color-picker:canceled')
-  }
-})
-
-ipcMain.handle('color-picker:stop', async () => {
-  if (colorPickerWindow) {
-    colorPickerWindow.close()
-    colorPickerWindow = null
-  }
-  return { success: true }
 })
 
 async function captureScreen(): Promise<string | null> {
