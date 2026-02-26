@@ -1904,6 +1904,24 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  globalShortcut.register('F8', async () => {
+    console.log('F8 pressed - emergency stop!')
+    if (autoClickerControlFile && fs.existsSync(autoClickerControlFile)) {
+      fs.writeFileSync(autoClickerControlFile, 'STOP')
+    }
+    
+    if (autoClickerProcess) {
+      autoClickerProcess.kill()
+      autoClickerProcess = null
+    }
+    
+    if (mainWindow) {
+      mainWindow.webContents.send('autoclicker-stopped')
+    }
+    
+    console.log('Auto clicker emergency stopped via F8')
+  })
+
   globalShortcut.register('Alt+Shift+T', async () => {
     console.log('Global shortcut Alt+Shift+T pressed')
     try {

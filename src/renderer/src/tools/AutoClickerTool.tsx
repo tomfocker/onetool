@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useEffect } from 'react'
-import { MousePointer, Play, Square, Settings, Info, ChevronRight, Keyboard } from 'lucide-react'
+import { MousePointer, Play, Square, Settings, Info, ChevronRight, Keyboard, AlertTriangle } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -40,6 +40,11 @@ const styles = `
     100% { transform: scale(2); opacity: 0; }
   }
 
+  @keyframes pulse-red {
+    0%, 100% { background-color: rgb(239, 68, 68); }
+    50% { background-color: rgb(248, 113, 113); }
+  }
+
   .merit-particle {
     position: absolute;
     pointer-events: none;
@@ -75,6 +80,10 @@ const styles = `
     border: 3px solid rgba(139, 92, 246, 0.6);
     animation: ripple 0.6s ease-out forwards;
     pointer-events: none;
+  }
+
+  .emergency-stop-pulse {
+    animation: pulse-red 1s ease-in-out infinite;
   }
 `
 
@@ -260,6 +269,20 @@ export const AutoClickerTool: React.FC = () => {
     return () => window.clearInterval(intervalCheck)
   }, [checkStatus])
 
+  useEffect(() => {
+    const handleStopped = () => {
+      console.log('Autoclicker stopped via global shortcut')
+      setIsRunning(false)
+    }
+    
+    if (window.electron.ipcRenderer) {
+      window.electron.ipcRenderer.on('autoclicker-stopped', handleStopped)
+      return () => {
+        window.electron.ipcRenderer.removeListener('autoclicker-stopped', handleStopped)
+      }
+    }
+  }, [])
+
   const handleWoodenFishClick = useCallback((e: React.MouseEvent) => {
     setMeritCount(prev => prev + 1)
     setIsShaking(true)
@@ -290,8 +313,10 @@ export const AutoClickerTool: React.FC = () => {
 
   const handleStart = async () => {
     try {
+      console.log('Starting autoclicker with:', { interval: clickInterval, button })
       const result = await window.electron.autoClicker.start({ interval: clickInterval, button })
       if (result.success) {
+        console.log('Autoclicker started successfully')
         setIsRunning(true)
       } else {
         console.error('Start failed:', result.error)
@@ -303,8 +328,10 @@ export const AutoClickerTool: React.FC = () => {
 
   const handleStop = async () => {
     try {
+      console.log('Stopping autoclicker')
       const result = await window.electron.autoClicker.stop()
       if (result.success) {
+        console.log('Autoclicker stopped successfully')
         setIsRunning(false)
       }
     } catch (error) {
@@ -325,6 +352,18 @@ export const AutoClickerTool: React.FC = () => {
         </h1>
         <p className='text-muted-foreground'>自定义热键和点击频率的自动点击工具</p>
       </div>
+
+      <Card className='bg-gradient-to-br from-red-500/10 via-orange-500/10 to-amber-500/10 border-red-500/20 mb-4'>
+        <CardHeader>
+          <CardTitle className='flex items-center gap-2 text-red-600 dark:text-red-400'>
+            <AlertTriangle className='h-5 w-5' />
+            ⚠️ 紧急停止
+          </CardTitle>
+          <CardDescription>
+            无论何时，按下 <kbd className='px-2 py-1 bg-red-500/20 rounded text-xs font-mono text-red-600 dark:text-red-400'>F8</kbd> 立即停止连点！
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
       <Card className='bg-gradient-to-br from-amber-500/10 via-orange-500/10 to-red-500/10 border-amber-500/20'>
         <CardHeader>
@@ -405,14 +444,14 @@ export const AutoClickerTool: React.FC = () => {
                 状态
               </CardTitle>
               <CardDescription>
-                {isRunning ? '连点器正在运行中...' : '连点器已停止'}
+                {isRunning ? '连点器正在运行中...按 F8 紧急停止！' : '连点器已停止'}
               </CardDescription>
             </div>
             <div className={cn(
               'px-4 py-2 rounded-full text-sm font-medium',
               isRunning ? 'bg-green-500 text-white animate-pulse' : 'bg-muted text-muted-foreground'
             )}>
-              {isRunning ? '● 运行中' : '○ 已停止'}
+              {isRunning ? '● 连点中' : '○ 已停止'}
             </div>
           </div>
         </CardHeader>
@@ -443,6 +482,14 @@ export const AutoClickerTool: React.FC = () => {
             <Keyboard className='h-4 w-4' />
             <span>按 <kbd className='px-2 py-1 bg-muted rounded text-xs font-mono'>F6</kbd> 快速切换启动/停止</span>
           </div>
+          {isRunning && (
+            <div className='mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg'>
+              <div className='flex items-center gap-2 text-red-600 dark:text-red-400 font-medium'>
+                <AlertTriangle className='h-4 w-4' />
+                <span>连点进行中！按 <kbd className='px-1.5 py-0.5 bg-red-500/20 rounded text-xs font-mono emergency-stop-pulse text-white'>F8</kbd> 立即停止！</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -535,7 +582,10 @@ export const AutoClickerTool: React.FC = () => {
             <ChevronRight className='h-5 w-5 text-primary flex-shrink-0 mt-0.5' />
             <div>
               <h4 className='font-medium'>快捷键</h4>
-              <p className='text-sm text-muted-foreground'>按 F6 可快速切换启动/停止连点</p>
+              <p className='text-sm text-muted-foreground'>
+                按 <kbd className='px-1.5 py-0.5 bg-muted rounded text-xs font-mono'>F6</kbd> 快速切换启动/停止，
+                按 <kbd className='px-1.5 py-0.5 bg-red-500/20 rounded text-xs font-mono text-red-600 dark:text-red-400'>F8</kbd> 紧急停止
+              </p>
             </div>
           </div>
           <div className='flex items-start gap-3'>
