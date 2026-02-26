@@ -2,7 +2,6 @@ import React, { useState, useRef, useCallback, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 
 type CompressMethod = 'quality' | 'limitWeight'
@@ -33,7 +32,7 @@ const animationStyles = `
 
   @keyframes float {
     0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-8px); }
+    50% { transform: translateY(-6px); }
   }
 
   @keyframes pulse-ring {
@@ -48,7 +47,7 @@ const animationStyles = `
   }
 
   @keyframes fade-in-up {
-    0% { opacity: 0; transform: translateY(10px); }
+    0% { opacity: 0; transform: translateY(8px); }
     100% { opacity: 1; transform: translateY(0); }
   }
 
@@ -58,58 +57,21 @@ const animationStyles = `
   }
 
   @keyframes slide-in-right {
-    0% { opacity: 0; transform: translateX(20px); }
+    0% { opacity: 0; transform: translateX(16px); }
     100% { opacity: 1; transform: translateX(0); }
   }
 
-  @keyframes skeleton-pulse {
-    0%, 100% { opacity: 0.4; }
-    50% { opacity: 0.7; }
-  }
-
-  .animate-float { 
-    animation: float 3s ease-in-out infinite; 
-    will-change: transform;
-  }
-  .animate-pulse-ring { 
-    animation: pulse-ring 2s ease-in-out infinite; 
-    will-change: transform, opacity;
-  }
+  .animate-float { animation: float 3s ease-in-out infinite; will-change: transform; }
+  .animate-pulse-ring { animation: pulse-ring 2s ease-in-out infinite; will-change: transform, opacity; }
   .animate-shimmer { 
     background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
     background-size: 200% 100%;
     animation: shimmer 2s infinite;
     will-change: background-position;
   }
-  .animate-fade-in-up { 
-    animation: fade-in-up 0.4s ease-out forwards; 
-    will-change: opacity, transform;
-  }
-  .animate-scale-in { 
-    animation: scale-in 0.3s ease-out forwards; 
-    will-change: opacity, transform;
-  }
-  .animate-slide-in-right { 
-    animation: slide-in-right 0.4s ease-out forwards; 
-    will-change: opacity, transform;
-  }
-
-  .drop-zone-border-animated {
-    animation: border-dance 20s linear infinite;
-  }
-
-  .drop-zone-dragging {
-    animation: border-dance 5s linear infinite;
-  }
-
-  .skeleton-pulse {
-    animation: skeleton-pulse 1.5s ease-in-out infinite;
-  }
-
-  .gpu-accelerated {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-  }
+  .animate-fade-in-up { animation: fade-in-up 0.3s ease-out forwards; will-change: opacity, transform; }
+  .animate-scale-in { animation: scale-in 0.25s ease-out forwards; will-change: opacity, transform; }
+  .animate-slide-in-right { animation: slide-in-right 0.3s ease-out forwards; will-change: opacity, transform; }
 `
 
 export const ImageProcessorTool: React.FC = () => {
@@ -226,7 +188,7 @@ export const ImageProcessorTool: React.FC = () => {
             const thumbnailCanvas = document.createElement('canvas')
             const thumbnailCtx = thumbnailCanvas.getContext('2d')
             if (thumbnailCtx) {
-              const thumbSize = 70
+              const thumbSize = 48
               const thumbAdjusted = getAdjustedDimensions(img, thumbSize)
               thumbnailCanvas.width = thumbAdjusted.width
               thumbnailCanvas.height = thumbAdjusted.height
@@ -369,59 +331,60 @@ export const ImageProcessorTool: React.FC = () => {
 
   const getSavedPercentage = (original: number, processed: number): string => {
     const saved = original - processed
-    const percentage = Math.abs((saved / original) * 100).toFixed(2)
+    const percentage = Math.abs((saved / original) * 100).toFixed(1)
     const trend = saved < 0 ? '+' : saved > 0 ? '-' : ''
     return `${trend}${percentage}%`
   }
 
   const getSavedClass = (original: number, processed: number): string => {
     const saved = original - processed
-    return saved <= 0 ? 'text-red-500 bg-red-50' : 'text-green-600 bg-green-50'
+    return saved <= 0 ? 'text-red-500 bg-red-50 dark:bg-red-950/30' : 'text-green-600 bg-green-50 dark:bg-green-950/30'
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="animate-fade-in-up">
-        <h2 className="text-2xl font-bold mb-2">图片处理工具</h2>
-        <p className="text-muted-foreground">本地图片压缩、格式转换，保护您的隐私安全</p>
+        <h2 className="text-lg font-semibold mb-0.5">图片处理</h2>
+        <p className="text-xs text-muted-foreground">本地压缩、格式转换，保护隐私</p>
       </div>
 
-      {showDropZone && !isProcessing && processedImages.length === 0 && (
+      {showDropZone && !isProcessing && (
         <div
           onDrop={handleDrop}
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
+          onClick={() => fileInputRef.current?.click()}
           className={cn(
-            "relative h-[280px] rounded-xl overflow-hidden cursor-pointer transition-all duration-300 animate-scale-in",
+            "relative h-[180px] rounded-lg overflow-hidden cursor-pointer transition-all duration-200 animate-scale-in",
             "bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20",
             "border border-border/50",
             isDragging 
-              ? "border-primary bg-primary/5 scale-[1.02] shadow-lg shadow-primary/10" 
-              : "hover:border-primary/30 hover:bg-primary/5 hover:shadow-md"
+              ? "border-primary bg-primary/5 scale-[1.01] shadow-md shadow-primary/10" 
+              : "hover:border-primary/30 hover:bg-primary/5"
           )}
         >
           {isDragging && (
-            <div className="absolute inset-0 bg-primary/10 animate-pulse-ring rounded-xl" />
+            <div className="absolute inset-0 bg-primary/10 animate-pulse-ring rounded-lg" />
           )}
 
-          <div className="relative w-full h-full flex items-center justify-center p-6">
-            <div className="text-center">
+          <div className="relative w-full h-full flex items-center justify-center p-4">
+            <div className="text-center flex items-center gap-4">
               <div className={cn(
-                "w-16 h-16 mx-auto mb-4 rounded-2xl flex items-center justify-center transition-all duration-300",
+                "w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 flex-shrink-0",
                 "bg-gradient-to-br from-primary/10 to-primary/5",
                 isDragging ? "scale-110 animate-float" : ""
               )}>
-                <svg className="w-8 h-8 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
               </div>
-              <div className="mb-4">
-                <p className="text-lg font-medium mb-1">
-                  {isDragging ? '松开以上传图片' : '拖放或点击选择图片'}
+              <div className="text-left">
+                <p className="text-sm font-medium mb-1">
+                  {isDragging ? '松开上传' : '拖放或点击选择图片'}
                 </p>
-                <p className="text-sm text-muted-foreground flex flex-wrap justify-center gap-1">
+                <p className="text-xs text-muted-foreground flex flex-wrap gap-1">
                   {['jpg', 'png', 'webp', 'gif', 'svg', 'ico'].map(ext => (
-                    <span key={ext} className="px-2 py-0.5 bg-muted rounded-md text-xs">{ext}</span>
+                    <span key={ext} className="px-1.5 py-0.5 bg-muted rounded text-[10px]">{ext}</span>
                   ))}
                 </p>
               </div>
@@ -433,16 +396,6 @@ export const ImageProcessorTool: React.FC = () => {
                 onChange={handleFileInput}
                 className="hidden"
               />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                variant="default"
-                className="gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                </svg>
-                浏览文件
-              </Button>
             </div>
           </div>
         </div>
@@ -450,35 +403,35 @@ export const ImageProcessorTool: React.FC = () => {
 
       {isProcessing && (
         <Card className="animate-scale-in overflow-hidden">
-          <CardContent className="p-6">
-            <div className="text-center mb-4">
-              <p className="text-lg font-medium">{processingText}</p>
+          <CardContent className="p-3">
+            <div className="text-center mb-2">
+              <p className="text-sm font-medium">{processingText}</p>
             </div>
-            <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+            <div className="w-full h-1.5 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-300 rounded-full relative overflow-hidden"
+                className="h-full bg-gradient-to-r from-primary to-purple-500 transition-all duration-200 rounded-full relative overflow-hidden"
                 style={{ width: `${processingProgress}%` }}
               >
                 <div className="absolute inset-0 animate-shimmer" />
               </div>
             </div>
-            <p className="text-center text-sm text-muted-foreground mt-2">{processingProgress}%</p>
+            <p className="text-center text-xs text-muted-foreground mt-1">{processingProgress}%</p>
           </CardContent>
         </Card>
       )}
 
-      <div className="flex justify-center animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-        <div className="inline-flex bg-muted/50 rounded-lg p-1 gap-1">
+      <div className="flex justify-center animate-fade-in-up" style={{ animationDelay: '0.05s' }}>
+        <div className="inline-flex bg-muted/50 rounded-md p-0.5 gap-0.5">
           <button
             onClick={() => setCurrentSubpage('settings')}
             className={cn(
-              "px-6 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2",
+              "px-3 py-1 rounded text-xs font-medium transition-all duration-150 flex items-center gap-1.5",
               currentSubpage === 'settings'
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
             </svg>
@@ -487,18 +440,18 @@ export const ImageProcessorTool: React.FC = () => {
           <button
             onClick={() => setCurrentSubpage('output')}
             className={cn(
-              "px-6 py-2 rounded-md font-medium transition-all duration-200 flex items-center gap-2",
+              "px-3 py-1 rounded text-xs font-medium transition-all duration-150 flex items-center gap-1.5",
               currentSubpage === 'output'
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             图片
             {processedImages.length > 0 && (
-              <span className="ml-1 px-2 py-0.5 bg-primary/20 text-primary rounded-full text-xs">
+              <span className="px-1.5 py-0.5 bg-primary/20 text-primary rounded-full text-[10px]">
                 {processedImages.length}
               </span>
             )}
@@ -507,65 +460,66 @@ export const ImageProcessorTool: React.FC = () => {
       </div>
 
       {currentSubpage === 'settings' && (
-        <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
+        <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <Card>
-            <CardHeader>
-              <CardTitle>优化方式</CardTitle>
-              <CardDescription>选择图片压缩的方式</CardDescription>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm">优化方式</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {[
-                { value: 'quality', label: '设置图片质量', desc: '数值越高保留细节越多，数值越低文件体积更小' },
-                { value: 'limitWeight', label: '限制文件大小', desc: '尝试将图片压缩至目标文件大小' }
-              ].map((method) => (
-                <button
-                  key={method.value}
-                  onClick={() => setCompressMethod(method.value as CompressMethod)}
-                  className={cn(
-                    "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left",
-                    compressMethod === method.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50 hover:bg-muted/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">{method.label}</span>
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      compressMethod === method.value ? "border-primary" : "border-muted-foreground"
-                    )}>
-                      {compressMethod === method.value && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                      )}
+            <CardContent className="p-4 pt-0">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { value: 'quality', label: '设置质量', desc: '数值越高细节越多' },
+                  { value: 'limitWeight', label: '限制大小', desc: '压缩至目标大小' }
+                ].map((method) => (
+                  <button
+                    key={method.value}
+                    onClick={() => setCompressMethod(method.value as CompressMethod)}
+                    className={cn(
+                      "p-3 rounded-lg border transition-all duration-150 text-left",
+                      compressMethod === method.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium">{method.label}</span>
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+                        compressMethod === method.value ? "border-primary" : "border-muted-foreground/50"
+                      )}>
+                        {compressMethod === method.value && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{method.desc}</p>
-                </button>
-              ))}
+                    <p className="text-[11px] text-muted-foreground">{method.desc}</p>
+                  </button>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
           {compressMethod === 'quality' && (
             <Card className="animate-scale-in">
-              <CardHeader>
-                <CardTitle>质量设置</CardTitle>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm">质量设置</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <div className="relative flex-1">
+              <CardContent className="p-4 pt-0">
+                <div className="flex items-center gap-3">
+                  <div className="relative w-20">
                     <Input
                       type="number"
                       value={quality}
                       onChange={(e) => setQuality(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
                       min={0}
                       max={100}
-                      className="pr-10"
+                      className="pr-8 h-8 text-xs text-center"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">%</span>
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">%</span>
                   </div>
-                  <div className="flex-1 relative h-8 bg-muted rounded-full overflow-hidden">
+                  <div className="flex-1 relative h-2 bg-muted rounded-full overflow-hidden">
                     <div
-                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary to-purple-500 rounded-full transition-all duration-200"
+                      className="absolute top-0 left-0 h-full bg-gradient-to-r from-primary to-purple-500 rounded-full transition-all duration-150"
                       style={{ width: `${quality}%` }}
                     />
                     <input
@@ -584,20 +538,20 @@ export const ImageProcessorTool: React.FC = () => {
 
           {compressMethod === 'limitWeight' && (
             <Card className="animate-scale-in">
-              <CardHeader>
-                <CardTitle>目标文件大小</CardTitle>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm">目标文件大小</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
+              <CardContent className="p-4 pt-0">
+                <div className="flex gap-2">
                   <div className="flex-1 relative">
                     <Input
                       type="number"
                       value={limitWeight}
                       onChange={(e) => setLimitWeight(parseFloat(e.target.value) || 0)}
                       step={0.1}
-                      className="pr-12"
+                      className="pr-10 h-8 text-xs"
                     />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">
                       {limitWeightUnit}
                     </span>
                   </div>
@@ -605,10 +559,10 @@ export const ImageProcessorTool: React.FC = () => {
                     <select
                       value={limitWeightUnit}
                       onChange={(e) => setLimitWeightUnit(e.target.value as 'MB' | 'KB')}
-                      className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                      className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                     >
-                      <option value="MB">兆字节 (MB)</option>
-                      <option value="KB">千字节 (KB)</option>
+                      <option value="MB">MB</option>
+                      <option value="KB">KB</option>
                     </select>
                   </div>
                 </div>
@@ -617,98 +571,98 @@ export const ImageProcessorTool: React.FC = () => {
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>尺寸设置</CardTitle>
-              <CardDescription>控制输出图片的尺寸</CardDescription>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm">尺寸设置</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              {[
-                { value: 'original', label: '保留原始尺寸', desc: '不修改图片的宽和高' },
-                { value: 'limit', label: '限制尺寸', desc: '限制图片的最大宽度和高度' }
-              ].map((method) => (
-                <button
-                  key={method.value}
-                  onClick={() => setDimensionMethod(method.value as DimensionMethod)}
-                  className={cn(
-                    "w-full p-4 rounded-lg border-2 transition-all duration-200 text-left",
-                    dimensionMethod === method.value
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50 hover:bg-muted/50"
-                  )}
-                >
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-medium">{method.label}</span>
-                    <div className={cn(
-                      "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-colors",
-                      dimensionMethod === method.value ? "border-primary" : "border-muted-foreground"
-                    )}>
-                      {dimensionMethod === method.value && (
-                        <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                      )}
+            <CardContent className="p-4 pt-0">
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { value: 'original', label: '原始尺寸', desc: '不修改宽高' },
+                  { value: 'limit', label: '限制尺寸', desc: '限制最大宽高' }
+                ].map((method) => (
+                  <button
+                    key={method.value}
+                    onClick={() => setDimensionMethod(method.value as DimensionMethod)}
+                    className={cn(
+                      "p-3 rounded-lg border transition-all duration-150 text-left",
+                      dimensionMethod === method.value
+                        ? "border-primary bg-primary/5"
+                        : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                    )}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium">{method.label}</span>
+                      <div className={cn(
+                        "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
+                        dimensionMethod === method.value ? "border-primary" : "border-muted-foreground/50"
+                      )}>
+                        {dimensionMethod === method.value && (
+                          <div className="w-2 h-2 rounded-full bg-primary" />
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground">{method.desc}</p>
-                </button>
-              ))}
+                    <p className="text-[11px] text-muted-foreground">{method.desc}</p>
+                  </button>
+                ))}
+              </div>
             </CardContent>
           </Card>
 
           {dimensionMethod === 'limit' && (
             <Card className="animate-scale-in">
-              <CardHeader>
-                <CardTitle>限制尺寸</CardTitle>
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm">限制尺寸</CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="relative">
+              <CardContent className="p-4 pt-0">
+                <div className="relative w-28">
                   <Input
                     type="number"
                     value={limitDimensions}
                     onChange={(e) => setLimitDimensions(Math.min(30000, Math.max(1, parseInt(e.target.value) || 1)))}
                     step={50}
-                    className="pr-12"
+                    className="pr-10 h-8 text-xs"
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">px</span>
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">px</span>
                 </div>
               </CardContent>
             </Card>
           )}
 
           <Card>
-            <CardHeader>
-              <CardTitle>输出格式</CardTitle>
-              <CardDescription>选择输出图片的格式</CardDescription>
+            <CardHeader className="p-4 pb-2">
+              <CardTitle className="text-sm">输出格式</CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-3">
+            <CardContent className="p-4 pt-0">
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { value: 'default', label: '默认', desc: '保持原格式' },
+                  { value: 'default', label: '默认', desc: '原格式' },
                   { value: 'image/jpeg', label: 'JPG', desc: '体积小' },
-                  { value: 'image/png', label: 'PNG', desc: '透明度' },
-                  { value: 'image/webp', label: 'WebP', desc: '高压缩比' },
-                  { value: 'image/vnd.microsoft.icon', label: 'ICO', desc: '图标格式' },
+                  { value: 'image/png', label: 'PNG', desc: '透明' },
+                  { value: 'image/webp', label: 'WebP', desc: '高压缩' },
+                  { value: 'image/vnd.microsoft.icon', label: 'ICO', desc: '图标' },
                 ].map((format) => (
                   <button
                     key={format.value}
                     onClick={() => setConvertFormat(format.value as ConvertFormat)}
                     className={cn(
-                      "p-3 rounded-lg border-2 transition-all duration-200 text-left",
+                      "p-2.5 rounded-lg border transition-all duration-150 text-left",
                       convertFormat === format.value
                         ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/50 hover:bg-muted/50"
+                        : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
                     )}
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-medium text-sm">{format.label}</span>
+                      <span className="text-xs font-medium">{format.label}</span>
                       <div className={cn(
-                        "w-4 h-4 rounded-full border-2 flex items-center justify-center transition-colors",
-                        convertFormat === format.value ? "border-primary" : "border-muted-foreground"
+                        "w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors",
+                        convertFormat === format.value ? "border-primary" : "border-muted-foreground/50"
                       )}>
                         {convertFormat === format.value && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary" />
                         )}
                       </div>
                     </div>
-                    <p className="text-xs text-muted-foreground">{format.desc}</p>
+                    <p className="text-[10px] text-muted-foreground">{format.desc}</p>
                   </button>
                 ))}
               </div>
@@ -718,23 +672,22 @@ export const ImageProcessorTool: React.FC = () => {
       )}
 
       {currentSubpage === 'output' && (
-        <Card className="animate-fade-in-up" style={{ animationDelay: '0.15s' }}>
-          <CardHeader>
+        <Card className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          <CardHeader className="p-3 pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>处理结果</CardTitle>
-                <CardDescription>已优化完成的图片，可预览并下载</CardDescription>
+                <CardTitle className="text-sm">处理结果</CardTitle>
               </div>
               {processedImages.length > 0 && (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleDeleteAll} className="gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div className="flex gap-1">
+                  <Button variant="ghost" size="sm" onClick={handleDeleteAll} className="h-6 px-2 text-xs gap-1 text-muted-foreground hover:text-destructive">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
                     清空
                   </Button>
-                  <Button size="sm" onClick={handleDownloadAll} className="gap-1">
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <Button size="sm" onClick={handleDownloadAll} className="h-6 px-2 text-xs gap-1">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
                     全部下载
@@ -743,60 +696,59 @@ export const ImageProcessorTool: React.FC = () => {
               )}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-3 pt-0">
             {processedImages.length === 0 ? (
-              <div className="text-center py-12 animate-scale-in">
-                <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-muted flex items-center justify-center">
-                  <svg className="w-8 h-8 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="text-center py-6 animate-scale-in">
+                <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-muted flex items-center justify-center">
+                  <svg className="w-5 h-5 text-muted-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                   </svg>
                 </div>
-                <h3 className="text-lg font-medium mb-1">暂无处理结果</h3>
-                <p className="text-sm text-muted-foreground">上传图片后将在此显示处理结果</p>
+                <p className="text-xs text-muted-foreground">暂无处理结果</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-1.5">
                 {processedImages.map((image, index) => (
                   <div
                     key={image.id}
-                    className="flex items-center gap-4 p-3 rounded-lg bg-muted/50 border border-border hover:bg-muted transition-colors animate-slide-in-right"
-                    style={{ animationDelay: `${index * 0.05}s` }}
+                    className="flex items-center gap-2 p-2 rounded-md bg-muted/30 border border-border/50 hover:bg-muted/50 transition-colors animate-slide-in-right"
+                    style={{ animationDelay: `${index * 0.03}s` }}
                   >
                     <img
                       src={image.thumbnailUrl}
                       alt={image.fileName}
-                      className="w-16 h-16 object-cover rounded-lg flex-shrink-0"
+                      className="w-10 h-10 object-cover rounded flex-shrink-0"
                     />
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{image.fileName}</p>
-                      <p className="text-sm text-muted-foreground">{image.width}x{image.height}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <span className="text-sm">{formatFileSize(image.processedSize)}</span>
-                        <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium", getSavedClass(image.originalSize, image.processedSize))}>
+                      <p className="text-xs font-medium truncate">{image.fileName}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-[11px] text-muted-foreground">{image.width}x{image.height}</span>
+                        <span className="text-[11px]">{formatFileSize(image.processedSize)}</span>
+                        <span className={cn("px-1.5 py-0.5 rounded text-[10px] font-medium", getSavedClass(image.originalSize, image.processedSize))}>
                           {getSavedPercentage(image.originalSize, image.processedSize)}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
                           {getFileExtension(image.processedBlob.type).toUpperCase()}
                         </span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
                         size="icon"
                         onClick={() => handleDeleteImage(image.id)}
-                        className="text-muted-foreground hover:text-destructive"
+                        className="h-6 w-6 text-muted-foreground hover:text-destructive"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
                       </Button>
                       <a
                         href={image.outputUrl}
                         download={image.fileName}
-                        className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 w-9"
+                        className="inline-flex items-center justify-center rounded-md text-xs font-medium transition-colors bg-primary text-primary-foreground hover:bg-primary/90 h-6 w-6"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                       </a>
@@ -813,16 +765,17 @@ export const ImageProcessorTool: React.FC = () => {
         <div className="text-center animate-fade-in-up">
           <Button
             variant="outline"
+            size="sm"
             onClick={() => {
               setShowDropZone(true)
               setCurrentSubpage('settings')
             }}
-            className="gap-2"
+            className="gap-1.5 h-7 text-xs"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
             </svg>
-            继续添加图片
+            继续添加
           </Button>
         </div>
       )}
