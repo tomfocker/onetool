@@ -158,14 +158,28 @@ const WebActivator: React.FC = () => {
   }
 
   const pickWindow = (win: WindowInfo) => {
-    const defaultName = win.processName.charAt(0).toUpperCase() + win.processName.slice(1)
-    if (editingId) {
-      setEditForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.hwnd }))
+    let cleanTitle = win.title || '(无标题)'
+    let pattern = win.processName
+
+    if (activeTab === 'tab') {
+      // 清理浏览器后缀 (Edge, Chrome, etc.)
+      cleanTitle = cleanTitle.replace(/ - (Microsoft Edge|Google Chrome|Firefox|Brave)$/, '')
+      // 提取前两个词或直到第一个横杠，避免匹配太长
+      const parts = cleanTitle.split(' - ')
+      pattern = parts[0].trim()
+      cleanTitle = pattern
     } else {
-      setNewForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.hwnd }))
+      cleanTitle = win.processName.charAt(0).toUpperCase() + win.processName.slice(1)
+      pattern = win.processName
+    }
+
+    if (editingId) {
+      setEditForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
+    } else {
+      setNewForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
     }
     setShowPicker(false)
-    showStatus('已获取窗口信息')
+    showStatus('已获取标签信息')
   }
 
   const handleSaveEdit = async () => {
@@ -197,10 +211,19 @@ const WebActivator: React.FC = () => {
     await registerShortcuts(newConfigs)
   }
 
-  const filteredWindows = windowList.filter(win => 
-    win.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    win.processName.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredWindows = windowList.filter(win => {
+    const isSearchMatch = win.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         win.processName.toLowerCase().includes(searchTerm.toLowerCase())
+    if (!isSearchMatch) return false
+
+    if (activeTab === 'tab') {
+      // 在标签页模式下，只显示标记为 'tab' 的项
+      return win.type === 'tab'
+    } else {
+      // 在应用模式下，只显示标记为 'window' 的项
+      return win.type === 'window'
+    }
+  })
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 relative">

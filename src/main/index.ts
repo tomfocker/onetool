@@ -884,26 +884,56 @@ interface WindowInfo {
 }
 
 ipcMain.handle('web-activator-get-window-list', async () => {
+  const allResults: any[] = [];
   try {
-    // 优化：返回更多信息，包括 HWND
-    const script = `
-      Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object @{N='id';E={$_.Id}}, @{N='title';E={$_.MainWindowTitle}}, @{N='processName';E={$_.ProcessName}}, @{N='hwnd';E={$_.MainWindowHandle.ToInt64()}} | ConvertTo-Json
-    `
-    const result = await execPowerShell(script)
-    let windows: any[] = []
-    if (result) {
-      try {
-        const parsed = JSON.parse(result)
-        windows = Array.isArray(parsed) ? parsed : [parsed]
-      } catch (e) {
-        console.error('Failed to parse window list JSON:', e)
-      }
+    const winScript = `Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { @{ id = $_.Id; title = $_.MainWindowTitle; processName = $_.ProcessName; hwnd = $_.MainWindowHandle.ToInt64(); type = 'window' } } | ConvertTo-Json -Compress`;
+    const winResult = await execPowerShell(winScript);
+    if (winResult) {
+      const parsed = JSON.parse(winResult);
+      allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
     }
-    return { success: true, windows }
-  } catch (error) {
-    console.error('Get window list error:', error)
-    return { success: false, windows: [], error: (error as Error).message }
-  }
+  } catch (e) {}
+
+  try {
+    const tabScript = `
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      $res = New-Object System.Collections.ArrayList
+      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+      foreach ($p in $edgeProcs) {
+          try {
+              $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+              $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+              foreach ($el in $all) {
+                  if ($el.Current.ControlType.Id -eq 50019) {
+                      $name = $el.Current.Name
+                      if ($name -and $name -notmatch "^\\d+ 个标签页$|^关闭$|^新标签页$") {
+                          $null = $res.Add(@{ id = $p.Id; title = $name; processName = "msedge"; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
+                      }
+                  }
+              }
+          } catch {}
+      }
+      $res | ConvertTo-Json -Compress
+    `;
+    const tabResult = await execPowerShell(tabScript);
+    const jsonStart = tabResult.lastIndexOf('[');
+    const jsonEnd = tabResult.lastIndexOf(']');
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+        const parsed = JSON.parse(tabResult.substring(jsonStart, jsonEnd + 1));
+        allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+    }
+  } catch (e) {}
+
+  const unique = new Map();
+  allResults.forEach(w => {
+    if (w.title && w.title.trim()) {
+      const key = w.type + "-" + w.processName + "-" + w.title;
+      if (!unique.has(key)) unique.set(key, w);
+    }
+  });
+  return { success: true, windows: Array.from(unique.values()) };
 })
 
 async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: boolean; action?: string; error?: string }> {
@@ -971,47 +1001,45 @@ async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: b
 
 async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
   try {
-    const escapedPattern = pattern.replace(/"/g, '`"')
-    // 浏览器标签通常通过标题匹配
+    const escapedPattern = pattern.replace(/"/g, '`"');
     const script = `
-      Add-Type @"
-        using System;
-        using System.Runtime.InteropServices;
-        public class Win32 {
-          [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-          [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-          [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-          [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-        }
-"@
-      # 寻找标题匹配的浏览器窗口 (Chrome, Edge, Firefox 等)
-      $proc = Get-Process | Where-Object { $_.MainWindowTitle -match "${escapedPattern}" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-      
-      if ($proc) {
-          $hwnd = $proc.MainWindowHandle
-          $fgHwnd = [Win32]::GetForegroundWindow()
-          $fgRoot = [Win32]::GetAncestor($fgHwnd, 2)
-          $targetRoot = [Win32]::GetAncestor($hwnd, 2)
-
-          if (($fgHwnd -eq $hwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $hwnd) -and -not [Win32]::IsIconic($hwnd)) {
-              [Win32]::ShowWindow($hwnd, 6) | Out-Null
-              "minimized"
-          } else {
-              [Win32]::ShowWindow($hwnd, 9) | Out-Null
-              [Win32]::ShowWindow($hwnd, 5) | Out-Null
-              [Win32]::SetForegroundWindow($hwnd) | Out-Null
-              "activated"
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+      $targetTab = $null
+      foreach ($p in $edgeProcs) {
+          $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+          $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+          foreach ($el in $all) {
+              if ($el.Current.ControlType.Id -eq 50019 -and $el.Current.Name -match "${escapedPattern}") {
+                  $targetTab = $el; $parentHwnd = $p.MainWindowHandle; $procId = $p.Id; break
+              }
           }
+          if ($targetTab) { break }
+      }
+      if ($targetTab) {
+          $wshell = New-Object -ComObject WScript.Shell
+          $wshell.AppActivate($procId)
+          Start-Sleep -Milliseconds 50
+          $selectionPattern = $null
+          if ($targetTab.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectionPattern)) {
+              if ($selectionPattern.Current.IsSelected) {
+                  $type = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);' -Name "Win32Toggle" -PassThru
+                  [Win32Toggle]::ShowWindow($parentHwnd, 6) | Out-Null
+                  "minimized"
+              } else {
+                  $selectionPattern.Select()
+                  "activated"
+              }
+          } else { "activated" }
       } else { "not_found" }
-    `
-    const result = await execPowerShell(script)
-    if (result.includes('activated')) return { success: true, action: 'activated' }
-    if (result.includes('minimized')) return { success: true, action: 'minimized' }
-    return { success: false, error: '未找到匹配的标签窗口' }
-  } catch (error) {
-    return { success: false, error: (error as Error).message }
-  }
+    `;
+    const result = await execPowerShell(script);
+    if (result.includes('activated')) return { success: true, action: 'activated' };
+    if (result.includes('minimized')) return { success: true, action: 'minimized' };
+    return { success: false, error: '未找到匹配的标签页' };
+  } catch (error) { return { success: false, error: (error as Error).message }; }
 }
 
 let webActivatorShortcuts = new Set<string>()
@@ -1022,22 +1050,42 @@ ipcMain.handle('web-activator-check-visibility', async (_event, configs: Array<{
     const script = `
       Add-Type @"
         using System;
+        using System.Text;
         using System.Runtime.InteropServices;
         public class Win32 {
           [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
           [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
           [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
           [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+          public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+          [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+          [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
         }
 "@
       $targetHwnd = [IntPtr]::Zero
-      if ("${config.hwnd || 0}" -ne "0") {
-          $h = [IntPtr]${config.hwnd || 0}
-          if ([Win32]::IsWindow($h)) { $targetHwnd = $h }
-      }
-      if ($targetHwnd -eq [IntPtr]::Zero) {
-          $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-          if ($proc) { $targetHwnd = $proc.MainWindowHandle }
+      if ("${config.type}" -eq "app") {
+          if ("${config.hwnd || 0}" -ne "0") {
+              $h = [IntPtr]${config.hwnd || 0}
+              if ([Win32]::IsWindow($h)) { $targetHwnd = $h }
+          }
+          if ($targetHwnd -eq [IntPtr]::Zero) {
+              $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+              if ($proc) { $targetHwnd = $proc.MainWindowHandle }
+          }
+      } else {
+          [Win32]::EnumWindows({
+              param($h, $l)
+              if ([Win32]::IsWindowVisible($h)) {
+                  $sb = New-Object System.Text.StringBuilder 256
+                  [Win32]::GetWindowText($h, $sb, $sb.Capacity) | Out-Null
+                  if ($sb.ToString() -match "${escapedPattern}") {
+                      $targetHwnd = $h
+                      return $false
+                  }
+              }
+              return $true
+          }, [IntPtr]::Zero) | Out-Null
       }
 
       if ($targetHwnd -ne [IntPtr]::Zero) {

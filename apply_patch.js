@@ -1,107 +1,112 @@
 const fs = require('fs');
-const filePath = 'src/main/index.ts';
-let content = fs.readFileSync(filePath, 'utf8');
+const path = require('path');
 
-const newCode = `async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: boolean; action?: string; error?: string }> {
+const filePath = path.join(__dirname, 'src/main/index.ts');
+const content = fs.readFileSync(filePath, 'utf8');
+
+const newGetListCode = `ipcMain.handle('web-activator-get-window-list', async () => {
+  const allResults: any[] = [];
   try {
-    const script = `
-      Add-Type @"
-        using System;
-        using System.Runtime.InteropServices;
-        public class Win32 {
-          [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-          [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-          [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-          [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
-        }
-"@
-      $targetProc = $null
-      if ("\${hwndId || 0}" -ne "0") {
-          $h = [IntPtr]\${hwndId || 0}
-          if ([Win32]::IsWindow($h)) {
-              [uint32]$pId = 0
-              [Win32]::GetWindowThreadProcessId($h, [ref]$pId)
-              $targetProc = Get-Process -Id $pId -ErrorAction SilentlyContinue
-          }
-      }
-      if (!$targetProc) {
-          $targetProc = Get-Process | Where-Object { ($_.MainWindowTitle -match "\${pattern}" -or $_.ProcessName -match "\${pattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-      }
-
-      if ($targetProc) {
-          $hwnd = $targetProc.MainWindowHandle
-          $fgHwnd = [Win32]::GetForegroundWindow()
-          [uint32]$fgPid = 0
-          [Win32]::GetWindowThreadProcessId($fgHwnd, [ref]$fgPid)
-
-          if ($fgPid -eq $targetProc.Id) {
-              [Win32]::ShowWindow($hwnd, 6) | Out-Null
-              "minimized"
-          } else {
-              [Win32]::ShowWindow($hwnd, 9) | Out-Null
-              [Win32]::SetForegroundWindow($hwnd) | Out-Null
-              "activated"
-          }
-      } else { "not_found" }
-    `
-    const result = await execPowerShell(script)
-    if (result.includes('activated')) return { success: true, action: 'activated' }
-    if (result.includes('minimized')) return { success: true, action: 'minimized' }
-    return { success: false, error: '未找到匹配的窗口' }
-  } catch (error) {
-    return { success: false, error: (error as Error).message }
-  }
-}
-
-let webActivatorShortcuts: string[] = [];
-
-ipcMain.handle('web-activator-toggle-window', async (_event, config: { type: 'app' | 'tab', pattern: string, id?: number }) => {
-  if (config.type === 'app') return await toggleApp(config.pattern, config.id)
-  return await toggleTab(config.pattern)
-})
-
-ipcMain.handle('web-activator-register-shortcuts', async (_event, configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => {
-  try {
-    globalShortcut.unregisterAll()
-    webActivatorShortcuts = []
-    
-    let successCount = 0
-    for (const config of configs) {
-      if (!config.shortcut || config.shortcut === 'Alt+' || config.shortcut.endsWith('+')) continue
-      
-      const success = globalShortcut.register(config.shortcut, async () => {
-        const result = config.type === 'app' ? await toggleApp(config.pattern, config.hwnd) : await toggleTab(config.pattern)
-        if (mainWindow && result.success) {
-          mainWindow.webContents.send('web-activator-shortcut-triggered', {
-            id: config.id,
-            action: result.action
-          })
-        }
-      })
-      if (success) {
-        webActivatorShortcuts.push(config.shortcut)
-        successCount++
-      }
+    const winScript = \`Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { @{ id = $_.Id; title = $_.MainWindowTitle; processName = $_.ProcessName; hwnd = $_.MainWindowHandle.ToInt64(); type = 'window' } } | ConvertTo-Json -Compress\`;
+    const winResult = await execPowerShell(winScript);
+    if (winResult) {
+      const parsed = JSON.parse(winResult);
+      allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
     }
-    return { success: true }
-  } catch (error) {
-    console.error('Register shortcuts error:', error)
-    return { success: false, error: (error as Error).message }
-  }
+  } catch (e) {}
+
+  try {
+    const tabScript = \`
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      $res = New-Object System.Collections.ArrayList
+      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+      foreach ($p in $edgeProcs) {
+          try {
+              $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+              $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+              foreach ($el in $all) {
+                  if ($el.Current.ControlType.Id -eq 50019) {
+                      $name = $el.Current.Name
+                      if ($name -and $name -notmatch "^\\\\d+ 个标签页$|^关闭$|^新标签页$") {
+                          $null = $res.Add(@{ id = $p.Id; title = $name; processName = "msedge"; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
+                      }
+                  }
+              }
+          } catch {}
+      }
+      $res | ConvertTo-Json -Compress
+    \`;
+    const tabResult = await execPowerShell(tabScript);
+    const jsonStart = tabResult.lastIndexOf('[');
+    const jsonEnd = tabResult.lastIndexOf(']');
+    if (jsonStart !== -1 && jsonEnd !== -1) {
+        const parsed = JSON.parse(tabResult.substring(jsonStart, jsonEnd + 1));
+        allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+    }
+  } catch (e) {}
+
+  const unique = new Map();
+  allResults.forEach(w => {
+    if (w.title && w.title.trim()) {
+      const key = w.type + "-" + w.processName + "-" + w.title;
+      if (!unique.has(key)) unique.set(key, w);
+    }
+  });
+  return { success: true, windows: Array.from(unique.values()) };
 })`;
 
-// 查找 toggleApp 函数的起始位置
-const startIndex = content.indexOf('async function toggleApp');
-// 查找该段逻辑结束后的下一个函数或 Tray 定义的起始位置
-const endIndex = content.indexOf('function createTray(): void {');
+const newToggleTabCode = `async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
+  try {
+    const escapedPattern = pattern.replace(/"/g, '\`"');
+    const script = \`
+      $ErrorActionPreference = 'SilentlyContinue'
+      Add-Type -AssemblyName UIAutomationClient
+      Add-Type -AssemblyName UIAutomationTypes
+      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
+      $targetTab = $null
+      foreach ($p in $edgeProcs) {
+          $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+          $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
+          foreach ($el in $all) {
+              if ($el.Current.ControlType.Id -eq 50019 -and $el.Current.Name -match "\${escapedPattern}") {
+                  $targetTab = $el; $parentHwnd = $p.MainWindowHandle; $procId = $p.Id; break
+              }
+          }
+          if ($targetTab) { break }
+      }
+      if ($targetTab) {
+          $wshell = New-Object -ComObject WScript.Shell
+          $wshell.AppActivate($procId)
+          Start-Sleep -Milliseconds 50
+          $selectionPattern = $null
+          if ($targetTab.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectionPattern)) {
+              if ($selectionPattern.Current.IsSelected) {
+                  $type = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);' -Name "Win32Toggle" -PassThru
+                  [Win32Toggle]::ShowWindow($parentHwnd, 6) | Out-Null
+                  "minimized"
+              } else {
+                  $selectionPattern.Select()
+                  "activated"
+              }
+          } else { "activated" }
+      } else { "not_found" }
+    \`;
+    const result = await execPowerShell(script);
+    if (result.includes('activated')) return { success: true, action: 'activated' };
+    if (result.includes('minimized')) return { success: true, action: 'minimized' };
+    return { success: false, error: '未找到匹配的标签页' };
+  } catch (error) { return { success: false, error: (error as Error).message }; }
+}`;
 
-if (startIndex !== -1 && endIndex !== -1) {
-    const newContent = content.substring(0, startIndex) + newCode + '
+const startGetIndex = content.indexOf('ipcMain.handle(\'web-activator-get-window-list\'');
+const nextAfterGetIndex = content.indexOf('async function toggleApp', startGetIndex);
+const updatedWithGet = content.substring(0, startGetIndex) + newGetListCode + "\n\n" + content.substring(nextAfterGetIndex);
 
-' + content.substring(endIndex);
-    fs.writeFileSync(filePath, newContent);
-    console.log('Patch applied successfully!');
-} else {
-    console.error('Could not find anchor points for patch', {startIndex, endIndex});
-}
+const startToggleIndex = updatedWithGet.indexOf('async function toggleTab');
+const nextAfterToggleIndex = updatedWithGet.indexOf('let webActivatorShortcuts', startToggleIndex);
+const finalContent = updatedWithGet.substring(0, startToggleIndex) + newToggleTabCode + "\n\n" + updatedWithGet.substring(nextAfterToggleIndex);
+
+fs.writeFileSync(filePath, finalContent);
+console.log('Final Polish Applied. Tab switching synced with detection.');
