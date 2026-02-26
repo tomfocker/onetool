@@ -104,11 +104,14 @@ const webActivatorAPI = {
   getWindowList: () => {
     return ipcRenderer.invoke('web-activator-get-window-list')
   },
-  toggleWindow: (config: { titlePattern: string; browserType?: string; shortcut?: string }) => {
+  toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => {
     return ipcRenderer.invoke('web-activator-toggle-window', config)
   },
-  registerShortcuts: (configs: Array<{ id: string; name: string; titlePattern: string; browserType?: string; shortcut: string }>) => {
+  registerShortcuts: (configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => {
     return ipcRenderer.invoke('web-activator-register-shortcuts', configs)
+  },
+  checkVisibility: (configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => {
+    return ipcRenderer.invoke('web-activator-check-visibility', configs)
   },
   onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => {
     const handler = (_event: any, data: { id: string; action: string }) => callback(data)

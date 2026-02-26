@@ -885,12 +885,12 @@ interface WindowInfo {
 
 ipcMain.handle('web-activator-get-window-list', async () => {
   try {
-    // 优化：改用更快的原生 PowerShell 命令，避免 Add-Type
+    // 优化：返回更多信息，包括 HWND
     const script = `
-      Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object @{N='id';E={$_.Id}}, @{N='title';E={$_.MainWindowTitle}}, @{N='processName';E={$_.ProcessName}} | ConvertTo-Json
+      Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object @{N='id';E={$_.Id}}, @{N='title';E={$_.MainWindowTitle}}, @{N='processName';E={$_.ProcessName}}, @{N='hwnd';E={$_.MainWindowHandle.ToInt64()}} | ConvertTo-Json
     `
     const result = await execPowerShell(script)
-    let windows: WindowInfo[] = []
+    let windows: any[] = []
     if (result) {
       try {
         const parsed = JSON.parse(result)
@@ -908,6 +908,7 @@ ipcMain.handle('web-activator-get-window-list', async () => {
 
 async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: boolean; action?: string; error?: string }> {
   try {
+    const escapedPattern = pattern.replace(/"/g, '`"')
     const script = `
       Add-Type @"
         using System;
@@ -919,35 +920,42 @@ async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: b
           [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
           [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
           [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
         }
 "@
       $proc = $null
+      $targetHwnd = [IntPtr]::Zero
+
+      # 1. 优先尝试句柄
       if ("${hwndId || 0}" -ne "0") {
           $h = [IntPtr]${hwndId || 0}
           if ([Win32]::IsWindow($h)) {
+              $targetHwnd = $h
               [uint32]$pId = 0
               [Win32]::GetWindowThreadProcessId($h, [ref]$pId)
               $proc = Get-Process -Id $pId -ErrorAction SilentlyContinue
           }
       }
-      if (!$proc) {
-          $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${pattern}" -or $_.ProcessName -match "${pattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+
+      # 2. 回退到进程匹配
+      if (!$proc -or $targetHwnd -eq [IntPtr]::Zero) {
+          $procs = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero }
+          $proc = $procs | Select-Object -First 1
+          if ($proc) { $targetHwnd = $proc.MainWindowHandle }
       }
 
-      if ($proc) {
-          $hwnd = $proc.MainWindowHandle
+      if ($targetHwnd -ne [IntPtr]::Zero) {
           $fgHwnd = [Win32]::GetForegroundWindow()
-          [uint32]$fgPid = 0
-          [Win32]::GetWindowThreadProcessId($fgHwnd, [ref]$fgPid)
+          $fgRoot = [Win32]::GetAncestor($fgHwnd, 2) # GA_ROOT
+          $targetRoot = [Win32]::GetAncestor($targetHwnd, 2)
 
-          # 只要当前前台窗口不是我们要找的那个，或者虽然是它但被最小化了，就执行激活
-          if ($fgPid -eq $proc.Id -and -not [Win32]::IsIconic($hwnd)) {
-              [Win32]::ShowWindow($hwnd, 6) | Out-Null # SW_MINIMIZE
+          if (($fgHwnd -eq $targetHwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $targetHwnd) -and -not [Win32]::IsIconic($targetHwnd)) {
+              [Win32]::ShowWindow($targetHwnd, 6) | Out-Null # SW_MINIMIZE
               "minimized"
           } else {
-              [Win32]::ShowWindow($hwnd, 9) | Out-Null # SW_RESTORE
-              [Win32]::ShowWindow($hwnd, 5) | Out-Null # SW_SHOW
-              [Win32]::SetForegroundWindow($hwnd) | Out-Null
+              [Win32]::ShowWindow($targetHwnd, 9) | Out-Null # SW_RESTORE
+              [Win32]::ShowWindow($targetHwnd, 5) | Out-Null # SW_SHOW
+              [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
               "activated"
           }
       } else { "not_found" }
@@ -961,7 +969,90 @@ async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: b
   }
 }
 
-let webActivatorShortcuts: string[] = []
+async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
+  try {
+    const escapedPattern = pattern.replace(/"/g, '`"')
+    // 浏览器标签通常通过标题匹配
+    const script = `
+      Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class Win32 {
+          [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+          [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+          [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+        }
+"@
+      # 寻找标题匹配的浏览器窗口 (Chrome, Edge, Firefox 等)
+      $proc = Get-Process | Where-Object { $_.MainWindowTitle -match "${escapedPattern}" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+      
+      if ($proc) {
+          $hwnd = $proc.MainWindowHandle
+          $fgHwnd = [Win32]::GetForegroundWindow()
+          $fgRoot = [Win32]::GetAncestor($fgHwnd, 2)
+          $targetRoot = [Win32]::GetAncestor($hwnd, 2)
+
+          if (($fgHwnd -eq $hwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $hwnd) -and -not [Win32]::IsIconic($hwnd)) {
+              [Win32]::ShowWindow($hwnd, 6) | Out-Null
+              "minimized"
+          } else {
+              [Win32]::ShowWindow($hwnd, 9) | Out-Null
+              [Win32]::ShowWindow($hwnd, 5) | Out-Null
+              [Win32]::SetForegroundWindow($hwnd) | Out-Null
+              "activated"
+          }
+      } else { "not_found" }
+    `
+    const result = await execPowerShell(script)
+    if (result.includes('activated')) return { success: true, action: 'activated' }
+    if (result.includes('minimized')) return { success: true, action: 'minimized' }
+    return { success: false, error: '未找到匹配的标签窗口' }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+}
+
+let webActivatorShortcuts = new Set<string>()
+
+ipcMain.handle('web-activator-check-visibility', async (_event, configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => {
+  const results = await Promise.all(configs.map(async (config) => {
+    const escapedPattern = config.pattern.replace(/"/g, '`"')
+    const script = `
+      Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class Win32 {
+          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+          [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+          [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+        }
+"@
+      $targetHwnd = [IntPtr]::Zero
+      if ("${config.hwnd || 0}" -ne "0") {
+          $h = [IntPtr]${config.hwnd || 0}
+          if ([Win32]::IsWindow($h)) { $targetHwnd = $h }
+      }
+      if ($targetHwnd -eq [IntPtr]::Zero) {
+          $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+          if ($proc) { $targetHwnd = $proc.MainWindowHandle }
+      }
+
+      if ($targetHwnd -ne [IntPtr]::Zero) {
+          $fgHwnd = [Win32]::GetForegroundWindow()
+          $fgRoot = [Win32]::GetAncestor($fgHwnd, 2)
+          $targetRoot = [Win32]::GetAncestor($targetHwnd, 2)
+          $isActive = ($fgHwnd -eq $targetHwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $targetHwnd) -and -not [Win32]::IsIconic($targetHwnd)
+          if ($isActive) { "active" } else { "inactive" }
+      } else { "not_found" }
+    `
+    const result = await execPowerShell(script)
+    return result.trim() === 'active'
+  }))
+  return results
+})
 
 ipcMain.handle('web-activator-toggle-window', async (_event, config: { type: 'app' | 'tab', pattern: string, id?: number }) => {
   if (config.type === 'app') return await toggleApp(config.pattern, config.id)
@@ -970,29 +1061,45 @@ ipcMain.handle('web-activator-toggle-window', async (_event, config: { type: 'ap
 
 ipcMain.handle('web-activator-register-shortcuts', async (_event, configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => {
   try {
-    globalShortcut.unregisterAll()
-    webActivatorShortcuts = []
+    console.log(`WebActivator: Registering ${configs.length} shortcuts...`)
+    // 仅注销之前由 WebActivator 注册的快捷键
+    webActivatorShortcuts.forEach(s => {
+      try { 
+        globalShortcut.unregister(s)
+        console.log(`WebActivator: Unregistered ${s}`)
+      } catch (e) { console.error(`WebActivator: Unregister error for ${s}:`, e) }
+    })
+    webActivatorShortcuts.clear()
     
     let successCount = 0
     for (const config of configs) {
-      if (!config.shortcut || config.shortcut === 'Alt+' || config.shortcut.endsWith('+')) continue
+      if (!config.shortcut || config.shortcut.endsWith('+') || config.shortcut === 'Alt') continue
       
-      const success = globalShortcut.register(config.shortcut, async () => {
+      const normalizedShortcut = config.shortcut.replace('Ctrl', 'CommandOrControl')
+      
+      const success = globalShortcut.register(normalizedShortcut, async () => {
+        console.log(`WebActivator: Shortcut triggered: ${normalizedShortcut} (ID: ${config.id})`)
+        // 使用存储的 hwnd (句柄) 或 pattern
         const result = config.type === 'app' ? await toggleApp(config.pattern, config.hwnd) : await toggleTab(config.pattern)
-        if (mainWindow && result.success) {
+        if (mainWindow) {
           mainWindow.webContents.send('web-activator-shortcut-triggered', {
             id: config.id,
-            action: result.action
+            action: result.success ? result.action : 'not_found'
           })
         }
       })
+      
       if (success) {
-        webActivatorShortcuts.push(config.shortcut)
+        webActivatorShortcuts.add(normalizedShortcut)
         successCount++
+        console.log(`WebActivator: Registered ${normalizedShortcut}`)
+      } else {
+        console.warn(`WebActivator: Failed to register ${normalizedShortcut}. Already in use?`)
       }
     }
-    return { success: true }
+    return { success: true, registeredCount: successCount }
   } catch (error) {
+    console.error('WebActivator: Registration error:', error)
     return { success: false, error: (error as Error).message }
   }
 })

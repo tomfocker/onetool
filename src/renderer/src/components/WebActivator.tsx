@@ -21,6 +21,7 @@ interface WindowInfo {
   id: number
   title: string
   processName: string
+  hwnd: number
 }
 
 const WebActivator: React.FC = () => {
@@ -37,7 +38,7 @@ const WebActivator: React.FC = () => {
   const [editForm, setEditForm] = useState<Partial<ActivatorConfig>>({})
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [newForm, setNewForm] = useState<Partial<ActivatorConfig>>({
-    name: '', pattern: '', type: 'app', shortcut: 'Alt+'
+    name: '', pattern: '', type: 'app', shortcut: 'Alt+Shift+Q'
   })
   const [statusMessage, setStatusMessage] = useState<string>('')
   const [isListeningShortcut, setIsListeningShortcut] = useState<string | null>(null)
@@ -52,6 +53,26 @@ const WebActivator: React.FC = () => {
 
   useEffect(() => {
     localStorage.setItem('web-activator-v4', JSON.stringify(configs))
+  }, [configs])
+
+  useEffect(() => {
+    // 组件加载时自动注册一次已保存的快捷键
+    if (configs.length > 0) {
+      registerShortcuts(configs)
+      syncVisibility()
+    }
+    const timer = setInterval(syncVisibility, 3000)
+    return () => clearInterval(timer)
+  }, [])
+
+  const syncVisibility = useCallback(async () => {
+    if (!window.electron?.webActivator?.checkVisibility || configs.length === 0) return
+    try {
+      const results = await window.electron.webActivator.checkVisibility(configs)
+      setConfigs(prev => prev.map((c, idx) => ({ ...c, isActive: results[idx] })))
+    } catch (e) {
+      console.error('Failed to sync visibility:', e)
+    }
   }, [configs])
 
   const registerShortcuts = useCallback(async (currentConfigs: ActivatorConfig[]) => {
@@ -84,11 +105,27 @@ const WebActivator: React.FC = () => {
     e.preventDefault()
     e.stopPropagation()
     const modifiers: string[] = []
-    if (e.ctrlKey) modifiers.push('Ctrl')
+    if (e.ctrlKey) modifiers.push('CommandOrControl')
     if (e.altKey) modifiers.push('Alt')
     if (e.shiftKey) modifiers.push('Shift')
-    const key = e.key.toUpperCase()
+    
+    let key = e.key.toUpperCase()
     if (['CONTROL', 'ALT', 'SHIFT', 'META'].includes(key)) return
+    
+    // 处理特殊按键
+    if (key === ' ') key = 'Space'
+    if (key === 'ARROWUP') key = 'Up'
+    if (key === 'ARROWDOWN') key = 'Down'
+    if (key === 'ARROWLEFT') key = 'Left'
+    if (key === 'ARROWRIGHT') key = 'Right'
+    if (key === 'ESCAPE') key = 'Esc'
+    if (key === 'DELETE') key = 'Delete'
+    if (key === 'INSERT') key = 'Insert'
+    if (key === 'HOME') key = 'Home'
+    if (key === 'END') key = 'End'
+    if (key === 'PAGEUP') key = 'PageUp'
+    if (key === 'PAGEDOWN') key = 'PageDown'
+
     const shortcut = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key
     if (isListeningShortcut === 'new') setNewForm(prev => ({ ...prev, shortcut }))
     else setEditForm(prev => ({ ...prev, shortcut }))
@@ -123,9 +160,9 @@ const WebActivator: React.FC = () => {
   const pickWindow = (win: WindowInfo) => {
     const defaultName = win.processName.charAt(0).toUpperCase() + win.processName.slice(1)
     if (editingId) {
-      setEditForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.id }))
+      setEditForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.hwnd }))
     } else {
-      setNewForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.id }))
+      setNewForm(prev => ({ ...prev, name: defaultName, pattern: win.processName, hwnd: win.hwnd }))
     }
     setShowPicker(false)
     showStatus('已获取窗口信息')
@@ -148,14 +185,14 @@ const WebActivator: React.FC = () => {
       name: newForm.name.trim(),
       pattern: newForm.pattern.trim(),
       type: activeTab,
-      shortcut: newForm.shortcut || 'Alt+',
+      shortcut: newForm.shortcut || 'Alt+Shift+Q',
       isActive: false,
       hwnd: newForm.hwnd
     }
     const newConfigs = [...configs, newConfig]
     setConfigs(newConfigs)
     setIsAddingNew(false)
-    setNewForm({ name: '', pattern: '', type: activeTab, shortcut: 'Alt+' })
+    setNewForm({ name: '', pattern: '', type: activeTab, shortcut: 'Alt+Shift+Q' })
     showStatus('添加成功')
     await registerShortcuts(newConfigs)
   }
@@ -248,7 +285,7 @@ const WebActivator: React.FC = () => {
                       {config.type === 'app' ? <Monitor className="w-7 h-7" /> : <Globe className="w-7 h-7" />}
                     </div>
                     <div className="overflow-hidden">
-                      <div className="flex items-center gap-2"><h3 className="font-bold text-base truncate">{config.name}</h3><span className="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">{config.shortcut}</span></div>
+                      <div className="flex items-center gap-2"><h3 className="font-bold text-base truncate">{config.name}</h3><span className="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">{config.shortcut.replace('CommandOrControl', 'Ctrl')}</span></div>
                       <p className="text-[11px] text-muted-foreground truncate mt-1 opacity-60">规则: {config.pattern}</p>
                     </div>
                   </div>

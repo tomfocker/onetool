@@ -37,6 +37,24 @@ function AppContent(): React.JSX.Element {
 
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
+
+    // 在应用启动时注册 WebActivator 的快捷键
+    const registerShortcutsOnStartup = async () => {
+      try {
+        const saved = localStorage.getItem('web-activator-v4')
+        if (saved) {
+          const configs = JSON.parse(saved)
+          if (Array.isArray(configs) && configs.length > 0 && window.electron?.webActivator?.registerShortcuts) {
+            await window.electron.webActivator.registerShortcuts(configs)
+            console.log('WebActivator shortcuts registered on startup')
+          }
+        }
+      } catch (e) {
+        console.error('Failed to register shortcuts on startup:', e)
+      }
+    }
+    registerShortcutsOnStartup()
+
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 

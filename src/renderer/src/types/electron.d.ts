@@ -136,15 +136,16 @@ declare global {
             id: number
             title: string
             processName: string
+            hwnd: number
           }>
           error?: string
         }>
-        toggleWindow: (config: { titlePattern: string; browserType?: string; shortcut?: string }) => Promise<{
+        toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => Promise<{
           success: boolean
           action?: 'activated' | 'minimized'
           error?: string
         }>
-        registerShortcuts: (configs: Array<{ id: string; name: string; titlePattern: string; browserType?: string; shortcut: string }>) => Promise<{
+        registerShortcuts: (configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => Promise<{
           success: boolean
           error?: string
         }>
