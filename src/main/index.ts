@@ -1837,6 +1837,187 @@ ipcMain.on('color-picker:cancel-pick', () => {
   stopColorPicker()
 })
 
+ipcMain.handle('network:ping', async (_event, host: string) => {
+  return new Promise((resolve) => {
+    const target = host.replace(/^https?:\/\//, '').split('/')[0]
+    // 强制使用 chcp 65001 确保输出为 UTF-8，解决中文匹配问题
+    const cmd = `chcp 65001 && ping -n 1 -w 2000 ${target}`
+    
+    exec(cmd, (error, stdout) => {
+      if (error) {
+        resolve({ success: false, latency: null })
+        return
+      }
+
+      // 更加宽松的正则，匹配任何数字后紧跟 ms 的情况
+      const match = stdout.match(/[=<](\d+)ms/)
+      if (match && match[1]) {
+        resolve({ success: true, latency: parseInt(match[1]) })
+      } else {
+        resolve({ success: false, latency: null })
+      }
+    })
+  })
+})
+
+ipcMain.handle('network:get-info', async () => {
+  try {
+    const script = `
+      $ErrorActionPreference = 'SilentlyContinue'
+      $results = @()
+      $adapters = Get-NetAdapter | Where-Object { $_.Status -eq 'Up' }
+      foreach ($adapter in $adapters) {
+          $ipInfo = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue
+          if ($ipInfo) {
+              $ip = if ($ipInfo.IPAddress -is [array]) { $ipInfo.IPAddress[0] } else { $ipInfo.IPAddress }
+              $results += @{
+                  name = $adapter.Name
+                  description = $adapter.InterfaceDescription
+                  ip = $ip
+                  speed = $adapter.LinkSpeed
+                  type = if ($adapter.MediaType -match 'Native 802.11|Wi-Fi|Wireless') { 'Wi-Fi' } else { '以太网' }
+              }
+          }
+      }
+      if ($results.Count -gt 0) {
+          $results | ConvertTo-Json -Compress
+      } else {
+          "[]"
+      }
+    `
+    const psResult = await execPowerShell(script)
+    let data: any[] = []
+    
+    try {
+      const startIdx = Math.min(
+        psResult.indexOf('[') !== -1 ? psResult.indexOf('[') : Infinity,
+        psResult.indexOf('{') !== -1 ? psResult.indexOf('{') : Infinity
+      );
+      const endIdx = Math.max(psResult.lastIndexOf(']'), psResult.lastIndexOf('}'));
+      
+      if (startIdx !== Infinity && endIdx !== -1) {
+        const cleanJson = psResult.substring(startIdx, endIdx + 1);
+        const parsed = JSON.parse(cleanJson);
+        data = Array.isArray(parsed) ? parsed : [parsed];
+      }
+    } catch (e) {
+      console.error('Failed to parse PS JSON:', e);
+    }
+
+    if (data.length === 0) {
+      const os = require('os')
+      const interfaces = os.networkInterfaces()
+      for (const name of Object.keys(interfaces)) {
+        const ifaces = interfaces[name]
+        if (!ifaces) continue
+        for (const iface of ifaces) {
+          if (iface.family === 'IPv4' && !iface.internal) {
+            data.push({
+              name: name,
+              description: name,
+              type: (name.toLowerCase().includes('wi-fi') || name.toLowerCase().includes('wlan')) ? 'Wi-Fi' : '以太网',
+              speed: '未知',
+              ip: iface.address
+            })
+          }
+        }
+      }
+    }
+
+    return { success: true, info: data }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('network:scan-lan', async (_event, targetSubnet: string) => {
+  console.log('--- Network LAN Scan Started for Subnet:', targetSubnet, '---')
+  try {
+    if (!targetSubnet) {
+      return { success: false, error: '未提供网段信息' }
+    }
+
+    const wakeCmd = `ping -n 1 -w 500 ${targetSubnet}.255 > nul 2>&1 & ping -n 1 -w 500 ${targetSubnet}.1 > nul 2>&1`
+    await execCommand(wakeCmd).catch(() => {})
+
+    const arpOutput = await execCommand('arp -a')
+    const lines = arpOutput.split(/\r?\n/)
+    const rawDevices: Array<{ ip: string; mac: string }> = []
+    
+    for (const line of lines) {
+      const cleanLine = line.trim()
+      if (!cleanLine) continue
+      const match = cleanLine.match(/(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17})/i)
+      if (match) {
+        const ip = match[1]
+        const mac = match[2]
+        if (!ip.startsWith('224.') && !ip.startsWith('239.') && !ip.endsWith('.255') && ip.startsWith(targetSubnet + '.')) {
+          rawDevices.push({ ip, mac })
+        }
+      }
+    }
+    
+    const uniqueMap = new Map()
+    for (const item of rawDevices) {
+      uniqueMap.set(item.ip, item)
+    }
+    const uniqueList = Array.from(uniqueMap.values())
+
+    const macVendors: Record<string, string> = {
+      'A4-A9-30': '小米 (Xiaomi)', 'EC-4D-3E': '小米 (Xiaomi)', 'C8-5C-CC': '小米 (Xiaomi)', '64-9E-31': '小米 (Xiaomi)',
+      '08-3A-F2': '普联 (TP-Link)', '54-48-E6': '普联 (TP-Link)', 'A4-39-B3': '普联 (TP-Link)',
+      'F4-F2-6D': 'Apple', 'BC-D1-1F': 'Apple', 'AC-29-3A': 'Apple', 'D8-BB-2C': 'Apple', '60-FB-42': 'Apple',
+      'E4-E4-AB': 'Huawei', '28-D2-44': 'Huawei', '80-05-DF': 'Intel', '48-51-B7': 'Intel',
+      'B4-2E-99': 'Samsung', 'FC-DB-B3': 'Samsung', '00-0C-29': 'VMware', '08-00-27': 'VirtualBox'
+    }
+
+    const devices = await Promise.all(uniqueList.map(async (dev: any) => {
+      let name = ''
+      
+      // 1. 如果是网关 IP，直接尝试标记
+      if (dev.ip.endsWith('.1')) {
+        name = '路由器 (网关)'
+      }
+
+      // 2. 尝试执行带超时的指令获取 Hostname
+      if (!name) {
+        try {
+          // 使用 powershell 的 Test-Connection 替代 ping -a 获得更稳健的结果，且自带超时控制
+          const hostRes = await execPowerShell(`$ErrorActionPreference='SilentlyContinue'; [System.Net.Dns]::GetHostEntry('${dev.ip}').HostName`)
+          if (hostRes && hostRes.trim() !== dev.ip) {
+            name = hostRes.trim().split('.')[0]
+          }
+        } catch (e) {}
+      }
+
+      // 3. 查厂商库
+      if (!name) {
+        const macPrefix = dev.mac.substring(0, 8).toUpperCase()
+        name = macVendors[macPrefix] || ''
+      }
+
+      // 4. 判断是否为“私有/随机 MAC”
+      if (!name) {
+        const firstByte = parseInt(dev.mac.substring(0, 2), 16)
+        if ((firstByte & 0x02) === 2) {
+          name = '移动设备 (私有MAC)'
+        }
+      }
+      
+      return { 
+        ip: dev.ip, 
+        mac: dev.mac, 
+        name: name || '未知设备',
+        type: '局域网设备'
+      }
+    }))
+    
+    return { success: true, devices }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
 ipcMain.handle('screen-overlay-start', async () => {
   try {
     if (screenOverlayWindow) {

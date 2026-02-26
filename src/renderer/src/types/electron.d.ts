@@ -202,6 +202,29 @@ declare global {
         disable: () => Promise<{ success: boolean }>
         pick: () => Promise<{ success: boolean; color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }; error?: string }>
         onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
+        onScreenshot: (callback: (dataUrl: string) => void) => () => void
+        onSelected: (callback: (data: any) => void) => () => void
+        confirm: (data: any) => void
+        cancel: () => void
+      }
+      network: {
+        ping: (host: string) => Promise<{ success: boolean; latency: number | null }>
+        getInfo: () => Promise<{
+          success: boolean
+          info?: Array<{
+            name: string
+            description: string
+            type: 'Wi-Fi' | '以太网'
+            speed: string
+            ip: string
+          }>
+          error?: string
+        }>
+        scanLan: (subnet: string) => Promise<{
+          success: boolean
+          devices?: Array<{ ip: string; mac: string; type: string }>
+          error?: string
+        }>
       }
     }
   }

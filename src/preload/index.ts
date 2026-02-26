@@ -271,6 +271,18 @@ const colorPickerAPI = {
   }
 }
 
+const networkAPI = {
+  ping: (host: string) => {
+    return ipcRenderer.invoke('network:ping', host)
+  },
+  getInfo: () => {
+    return ipcRenderer.invoke('network:get-info')
+  },
+  scanLan: (subnet: string) => {
+    return ipcRenderer.invoke('network:scan-lan', subnet)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', {
@@ -288,7 +300,8 @@ if (process.contextIsolated) {
       window: windowAPI,
       floatBall: floatBallAPI,
       screenOverlay: screenOverlayAPI,
-      colorPicker: colorPickerAPI
+      colorPicker: colorPickerAPI,
+      network: networkAPI
     })
   } catch (error) {
     console.error(error)
@@ -310,6 +323,7 @@ if (process.contextIsolated) {
     window: windowAPI,
     floatBall: floatBallAPI,
     screenOverlay: screenOverlayAPI,
-    colorPicker: colorPickerAPI
+    colorPicker: colorPickerAPI,
+    network: networkAPI
   }
 }
