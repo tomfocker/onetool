@@ -4,109 +4,97 @@ const path = require('path');
 const filePath = path.join(__dirname, 'src/main/index.ts');
 const content = fs.readFileSync(filePath, 'utf8');
 
-const newGetListCode = `ipcMain.handle('web-activator-get-window-list', async () => {
-  const allResults: any[] = [];
-  try {
-    const winScript = \`Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { @{ id = $_.Id; title = $_.MainWindowTitle; processName = $_.ProcessName; hwnd = $_.MainWindowHandle.ToInt64(); type = 'window' } } | ConvertTo-Json -Compress\`;
-    const winResult = await execPowerShell(winScript);
-    if (winResult) {
-      const parsed = JSON.parse(winResult);
-      allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-    }
-  } catch (e) {}
+const toggleTabCode = `
+const tabHistory = new Map();
 
+async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
   try {
-    const tabScript = \`
-      $ErrorActionPreference = 'SilentlyContinue'
-      Add-Type -AssemblyName UIAutomationClient
-      Add-Type -AssemblyName UIAutomationTypes
-      $res = New-Object System.Collections.ArrayList
-      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
-      foreach ($p in $edgeProcs) {
-          try {
-              $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-              $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-              foreach ($el in $all) {
-                  if ($el.Current.ControlType.Id -eq 50019) {
-                      $name = $el.Current.Name
-                      if ($name -and $name -notmatch "^\\\\d+ 个标签页$|^关闭$|^新标签页$") {
-                          $null = $res.Add(@{ id = $p.Id; title = $name; processName = "msedge"; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
-                      }
-                  }
-              }
-          } catch {}
-      }
-      $res | ConvertTo-Json -Compress
-    \`;
-    const tabResult = await execPowerShell(tabScript);
-    const jsonStart = tabResult.lastIndexOf('[');
-    const jsonEnd = tabResult.lastIndexOf(']');
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-        const parsed = JSON.parse(tabResult.substring(jsonStart, jsonEnd + 1));
-        allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-    }
-  } catch (e) {}
+    const escapedPattern = pattern.replace(/"/g, '\\\\"');
+    const lastTabName = tabHistory.get(pattern) || "";
 
-  const unique = new Map();
-  allResults.forEach(w => {
-    if (w.title && w.title.trim()) {
-      const key = w.type + "-" + w.processName + "-" + w.title;
-      if (!unique.has(key)) unique.set(key, w);
-    }
-  });
-  return { success: true, windows: Array.from(unique.values()) };
-})`;
-
-const newToggleTabCode = `async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
-  try {
-    const escapedPattern = pattern.replace(/"/g, '\`"');
     const script = \`
       $ErrorActionPreference = 'SilentlyContinue'
       Add-Type -AssemblyName UIAutomationClient
       Add-Type -AssemblyName UIAutomationTypes
-      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
-      $targetTab = $null
-      foreach ($p in $edgeProcs) {
-          $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-          $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-          foreach ($el in $all) {
-              if ($el.Current.ControlType.Id -eq 50019 -and $el.Current.Name -match "\${escapedPattern}") {
-                  $targetTab = $el; $parentHwnd = $p.MainWindowHandle; $procId = $p.Id; break
-              }
-          }
-          if ($targetTab) { break }
+      
+      if (!([PSObject].Assembly.GetType('Win32'))) {
+          Add-Type -TypeDefinition @"
+            using System;
+            using System.Runtime.InteropServices;
+            public class Win32 {
+                [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+                [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+                [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+            }
+"@
       }
+
+      $edge = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
+      if (!$edge) { "NOT_RUNNING"; exit }
+
+      $hwnd = $edge.MainWindowHandle
+      $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+      $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlTypes]::TabItem)
+      $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+      
+      $targetTab = $null
+      $currentTab = $null
+      $returnTab = $null
+
+      foreach ($t in $tabs) {
+          $name = $t.Current.Name
+          if ($name -match "\${escapedPattern}") { $targetTab = $t }
+          if ($name -eq "\${lastTabName}") { $returnTab = $t }
+          $selPattern = $null
+          if ($t.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selPattern)) {
+              if ($selPattern.Current.IsSelected) { $currentTab = $t }
+          }
+      }
+
+      $fgHwnd = [Win32]::GetForegroundWindow()
       if ($targetTab) {
-          $wshell = New-Object -ComObject WScript.Shell
-          $wshell.AppActivate($procId)
-          Start-Sleep -Milliseconds 50
-          $selectionPattern = $null
-          if ($targetTab.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selectionPattern)) {
-              if ($selectionPattern.Current.IsSelected) {
-                  $type = Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);' -Name "Win32Toggle" -PassThru
-                  [Win32Toggle]::ShowWindow($parentHwnd, 6) | Out-Null
-                  "minimized"
+          $sel = $targetTab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
+          if ($fgHwnd -eq $hwnd) {
+              if ($currentTab -and $currentTab.Current.Name -match "\${escapedPattern}") {
+                  if ($returnTab) {
+                      $returnTab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+                      "ACTION:RETURN|NAME:" + $returnTab.Current.Name
+                  } else { "ACTION:ALREADY_HERE" }
               } else {
-                  $selectionPattern.Select()
-                  "activated"
+                  $oldName = if ($currentTab) { $currentTab.Current.Name } else { "" }
+                  $sel.Select()
+                  "ACTION:SWITCH|NAME:" + $oldName
               }
-          } else { "activated" }
-      } else { "not_found" }
+          } else {
+              [Win32]::ShowWindow($hwnd, 9) | Out-Null
+              [Win32]::ShowWindow($hwnd, 5) | Out-Null
+              [Win32]::SetForegroundWindow($hwnd) | Out-Null
+              $sel.Select()
+              "ACTION:ACTIVATE|NAME:" + (if ($currentTab) { $currentTab.Current.Name } else { "" })
+          }
+      } else { "NOT_FOUND" }
     \`;
+
     const result = await execPowerShell(script);
-    if (result.includes('activated')) return { success: true, action: 'activated' };
-    if (result.includes('minimized')) return { success: true, action: 'minimized' };
-    return { success: false, error: '未找到匹配的标签页' };
-  } catch (error) { return { success: false, error: (error as Error).message }; }
-}`;
+    if (result.includes('ACTION:SWITCH') || result.includes('ACTION:ACTIVATE')) {
+        const parts = result.split('NAME:');
+        if (parts.length > 1) tabHistory.set(pattern, parts[1].trim());
+        return { success: true, action: 'activated' };
+    }
+    if (result.includes('ACTION:RETURN')) {
+        tabHistory.delete(pattern);
+        return { success: true, action: 'activated' };
+    }
+    return { success: false, error: 'Target not found' };
+  } catch (error) {
+    return { success: false, error: (error as Error).message };
+  }
+}
+`;
 
-const startGetIndex = content.indexOf('ipcMain.handle(\'web-activator-get-window-list\'');
-const nextAfterGetIndex = content.indexOf('async function toggleApp', startGetIndex);
-const updatedWithGet = content.substring(0, startGetIndex) + newGetListCode + "\n\n" + content.substring(nextAfterGetIndex);
+const startToggleIndex = content.indexOf('async function toggleTab');
+const nextAfterToggleIndex = content.indexOf('let webActivatorShortcuts', startToggleIndex);
+const updatedContent = content.substring(0, startToggleIndex) + toggleTabCode + "\n\n" + content.substring(nextAfterToggleIndex);
 
-const startToggleIndex = updatedWithGet.indexOf('async function toggleTab');
-const nextAfterToggleIndex = updatedWithGet.indexOf('let webActivatorShortcuts', startToggleIndex);
-const finalContent = updatedWithGet.substring(0, startToggleIndex) + newToggleTabCode + "\n\n" + updatedWithGet.substring(nextAfterToggleIndex);
-
-fs.writeFileSync(filePath, finalContent);
-console.log('Final Polish Applied. Tab switching synced with detection.');
+fs.writeFileSync(filePath, updatedContent);
+console.log('Fixed Patch Applied.');
