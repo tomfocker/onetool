@@ -885,62 +885,18 @@ interface WindowInfo {
 
 ipcMain.handle('web-activator-get-window-list', async () => {
   try {
+    // 优化：改用更快的原生 PowerShell 命令，避免 Add-Type
     const script = `
-Add-Type @"
-  using System;
-  using System.Runtime.InteropServices;
-  using System.Text;
-  public class Win32 {
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-    [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-  }
-"@
-
-$windows = @()
-[Win32]::EnumWindows({
-  param($hwnd, $lParam)
-  if ([Win32]::IsWindowVisible($hwnd)) {
-    $length = [Win32]::GetWindowTextLength($hwnd)
-    if ($length -gt 0) {
-      $sb = New-Object System.Text.StringBuilder ($length + 1)
-      [Win32]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null
-      $title = $sb.ToString()
-      if ($title -and $title -ne 'Program Manager' -and $title -ne 'Microsoft Text Input Application') {
-        $pid = 0
-        [Win32]::GetWindowThreadProcessId($hwnd, [ref]$pid) | Out-Null
-        try {
-          $process = Get-Process -Id $pid -ErrorAction SilentlyContinue
-          if ($process) {
-            $windows += [PSCustomObject]@{
-              id = $hwnd.ToInt64()
-              title = $title
-              processName = $process.ProcessName
-            }
-          }
-        } catch {}
-      }
-    }
-  }
-  return $true
-}, [IntPtr]::Zero)
-
-$windows | ConvertTo-Json -Depth 2
-`
+      Get-Process | Where-Object { $_.MainWindowTitle } | Select-Object @{N='id';E={$_.Id}}, @{N='title';E={$_.MainWindowTitle}}, @{N='processName';E={$_.ProcessName}} | ConvertTo-Json
+    `
     const result = await execPowerShell(script)
     let windows: WindowInfo[] = []
     if (result) {
       try {
-        windows = JSON.parse(result)
-        if (!Array.isArray(windows)) {
-          windows = [windows]
-        }
+        const parsed = JSON.parse(result)
+        windows = Array.isArray(parsed) ? parsed : [parsed]
       } catch (e) {
-        console.error('Failed to parse window list:', e)
+        console.error('Failed to parse window list JSON:', e)
       }
     }
     return { success: true, windows }
@@ -950,141 +906,93 @@ $windows | ConvertTo-Json -Depth 2
   }
 })
 
-async function toggleWindowByTitle(
-  titlePattern: string, 
-  browserType: string = 'any'
-): Promise<{ success: boolean; action?: string; error?: string }> {
+async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: boolean; action?: string; error?: string }> {
   try {
-    const browserProcessMap: Record<string, string[]> = {
-      chrome: ['chrome', 'google chrome'],
-      edge: ['msedge', 'microsoft edge'],
-      firefox: ['firefox', 'mozilla firefox'],
-      brave: ['brave'],
-      opera: ['opera', 'operagx'],
-      vivaldi: ['vivaldi'],
-      ie: ['iexplore', 'internet explorer'],
-      any: ['chrome', 'msedge', 'firefox', 'brave', 'opera', 'vivaldi', 'iexplore', 'application', 'browser']
-    }
-    
-    const targetProcesses = browserProcessMap[browserType] || browserProcessMap['any']
-    const processFilter = targetProcesses.map(p => `$processName -like '*${p}*'`).join(' -or ')
-    
-    const findWindowScript = `
-Add-Type @"
-  using System;
-  using System.Runtime.InteropServices;
-  using System.Text;
-  public class Win32 {
-    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-    [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-    [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
-    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
-    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-  }
+    const script = `
+      Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public class Win32 {
+          [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+          [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+          [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+          [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+        }
 "@
-
-$pattern = "${titlePattern}"
-$foundHwnd = $null
-$foundTitle = $null
-
-[Win32]::EnumWindows({
-  param($hwnd, $lParam)
-  if ([Win32]::IsWindowVisible($hwnd)) {
-    $length = [Win32]::GetWindowTextLength($hwnd)
-    if ($length -gt 0) {
-      $sb = New-Object System.Text.StringBuilder ($length + 1)
-      [Win32]::GetWindowText($hwnd, $sb, $sb.Capacity) | Out-Null
-      $title = $sb.ToString()
-      
-      if ($title -and $title -like "*$pattern*") {
-        $winPid = 0
-        [Win32]::GetWindowThreadProcessId($hwnd, [ref]$winPid) | Out-Null
-        try {
-          $process = Get-Process -Id $winPid -ErrorAction SilentlyContinue
-          if ($process) {
-            $processName = $process.ProcessName.ToLower()
-            $processFilterResult = ${processFilter}
-            if ($processFilterResult) {
-              $foundHwnd = $hwnd
-              $foundTitle = $title
-              return $false
-            }
+      $proc = $null
+      if ("${hwndId || 0}" -ne "0") {
+          $h = [IntPtr]${hwndId || 0}
+          if ([Win32]::IsWindow($h)) {
+              [uint32]$pId = 0
+              [Win32]::GetWindowThreadProcessId($h, [ref]$pId)
+              $proc = Get-Process -Id $pId -ErrorAction SilentlyContinue
           }
-        } catch {}
       }
-    }
-  }
-  return $true
-}, [IntPtr]::Zero)
+      if (!$proc) {
+          $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${pattern}" -or $_.ProcessName -match "${pattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+      }
 
-if ($foundHwnd) {
-  $isMinimized = [Win32]::IsIconic($foundHwnd)
-  $foregroundHwnd = [Win32]::GetForegroundWindow()
-  
-  if ($isMinimized -or $foregroundHwnd -ne $foundHwnd) {
-    [Win32]::ShowWindow($foundHwnd, 9)
-    [Win32]::SetForegroundWindow($foundHwnd)
-    Write-Output "activated"
-  } else {
-    [Win32]::ShowWindow($foundHwnd, 6)
-    Write-Output "minimized"
-  }
-} else {
-  Write-Output "not_found"
-}
-`
-    const result = await execPowerShell(findWindowScript)
-    const action = result.trim()
-    
-    if (action === 'not_found') {
-      return { success: false, error: '未找到匹配的窗口' }
-    }
-    
-    return { success: true, action }
+      if ($proc) {
+          $hwnd = $proc.MainWindowHandle
+          $fgHwnd = [Win32]::GetForegroundWindow()
+          [uint32]$fgPid = 0
+          [Win32]::GetWindowThreadProcessId($fgHwnd, [ref]$fgPid)
+
+          # 只要当前前台窗口不是我们要找的那个，或者虽然是它但被最小化了，就执行激活
+          if ($fgPid -eq $proc.Id -and -not [Win32]::IsIconic($hwnd)) {
+              [Win32]::ShowWindow($hwnd, 6) | Out-Null # SW_MINIMIZE
+              "minimized"
+          } else {
+              [Win32]::ShowWindow($hwnd, 9) | Out-Null # SW_RESTORE
+              [Win32]::ShowWindow($hwnd, 5) | Out-Null # SW_SHOW
+              [Win32]::SetForegroundWindow($hwnd) | Out-Null
+              "activated"
+          }
+      } else { "not_found" }
+    `
+    const result = await execPowerShell(script)
+    if (result.includes('activated')) return { success: true, action: 'activated' }
+    if (result.includes('minimized')) return { success: true, action: 'minimized' }
+    return { success: false, error: '未找到匹配的窗口' }
   } catch (error) {
-    console.error('Toggle window error:', error)
     return { success: false, error: (error as Error).message }
   }
 }
 
-ipcMain.handle('web-activator-toggle-window', async (_event, { titlePattern, browserType }: { titlePattern: string; browserType?: string }) => {
-  return await toggleWindowByTitle(titlePattern, browserType || 'any')
+let webActivatorShortcuts: string[] = []
+
+ipcMain.handle('web-activator-toggle-window', async (_event, config: { type: 'app' | 'tab', pattern: string, id?: number }) => {
+  if (config.type === 'app') return await toggleApp(config.pattern, config.id)
+  return await toggleTab(config.pattern)
 })
 
-ipcMain.handle('web-activator-register-shortcuts', async (_event, configs: Array<{ id: string; name: string; titlePattern: string; browserType?: string; shortcut: string }>) => {
+ipcMain.handle('web-activator-register-shortcuts', async (_event, configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => {
   try {
     globalShortcut.unregisterAll()
+    webActivatorShortcuts = []
     
+    let successCount = 0
     for (const config of configs) {
-      if (!config.shortcut || config.shortcut === 'Alt+') continue
+      if (!config.shortcut || config.shortcut === 'Alt+' || config.shortcut.endsWith('+')) continue
       
       const success = globalShortcut.register(config.shortcut, async () => {
-        try {
-          const result = await toggleWindowByTitle(config.titlePattern, config.browserType || 'any')
-          if (mainWindow && result.success) {
-            mainWindow.webContents.send('web-activator-shortcut-triggered', {
-              id: config.id,
-              action: result.action
-            })
-          }
-        } catch (error) {
-          console.error('Toggle window error:', error)
+        const result = config.type === 'app' ? await toggleApp(config.pattern, config.hwnd) : await toggleTab(config.pattern)
+        if (mainWindow && result.success) {
+          mainWindow.webContents.send('web-activator-shortcut-triggered', {
+            id: config.id,
+            action: result.action
+          })
         }
       })
-      
-      if (!success) {
-        console.warn(`Failed to register shortcut: ${config.shortcut}`)
+      if (success) {
+        webActivatorShortcuts.push(config.shortcut)
+        successCount++
       }
     }
-    
     return { success: true }
   } catch (error) {
-    console.error('Register shortcuts error:', error)
     return { success: false, error: (error as Error).message }
   }
 })
