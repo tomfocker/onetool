@@ -242,11 +242,31 @@ const colorPickerAPI = {
   pick: () => {
     return ipcRenderer.invoke('color-picker:pick')
   },
+  confirm: (data: any) => {
+    return ipcRenderer.send('color-picker:confirm-pick', data)
+  },
+  cancel: () => {
+    return ipcRenderer.send('color-picker:cancel-pick')
+  },
   onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
     const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
     ipcRenderer.on('color-picker:update', handler)
     return () => {
       ipcRenderer.removeListener('color-picker:update', handler)
+    }
+  },
+  onScreenshot: (callback: (dataUrl: string) => void) => {
+    const handler = (_event: any, dataUrl: string) => callback(dataUrl)
+    ipcRenderer.on('color-picker:screenshot', handler)
+    return () => {
+      ipcRenderer.removeListener('color-picker:screenshot', handler)
+    }
+  },
+  onSelected: (callback: (data: any) => void) => {
+    const handler = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('color-picker:selected', handler)
+    return () => {
+      ipcRenderer.removeListener('color-picker:selected', handler)
     }
   }
 }

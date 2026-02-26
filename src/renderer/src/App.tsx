@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useLayoutEffect } from 'react'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
@@ -20,21 +20,32 @@ import { ColorPickerTool } from '@/tools/ColorPickerTool'
 import { ScreenRecorderTool } from '@/tools/ScreenRecorderTool'
 import { FileDropoverTool } from '@/tools/FileDropoverTool'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
+import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { ScreenOverlayTranslatorTool } from '@/tools/ScreenOverlayTranslatorTool'
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
   const [isScreenOverlay, setIsScreenOverlay] = useState(false)
+  const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
 
-  useEffect(() => {
-    const hash = window.location.hash
-    if (hash.startsWith('#/screen-overlay')) {
-      setIsScreenOverlay(true)
+  useLayoutEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash
+      setIsScreenOverlay(hash.startsWith('#/screen-overlay'))
+      setIsColorPickerOverlay(hash.startsWith('#/color-picker-overlay'))
     }
+
+    handleHashChange()
+    window.addEventListener('hashchange', handleHashChange)
+    return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
   if (isScreenOverlay) {
     return <ScreenOverlay />
+  }
+
+  if (isColorPickerOverlay) {
+    return <ColorPickerOverlay />
   }
 
   const renderContent = () => {
