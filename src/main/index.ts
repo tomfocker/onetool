@@ -570,18 +570,47 @@ function stopAutoClicker() {
   return false
 }
 
-function registerAutoClickerShortcut(shortcut: string) {
-  globalShortcut.unregisterAll() // 简单处理，或者只销毁特定的
-  // 重新注册所有必要的快捷键
-  globalShortcut.register(shortcut, () => {
+function registerAutoClickerShortcuts() {
+  // 1. 先尝试注销所有可能相关的快捷键，防止冲突
+  try {
+    // 注销当前配置的键
+    if (autoClickerConfig.shortcut) {
+      globalShortcut.unregister(autoClickerConfig.shortcut)
+    }
+    // 注销默认的 F6 和 F8，防止之前的残留
+    globalShortcut.unregister('F6')
+    globalShortcut.unregister('F8')
+  } catch (e) {
+    console.warn('Initial unregister cleanup:', e)
+  }
+
+  // 2. 注册主切换快捷键
+  const mainShortcut = autoClickerConfig.shortcut || 'F6'
+  const isRegistered = globalShortcut.register(mainShortcut, () => {
+    console.log(`Action: Toggle AutoClicker via ${mainShortcut}`)
     if (autoClickerProcess) {
       stopAutoClicker()
     } else {
       startAutoClicker(autoClickerConfig)
     }
   })
-  
-  // 重新注册翻译等其他快捷键... (为了简化，这里先只管连点器)
+
+  if (!isRegistered) {
+    console.error(`CRITICAL: Failed to register ${mainShortcut}. It might be held by the OS or another app.`)
+    // 尝试保底：如果用户设定的键失败了，尝试强制注册 F6
+    if (mainShortcut !== 'F6') {
+      globalShortcut.register('F6', () => {
+        if (autoClickerProcess) stopAutoClicker()
+        else startAutoClicker(autoClickerConfig)
+      })
+    }
+  }
+
+  // 3. 注册紧急停止键 (F8) - 始终静默存在
+  globalShortcut.register('F8', () => {
+    console.log('Action: Emergency Stop (F8)')
+    stopAutoClicker()
+  })
 }
 
 function startAutoClicker(config: { interval: number; button: string }) {
@@ -634,11 +663,11 @@ ipcMain.handle('autoclicker-stop', async () => {
 })
 
 ipcMain.handle('autoclicker-update-config', async (_event, config: any) => {
+  const oldShortcut = autoClickerConfig.shortcut
   autoClickerConfig = { ...autoClickerConfig, ...config }
-  // 如果修改了快捷键，重新注册
-  if (config.shortcut) {
-    globalShortcut.unregisterAll() // 注意：这会取消所有快捷键，项目中还有其他快捷键
-    // 这里需要一个更稳健的快捷键管理逻辑，稍后在 initShortcuts 中统一处理
+  
+  if (config.shortcut && config.shortcut !== oldShortcut) {
+    registerAutoClickerShortcuts()
   }
   return { success: true }
 })
@@ -1895,14 +1924,14 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  globalShortcut.register(autoClickerConfig.shortcut, async () => {
-    console.log(`${autoClickerConfig.shortcut} pressed - toggle autoclicker`)
-    if (autoClickerProcess) {
-      stopAutoClicker()
-    } else {
-      startAutoClicker(autoClickerConfig)
+  registerAutoClickerShortcuts()
+
+  // 延迟一秒再次尝试注册，防止启动冲突
+  setTimeout(() => {
+    if (!globalShortcut.isRegistered(autoClickerConfig.shortcut || 'F6')) {
+      registerAutoClickerShortcuts()
     }
-  })
+  }, 1000)
 
   globalShortcut.register('Alt+Shift+T', async () => {
     console.log('Global shortcut Alt+Shift+T pressed')
