@@ -10,38 +10,40 @@ import windowStateKeeper from 'electron-window-state'
 
 function getFfmpegPath(): string {
   const isDev = !app.isPackaged
-  
-  console.log('=== FFmpeg Path Debug ===')
-  console.log('isDev:', isDev)
-  console.log('app.isPackaged:', app.isPackaged)
-  console.log('process.resourcesPath:', process.resourcesPath)
-  console.log('ffmpegStatic:', ffmpegStatic)
+  let selectedPath = ''
   
   if (isDev) {
-    const devPath = ffmpegStatic as string
-    console.log('Dev mode, using ffmpegStatic:', devPath)
-    console.log('Dev path exists:', fs.existsSync(devPath))
-    return devPath
-  }
-  
-  const possiblePaths = [
-    path.join(process.resourcesPath, 'ffmpeg.exe'),
-    path.join(process.resourcesPath, 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
-    path.join(path.dirname(app.getPath('exe')), 'resources', 'ffmpeg.exe'),
-    path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
-    ffmpegStatic as string
-  ]
-  
-  for (const testPath of possiblePaths) {
-    console.log('Checking path:', testPath, 'exists:', fs.existsSync(testPath))
-    if (testPath && fs.existsSync(testPath)) {
-      console.log('Found FFmpeg at:', testPath)
-      return testPath
+    selectedPath = ffmpegStatic as string
+  } else {
+    const possiblePaths = [
+      path.join(process.resourcesPath, 'ffmpeg.exe'),
+      path.join(process.resourcesPath, 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
+      path.join(path.dirname(app.getPath('exe')), 'resources', 'ffmpeg.exe'),
+      path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
+      ffmpegStatic as string
+    ]
+    
+    for (const testPath of possiblePaths) {
+      if (testPath && fs.existsSync(testPath)) {
+        selectedPath = testPath
+        break
+      }
     }
   }
+
+  if (!selectedPath) selectedPath = ffmpegStatic as string
+
+  // 验证路径是否有效且可执行
+  try {
+    const { execSync } = require('child_process')
+    // 使用更温和的检查方式，避免长时间阻塞或在某些环境下报错
+    execSync(`"${selectedPath}" -version`, { stdio: 'ignore', timeout: 2000 })
+    console.log('FFmpeg 路径验证成功:', selectedPath)
+  } catch (e) {
+    console.warn('FFmpeg 路径验证警告 (可能不影响使用):', selectedPath, (e as Error).message)
+  }
   
-  console.error('FFmpeg not found in any location!')
-  return ffmpegStatic as string
+  return selectedPath
 }
 
 let ffmpegInitialized = false
@@ -1525,8 +1527,21 @@ function createWindow(): void {
   })
 
   mainWindow.on('close', (event) => {
-    // 移除隐藏逻辑，改为直接退出以方便调试
-    app.quit()
+    if (isQuitting) {
+      mainWindow = null
+    } else {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
+  // 捕获未处理的异常，防止进程静默退出
+  process.on('uncaughtException', (error) => {
+    console.error('未捕获的异常:', error)
+  })
+
+  process.on('unhandledRejection', (reason, promise) => {
+    console.error('未处理的 Promise 拒绝:', reason, promise)
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -1596,6 +1611,7 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
     }
 
     isRecording = true
+    if (mainWindow) mainWindow.minimize()
 
     let command = ffmpeg()
       .input('desktop')
@@ -1612,14 +1628,14 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
           '-vcodec libx264',
           `-crf ${crf}`,
           '-pix_fmt yuv420p',
-          '-preset ultrafast'
+          '-preset ultrafast',
+          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // 确保宽高为偶数，libx264 强制要求
         ])
         .format('mp4')
     } else if (format === 'gif') {
       command = command
         .outputOptions([
-          '-vf',
-          'fps=10,scale=iw:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse'
+          '-vf fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse'
         ])
         .format('gif')
     } else if (format === 'webm') {
@@ -1629,20 +1645,73 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
           '-vcodec libvpx',
           `-crf ${crf}`,
           '-b:v 0',
-          '-cpu-used 4'
+          '-cpu-used 4',
+          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2'
         ])
         .format('webm')
     }
 
-    command = command.save(outputPath)
     recordingCommand = command
 
     command.on('start', (commandLine) => {
-      console.log('FFmpeg 命令:', commandLine)
-      if (mainWindow) {
+      console.log('FFmpeg 开始执行, 命令:', commandLine)
+      // 异步获取 ffmpegProc 避免同步访问可能产生的 null 错误
+      setTimeout(() => {
+        try {
+          const proc = (recordingCommand as any).ffmpegProc
+          if (!proc) {
+            console.warn('无法获取 FFmpeg 进程句柄')
+            return
+          }
+
+          proc.stderr.on('data', (data: Buffer) => {
+            const msg = data.toString()
+            console.log('[FFmpeg Stderr]', msg)
+            // 过滤关键错误行，避免发送过多无关日志
+            const errorLines = msg.split('\n').filter(line => 
+              line.toLowerCase().includes('error') || 
+              line.toLowerCase().includes('failed') ||
+              line.toLowerCase().includes('cannot')
+            )
+            
+            if (errorLines.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('screen-recorder-error', { 
+                message: errorLines[0].trim().substring(0, 200) // 限制长度
+              })
+            }
+          })
+          
+          let exitHandled = false
+          proc.on('exit', (code: number, signal: string) => {
+            if (exitHandled) return
+            exitHandled = true
+            console.log(`FFmpeg 进程退出, code: ${code}, signal: ${signal}`)
+            
+            if (isRecording) {
+              isRecording = false
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.show()
+                  mainWindow.focus()
+                  if (code !== 0 && code !== null) {
+                    mainWindow.webContents.send('screen-recorder-stopped', { 
+                      success: false, 
+                      error: `FFmpeg 异常退出 (退出码: ${code})。可能是因为权限不足、编码器不支持、路径无效或目标文件被占用。` 
+                    })
+                  }
+              }
+            }
+          })
+        } catch (e) {
+          console.error('初始化 FFmpeg 进程监听失败:', e)
+        }
+      }, 500)
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('screen-recorder-started')
       }
     })
+
+    command.save(outputPath)
 
     command.on('progress', (progress) => {
       if (mainWindow) {
@@ -1656,6 +1725,7 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
       isRecording = false
       recordingCommand = null
       if (mainWindow) {
+        mainWindow.show()
         mainWindow.webContents.send('screen-recorder-stopped', { success: true, outputPath })
       }
     })
@@ -1664,6 +1734,7 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
       console.error('FFmpeg 错误:', err)
       isRecording = false
       recordingCommand = null
+      if (mainWindow) mainWindow.show()
       let errorMessage = err.message
       if (err.message.includes('Permission denied') || err.message.includes('Access is denied')) {
         errorMessage = '没有写入权限，请尝试选择其他目录或以管理员身份运行程序'
@@ -1707,6 +1778,10 @@ ipcMain.handle('screen-recorder-status', async () => {
   return {
     recording: isRecording
   }
+})
+
+ipcMain.handle('screen-recorder-get-default-path', async () => {
+  return path.join(app.getPath('desktop'), `recording-${Date.now()}.mp4`)
 })
 
 let colorPickerTimer: NodeJS.Timeout | null = null
@@ -2425,6 +2500,12 @@ app.whenReady().then(() => {
       })
     } catch (error) {
       console.error('Start screen overlay via shortcut error:', error)
+    }
+  })
+
+  globalShortcut.register('Alt+Shift+R', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('screen-recorder-toggle-hotkey')
     }
   })
 

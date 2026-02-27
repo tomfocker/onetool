@@ -179,6 +179,7 @@ declare global {
         }) => Promise<{ success: boolean; error?: string }>
         stopRecording: () => Promise<{ success: boolean; error?: string }>
         getStatus: () => Promise<{ recording: boolean }>
+        getDefaultPath: () => Promise<string>
         onStarted: (callback: () => void) => () => void
         onProgress: (callback: (data: { timemark: string }) => void) => () => void
         onStopped: (callback: (data: {
@@ -186,6 +187,8 @@ declare global {
           outputPath?: string
           error?: string
         }) => void) => () => void
+        onError: (callback: (data: { message: string }) => void) => () => void
+        onToggleHotkey: (callback: () => void) => () => void
       }
       window: {
         minimize: () => Promise<{ success: boolean }>

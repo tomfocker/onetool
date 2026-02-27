@@ -176,6 +176,9 @@ const screenRecorderAPI = {
   getStatus: () => {
     return ipcRenderer.invoke('screen-recorder-status')
   },
+  getDefaultPath: () => {
+    return ipcRenderer.invoke('screen-recorder-get-default-path')
+  },
   onStarted: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('screen-recorder-started', handler)
@@ -195,6 +198,20 @@ const screenRecorderAPI = {
     ipcRenderer.on('screen-recorder-stopped', handler)
     return () => {
       ipcRenderer.removeListener('screen-recorder-stopped', handler)
+    }
+  },
+  onError: (callback: (data: { message: string }) => void) => {
+    const handler = (_event: any, data: { message: string }) => callback(data)
+    ipcRenderer.on('screen-recorder-error', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-error', handler)
+    }
+  },
+  onToggleHotkey: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('screen-recorder-toggle-hotkey', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-toggle-hotkey', handler)
     }
   }
 }

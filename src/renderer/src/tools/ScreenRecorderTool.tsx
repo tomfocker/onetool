@@ -56,48 +56,6 @@ export const ScreenRecorderTool: React.FC = () => {
   const recordingStartTime = useRef<number | null>(null)
   const recordingInterval = useRef<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    const styleSheet = document.createElement('style')
-    styleSheet.innerText = styles
-    document.head.appendChild(styleSheet)
-    return () => {
-      document.head.removeChild(styleSheet)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!window.electron?.screenRecorder) return
-
-    const unsubscribeStarted = window.electron.screenRecorder.onStarted(() => {
-      setIsRecording(true)
-      recordingStartTime.current = Date.now()
-      startRecordingTimer()
-      showToast('录制已开始', 'success')
-    })
-
-    const unsubscribeProgress = window.electron.screenRecorder.onProgress((data) => {
-      if (data.timemark) {
-        setRecordingTime(data.timemark)
-      }
-    })
-
-    const unsubscribeStopped = window.electron.screenRecorder.onStopped((data) => {
-      setIsRecording(false)
-      stopRecordingTimer()
-      if (data.success) {
-        showToast(`录制完成，文件已保存到: ${data.outputPath}`, 'success')
-      } else {
-        showToast(`录制失败: ${data.error}`, 'error')
-      }
-    })
-
-    return () => {
-      unsubscribeStarted()
-      unsubscribeProgress()
-      unsubscribeStopped()
-    }
-  }, [])
-
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
@@ -181,6 +139,72 @@ export const ScreenRecorderTool: React.FC = () => {
       showToast(`停止录制失败: ${(error as Error).message}`, 'error')
     }
   }, [showToast])
+
+  useEffect(() => {
+    const styleSheet = document.createElement('style')
+    styleSheet.innerText = styles
+    document.head.appendChild(styleSheet)
+    return () => {
+      document.head.removeChild(styleSheet)
+    }
+  }, [])
+
+  useEffect(() => {
+    const initDefaultPath = async () => {
+      if (window.electron?.screenRecorder?.getDefaultPath) {
+        const path = await window.electron.screenRecorder.getDefaultPath()
+        setOutputPath(path)
+      }
+    }
+    initDefaultPath()
+
+    if (!window.electron?.screenRecorder) return
+
+    const unsubscribeStarted = window.electron.screenRecorder.onStarted(() => {
+      setIsRecording(true)
+      recordingStartTime.current = Date.now()
+      startRecordingTimer()
+      showToast('录制已开始', 'success')
+    })
+
+    const unsubscribeProgress = window.electron.screenRecorder.onProgress((data) => {
+      if (data.timemark) {
+        setRecordingTime(data.timemark)
+      }
+    })
+
+    const unsubscribeStopped = window.electron.screenRecorder.onStopped((data) => {
+      setIsRecording(false)
+      stopRecordingTimer()
+      if (data.success) {
+        showToast(`录制完成，文件已保存到: ${data.outputPath}`, 'success')
+      } else {
+        showToast(`录制失败: ${data.error}`, 'error')
+      }
+    })
+
+    // 监听运行中的错误
+    const unsubscribeError = (window.electron.screenRecorder as any).onError?.((data: { message: string }) => {
+      showToast(`录制中出错: ${data.message}`, 'error')
+    })
+
+    // 监听全局热键触发
+    const unsubscribeHotkey = window.electron.screenRecorder.onToggleHotkey?.(() => {
+      if (isRecording) {
+        handleStopRecording()
+      } else {
+        handleStartRecording()
+      }
+    })
+
+    return () => {
+      unsubscribeStarted()
+      unsubscribeProgress()
+      unsubscribeStopped()
+      if (unsubscribeError) unsubscribeError()
+      if (unsubscribeHotkey) unsubscribeHotkey()
+    }
+  }, [isRecording, handleStartRecording, handleStopRecording, startRecordingTimer, stopRecordingTimer, showToast])
 
   const formatOptions = [
     { value: 'mp4', label: 'MP4', desc: '高质量视频' },
@@ -343,6 +367,10 @@ export const ScreenRecorderTool: React.FC = () => {
               <span>ℹ️</span> 提示
             </h2>
             <ul className="space-y-2 text-sm text-muted-foreground">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-400">•</span>
+                <span>使用热键 <kbd className="px-1.5 py-0.5 bg-white/10 rounded border border-white/20 font-sans text-xs">Alt + Shift + R</kbd> 快速开始/停止录制</span>
+              </li>
               <li className="flex items-start gap-2">
                 <span className="text-purple-400">•</span>
                 <span>录制过程中请保持窗口可见，以确保录制质量</span>
