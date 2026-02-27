@@ -22,6 +22,7 @@ import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { ScreenOverlayTranslatorTool } from '@/tools/ScreenOverlayTranslatorTool'
 import { ScreenRecorderTool, RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
+import { SuperScreenshotTool } from '@/tools/SuperScreenshotTool'
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
@@ -104,6 +105,8 @@ function AppContent(): React.JSX.Element {
         return <ColorPickerTool />
       case 'screen-recorder':
         return <ScreenRecorderTool />
+      case 'super-screenshot':
+        return <SuperScreenshotTool />
       case 'file-dropover':
         return <FileDropoverTool />
       case 'screen-overlay-translator':

@@ -92,10 +92,8 @@ declare global {
           config: {
             interval: number
             button: string
-            shortcut: string
           }
         }>
-        updateConfig: (config: { interval?: number; button?: string; shortcut?: string }) => Promise<{ success: boolean; error?: string }>
       }
       autoStart: {
         getStatus: () => Promise<{
@@ -138,21 +136,18 @@ declare global {
             id: number
             title: string
             processName: string
-            hwnd: number
-            type: 'window' | 'tab'
           }>
           error?: string
         }>
-        toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => Promise<{
+        toggleWindow: (config: { titlePattern: string; browserType?: string; shortcut?: string }) => Promise<{
           success: boolean
           action?: 'activated' | 'minimized'
           error?: string
         }>
-        registerShortcuts: (configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => Promise<{
+        registerShortcuts: (configs: Array<{ id: string; name: string; titlePattern: string; browserType?: string; shortcut: string }>) => Promise<{
           success: boolean
           error?: string
         }>
-        checkVisibility: (configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => Promise<boolean[]>
         onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => () => void
       }
       clipboard: {
@@ -179,7 +174,6 @@ declare global {
         }) => Promise<{ success: boolean; error?: string }>
         stopRecording: () => Promise<{ success: boolean; error?: string }>
         getStatus: () => Promise<{ recording: boolean }>
-        getDefaultPath: () => Promise<string>
         onStarted: (callback: () => void) => () => void
         onProgress: (callback: (data: { timemark: string }) => void) => () => void
         onStopped: (callback: (data: {
@@ -187,8 +181,6 @@ declare global {
           outputPath?: string
           error?: string
         }) => void) => () => void
-        onError: (callback: (data: { message: string }) => void) => () => void
-        onToggleHotkey: (callback: () => void) => () => void
       }
       window: {
         minimize: () => Promise<{ success: boolean }>
@@ -210,29 +202,6 @@ declare global {
         disable: () => Promise<{ success: boolean }>
         pick: () => Promise<{ success: boolean; color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }; error?: string }>
         onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
-        onScreenshot: (callback: (dataUrl: string) => void) => () => void
-        onSelected: (callback: (data: any) => void) => () => void
-        confirm: (data: any) => void
-        cancel: () => void
-      }
-      network: {
-        ping: (host: string) => Promise<{ success: boolean; latency: number | null }>
-        getInfo: () => Promise<{
-          success: boolean
-          info?: Array<{
-            name: string
-            description: string
-            type: 'Wi-Fi' | '以太网'
-            speed: string
-            ip: string
-          }>
-          error?: string
-        }>
-        scanLan: (subnet: string) => Promise<{
-          success: boolean
-          devices?: Array<{ ip: string; mac: string; name: string; type: string }>
-          error?: string
-        }>
       }
     }
   }

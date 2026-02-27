@@ -192,7 +192,10 @@ function getSettingsPath(): string {
 }
 
 let appSettings = {
-  recorderHotkey: 'Alt+Shift+R'
+  recorderHotkey: 'Alt+Shift+R',
+  screenshotHotkey: 'Alt+Shift+S',
+  screenshotSavePath: '',
+  autoSaveScreenshot: false
 }
 
 function loadSettings() {
@@ -219,28 +222,27 @@ function saveSettings() {
 
 function registerRecorderShortcut() {
   try {
-    // 先注销可能的旧快捷键
     globalShortcut.unregister(appSettings.recorderHotkey)
-    
-    const success = globalShortcut.register(appSettings.recorderHotkey, () => {
+    globalShortcut.register(appSettings.recorderHotkey, () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('screen-recorder-toggle-hotkey')
       }
     })
-    
-    if (!success) {
-      console.warn(`Failed to register recorder shortcut: ${appSettings.recorderHotkey}`)
-      // 如果自定义的失败了，尝试回退到默认的
-      if (appSettings.recorderHotkey !== 'Alt+Shift+R') {
-        globalShortcut.register('Alt+Shift+R', () => {
-           if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('screen-recorder-toggle-hotkey')
-          }
-        })
-      }
-    }
   } catch (e) {
     console.error('Error registering recorder shortcut:', e)
+  }
+}
+
+function registerScreenshotShortcut() {
+  try {
+    globalShortcut.unregister(appSettings.screenshotHotkey)
+    globalShortcut.register(appSettings.screenshotHotkey, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('super-screenshot-trigger')
+      }
+    })
+  } catch (e) {
+    console.error('Error registering screenshot shortcut:', e)
   }
 }
 
@@ -250,10 +252,7 @@ ipcMain.handle('recorder-hotkey-get', () => {
 
 ipcMain.handle('recorder-hotkey-set', (_event, hotkey: string) => {
   try {
-    // 尝试注销旧的
     globalShortcut.unregister(appSettings.recorderHotkey)
-    
-    // 尝试注册新的
     const success = globalShortcut.register(hotkey, () => {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('screen-recorder-toggle-hotkey')
@@ -265,8 +264,33 @@ ipcMain.handle('recorder-hotkey-set', (_event, hotkey: string) => {
       saveSettings()
       return { success: true }
     } else {
-      // 注册失败，还原旧的
       registerRecorderShortcut()
+      return { success: false, error: '快捷键已被占用或无效' }
+    }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
+ipcMain.handle('screenshot-hotkey-get', () => {
+  return appSettings.screenshotHotkey
+})
+
+ipcMain.handle('screenshot-hotkey-set', (_event, hotkey: string) => {
+  try {
+    globalShortcut.unregister(appSettings.screenshotHotkey)
+    const success = globalShortcut.register(hotkey, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('super-screenshot-trigger')
+      }
+    })
+
+    if (success) {
+      appSettings.screenshotHotkey = hotkey
+      saveSettings()
+      return { success: true }
+    } else {
+      registerScreenshotShortcut()
       return { success: false, error: '快捷键已被占用或无效' }
     }
   } catch (e) {
@@ -1678,13 +1702,141 @@ let recorderProcess: ChildProcess | null = null
 
 let selectionWindow: BrowserWindow | null = null
 
-ipcMain.handle('recorder-selection-open', async () => {
+ipcMain.handle('screenshot-capture', async (_event, { x, y, width, height }) => {
+  const { desktopCapturer, screen } = require('electron')
+  const primaryDisplay = screen.getPrimaryDisplay()
+  const scaleFactor = primaryDisplay.scaleFactor
+
+  try {
+    const sources = await desktopCapturer.getSources({ 
+      types: ['screen'], 
+      thumbnailSize: { 
+        width: Math.round(primaryDisplay.size.width * scaleFactor), 
+        height: Math.round(primaryDisplay.size.height * scaleFactor) 
+      } 
+    })
+    
+    const source = sources[0]
+    const img = source.thumbnail
+    
+    // 裁剪图片 (考虑缩放)
+    const cropped = img.crop({
+      x: Math.round(x * scaleFactor),
+      y: Math.round(y * scaleFactor),
+      width: Math.round(width * scaleFactor),
+      height: Math.round(height * scaleFactor)
+    })
+
+    return cropped.toDataURL()
+  } catch (e) {
+    console.error('Capture error:', e)
+    return null
+  }
+})
+
+ipcMain.handle('screenshot-composite', async (_event, { baseDataUrl, overlayDataUrl, baseOpacity = 0.4 }) => {
+  try {
+    const baseImg = nativeImage.createFromDataURL(baseDataUrl)
+    const overlayImg = nativeImage.createFromDataURL(overlayDataUrl)
+    
+    const canvasSize = baseImg.getSize()
+    
+    // 注意：Electron nativeImage 不直接支持透明度叠加，我们通过渲染进程 Canvas 处理更灵活
+    // 所以主进程只负责最后写入剪贴板
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('screenshot-settings-get', () => {
+  return {
+    savePath: appSettings.screenshotSavePath || app.getPath('pictures'),
+    autoSave: appSettings.autoSaveScreenshot
+  }
+})
+
+ipcMain.handle('screenshot-settings-set', (_event, { savePath, autoSave }) => {
+  appSettings.screenshotSavePath = savePath
+  appSettings.autoSaveScreenshot = autoSave
+  saveSettings()
+  return { success: true }
+})
+
+ipcMain.handle('select-directory', async () => {
+  const win = BrowserWindow.getFocusedWindow() || mainWindow
+  if (!win) return { success: false, error: '无法获取窗口' }
+  
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    properties: ['openDirectory', 'createDirectory'],
+    title: '选择保存目录'
+  })
+  
+  return { success: true, canceled, path: !canceled ? filePaths[0] : null }
+})
+
+ipcMain.handle('save-image', async (_event, dataUrl: string, customPath?: string) => {
+  try {
+    const win = BrowserWindow.getFocusedWindow() || mainWindow
+    if (!win) {
+      return { success: false, error: '无法获取主窗口' }
+    }
+
+    let filePath = customPath
+
+    if (!filePath) {
+      const result = await dialog.showSaveDialog(win, {
+        title: '保存截图',
+        defaultPath: path.join(appSettings.screenshotSavePath || app.getPath('pictures'), `screenshot-${Date.now()}.png`),
+        filters: [
+          { name: 'PNG 图片', extensions: ['png'] },
+          { name: 'JPEG 图片', extensions: ['jpg', 'jpeg'] }
+        ]
+      })
+      if (result.canceled || !result.filePath) return { success: false, canceled: true }
+      filePath = result.filePath
+    }
+
+    const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, '')
+    const buffer = Buffer.from(base64Data, 'base64')
+    fs.writeFileSync(filePath, buffer)
+
+    return { success: true, filePath }
+  } catch (error) {
+    return { success: false, error: (error as Error).message }
+  }
+})
+
+ipcMain.handle('copy-to-clipboard-image', (_event, dataUrl) => {
+  try {
+    const img = nativeImage.createFromDataURL(dataUrl)
+    clipboard.writeImage(img)
+    return true
+  } catch (e) {
+    return false
+  }
+})
+
+ipcMain.handle('recorder-selection-open', async (_event, restrictBounds) => {
   if (selectionWindow || !mainWindow) return
   
   const { screen } = require('electron')
-  // 锁定在工具箱所在的屏幕
-  const targetDisplay = screen.getDisplayMatching(mainWindow.getBounds())
-  const { x, y, width, height } = targetDisplay.bounds
+  let x, y, width, height;
+
+  if (restrictBounds) {
+    // 如果指定了限制区域（即第二次截图）
+    x = restrictBounds.x
+    y = restrictBounds.y
+    width = restrictBounds.width
+    height = restrictBounds.height
+  } else {
+    // 默认锁定在工具箱所在的屏幕
+    const targetDisplay = screen.getDisplayMatching(mainWindow.getBounds())
+    x = targetDisplay.bounds.x
+    y = targetDisplay.bounds.y
+    width = targetDisplay.bounds.width
+    height = targetDisplay.bounds.height
+  }
 
   selectionWindow = new BrowserWindow({
     x,
@@ -1698,7 +1850,7 @@ ipcMain.handle('recorder-selection-open', async () => {
     resizable: false,
     movable: false,
     hasShadow: false,
-    enableLargerThanScreen: true, // 允许在某些环境下铺满
+    enableLargerThanScreen: true,
     backgroundColor: '#00000000',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -1706,8 +1858,6 @@ ipcMain.handle('recorder-selection-open', async () => {
     }
   })
 
-  // 关键：确保窗口在 Windows 下不会因为任务栏等因素被偏移
-  selectionWindow.setBounds({ x, y, width, height })
   selectionWindow.setIgnoreMouseEvents(false)
   selectionWindow.setAlwaysOnTop(true, 'screen-saver')
   
@@ -2604,6 +2754,7 @@ app.whenReady().then(() => {
 
   registerAutoClickerShortcuts()
   registerRecorderShortcut()
+  registerScreenshotShortcut()
 
   // 延迟一秒再次尝试注册，防止启动冲突
   setTimeout(() => {

@@ -80,16 +80,21 @@ export const ColorPickerTool: React.FC = () => {
         console.error('Failed to parse color history:', e)
       }
     }
+  }, [])
 
+  useEffect(() => {
     if (!window.electron?.colorPicker) return
 
-    const unsubscribeSelected = window.electron.colorPicker.onSelected((data) => {
+    const unsubscribeUpdate = window.electron.colorPicker.onUpdate((data) => {
       updateColorFromData(data)
-      saveToHistory(data.hex)
+      setMousePosition({ x: data.x, y: data.y })
     })
 
+    window.electron.colorPicker.enable()
+
     return () => {
-      unsubscribeSelected()
+      unsubscribeUpdate()
+      window.electron.colorPicker.disable()
     }
   }, [])
 
@@ -104,7 +109,7 @@ export const ColorPickerTool: React.FC = () => {
 
   const saveToHistory = useCallback((hex: string) => {
     setColorHistory(prev => {
-      const filtered = prev.filter(c => c.hex.toLowerCase() !== hex.toLowerCase())
+      const filtered = prev.filter(c => c.hex !== hex)
       const newHistory = [{ hex, timestamp: Date.now() }, ...filtered].slice(0, 20)
       localStorage.setItem('colorPickerHistory', JSON.stringify(newHistory))
       return newHistory
@@ -113,6 +118,7 @@ export const ColorPickerTool: React.FC = () => {
 
   const pickCurrentColor = useCallback(async () => {
     if (!window.electron?.colorPicker?.pick) {
+      saveToHistory(currentColor.hex)
       return
     }
 
@@ -124,8 +130,9 @@ export const ColorPickerTool: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to pick color:', error)
+      saveToHistory(currentColor.hex)
     }
-  }, [saveToHistory, updateColorFromData])
+  }, [currentColor, saveToHistory, updateColorFromData])
 
   const copyToClipboard = useCallback(async (text: string, format: string) => {
     try {

@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -20,6 +20,7 @@ const toolNameMap: Record<string, string> = {
   'config-checker': '配置检测',
   'settings': '设置',
   'image-processor': '图片处理',
+  'super-screenshot': '叠加截图',
   'network-radar': '网络雷达',
   'clipboard-manager': '剪贴板管理',
   'qr-generator': '二维码生成',
@@ -36,6 +37,7 @@ const navItems = [
   { id: 'autoclicker', icon: MousePointer, name: '鼠标连点器' },
   { id: 'capswriter', icon: Mic, name: 'CapsWriter 语音' },
   { id: 'image-processor', icon: Image, name: '图片处理' },
+  { id: 'super-screenshot', icon: Camera, name: '叠加截图' },
   { id: 'web-activator', icon: Globe, name: '网页激活器' },
   { id: 'flip-clock', icon: Clock, name: '翻页时钟' },
   { id: 'config-checker', icon: Settings, name: '配置检测' },
