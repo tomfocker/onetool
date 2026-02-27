@@ -134,7 +134,7 @@ const getLatencyBgColor = (latency: number | null): string => {
 export const NetworkRadarTool: React.FC = () => {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo[]>([])
   
-  const [lanDevices, setLanDevices] = useState<Array<{ip: string, mac: string, type: string}>>([])
+  const [lanDevices, setLanDevices] = useState<Array<{ip: string, mac: string, name: string, type: string}>>([])
   const [isScanningLan, setIsScanningLan] = useState(false)
   const [scannedSubnet, setScannedSubnet] = useState<string>('')
   const [hasScanned, setHasScanned] = useState(false)
@@ -204,7 +204,7 @@ export const NetworkRadarTool: React.FC = () => {
 
   const runPingTest = useCallback(async () => {
     setIsPinging(true)
-    const initialResults = PING_TARGETS.map(t => ({ ...t, latency: null, status: 'pending' as const }))
+    const initialResults = PING_TARGETS.map(t => ({ ...t, latency: null as number | null, status: 'pending' as 'pending' | 'success' | 'error' }))
     setPingResults(initialResults)
     
     const concurrency = 3

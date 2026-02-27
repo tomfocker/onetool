@@ -28,28 +28,40 @@ export const ColorPickerOverlay: React.FC = () => {
   }, [])
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    const x = e.clientX
-    const y = e.clientY
-    setMousePos({ x, y })
+    if (!imageRef.current || !canvasRef.current || !screenshot) return
 
-    if (screenshot && canvasRef.current && imageRef.current) {
-      const canvas = canvasRef.current
-      const ctx = canvas.getContext('2d', { willReadFrequently: true })
-      if (!ctx) return
+    const img = imageRef.current
+    const canvas = canvasRef.current
+    const rect = img.getBoundingClientRect()
+    
+    // 计算坐标映射比例（逻辑像素 -> 原始截图像素）
+    const scaleX = img.naturalWidth / rect.width
+    const scaleY = img.naturalHeight / rect.height
+    
+    const x = Math.floor((e.clientX - rect.left) * scaleX)
+    const y = Math.floor((e.clientY - rect.top) * scaleY)
+    
+    setMousePos({ x: e.clientX, y: e.clientY })
 
-      // 确保 canvas 尺寸与显示一致
-      if (canvas.width !== imageRef.current.clientWidth) {
-          canvas.width = imageRef.current.clientWidth
-          canvas.height = imageRef.current.clientHeight
-          ctx.drawImage(imageRef.current, 0, 0, canvas.width, canvas.height)
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return
+
+    try {
+      // 检查边界
+      if (x >= 0 && x < canvas.width && y >= 0 && y < canvas.height) {
+        const pixel = ctx.getImageData(x, y, 1, 1).data
+        const r = pixel[0]
+        const g = pixel[1]
+        const b = pixel[2]
+        const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
+        
+        setCurrentColor(prev => {
+          if (prev.hex === hex) return prev
+          return { hex, r, g, b }
+        })
       }
-
-      const pixel = ctx.getImageData(x, y, 1, 1).data
-      const r = pixel[0]
-      const g = pixel[1]
-      const b = pixel[2]
-      const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-      setCurrentColor({ hex, r, g, b })
+    } catch (err) {
+      console.error('Pick color error:', err)
     }
   }, [screenshot])
 
@@ -65,6 +77,17 @@ export const ColorPickerOverlay: React.FC = () => {
       })
     }
   }, [screenshot, currentColor, mousePos])
+
+  const onImageLoad = useCallback((e: React.SyntheticEvent<HTMLImageElement>) => {
+    const img = e.currentTarget
+    if (canvasRef.current) {
+      const canvas = canvasRef.current
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      const ctx = canvas.getContext('2d')
+      ctx?.drawImage(img, 0, 0)
+    }
+  }, [])
 
   // 即使没有截图，也显示一个透明层用于捕获 ESC
   return (
@@ -86,16 +109,7 @@ export const ColorPickerOverlay: React.FC = () => {
             src={screenshot}
             className="w-full h-full object-contain pointer-events-none"
             alt="screenshot"
-            onLoad={(e) => {
-              const img = e.currentTarget
-              if (canvasRef.current) {
-                const canvas = canvasRef.current
-                canvas.width = img.clientWidth
-                canvas.height = img.clientHeight
-                const ctx = canvas.getContext('2d')
-                ctx?.drawImage(img, 0, 0, canvas.width, canvas.height)
-              }
-            }}
+            onLoad={onImageLoad}
           />
           
           <canvas ref={canvasRef} className="hidden" />

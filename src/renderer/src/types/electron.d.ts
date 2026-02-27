@@ -92,8 +92,10 @@ declare global {
           config: {
             interval: number
             button: string
+            shortcut: string
           }
         }>
+        updateConfig: (config: { interval?: number; button?: string; shortcut?: string }) => Promise<{ success: boolean; error?: string }>
       }
       autoStart: {
         getStatus: () => Promise<{
@@ -137,6 +139,7 @@ declare global {
             title: string
             processName: string
             hwnd: number
+            type: 'window' | 'tab'
           }>
           error?: string
         }>
@@ -149,6 +152,7 @@ declare global {
           success: boolean
           error?: string
         }>
+        checkVisibility: (configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => Promise<boolean[]>
         onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => () => void
       }
       clipboard: {
@@ -223,7 +227,7 @@ declare global {
         }>
         scanLan: (subnet: string) => Promise<{
           success: boolean
-          devices?: Array<{ ip: string; mac: string; type: string }>
+          devices?: Array<{ ip: string; mac: string; name: string; type: string }>
           error?: string
         }>
       }

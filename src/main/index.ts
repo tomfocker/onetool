@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage, globalShortcut, clipboard, nativeTheme } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Tray, Menu, nativeImage, globalShortcut, clipboard, nativeTheme, NativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fs from 'fs'
@@ -900,29 +900,48 @@ ipcMain.handle('web-activator-get-window-list', async () => {
       Add-Type -AssemblyName UIAutomationClient
       Add-Type -AssemblyName UIAutomationTypes
       $res = New-Object System.Collections.ArrayList
-      $edgeProcs = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }
-      foreach ($p in $edgeProcs) {
+      
+      $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne 0 }
+      $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlTypes]::TabItem)
+
+      foreach ($p in $browserProcs) {
           try {
               $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-              $all = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, [System.Windows.Automation.Condition]::TrueCondition)
-              foreach ($el in $all) {
-                  if ($el.Current.ControlType.Id -eq 50019) {
-                      $name = $el.Current.Name
+              if ($root) {
+                  $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+                  foreach ($t in $tabs) {
+                      $name = $t.Current.Name
                       if ($name -and $name -notmatch "^\\d+ 个标签页$|^关闭$|^新标签页$") {
-                          $null = $res.Add(@{ id = $p.Id; title = $name; processName = "msedge"; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
+                          $null = $res.Add(@{ id = $p.Id; title = $name; processName = $p.ProcessName; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
                       }
                   }
               }
           } catch {}
       }
-      $res | ConvertTo-Json -Compress
+      
+      # [终极修复]：使用強标记包裹 JSON，并强制处理数组格式，避免被网页标题里的中括号干扰
+      Write-Output "---TAB_JSON_START---"
+      if ($res.Count -eq 0) {
+          Write-Output "[]"
+      } elseif ($res.Count -eq 1) {
+          Write-Output "[$($res[0] | ConvertTo-Json -Compress)]"
+      } else {
+          Write-Output ($res | ConvertTo-Json -Compress)
+      }
+      Write-Output "---TAB_JSON_END---"
     `;
+    
     const tabResult = await execPowerShell(tabScript);
-    const jsonStart = tabResult.lastIndexOf('[');
-    const jsonEnd = tabResult.lastIndexOf(']');
-    if (jsonStart !== -1 && jsonEnd !== -1) {
-        const parsed = JSON.parse(tabResult.substring(jsonStart, jsonEnd + 1));
-        allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+    
+    // 用正则精准提取标记中间的内容，免疫任何特殊符号
+    const match = tabResult.match(/---TAB_JSON_START---\s*(.*?)\s*---TAB_JSON_END---/s);
+    if (match && match[1]) {
+        try {
+            const parsed = JSON.parse(match[1].trim());
+            allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+        } catch (e) {
+            console.error('Tab JSON Parse Error:', e);
+        }
     }
   } catch (e) {}
 
@@ -1001,15 +1020,14 @@ async function toggleApp(pattern: string, hwndId?: number): Promise<{ success: b
 
 
 // 记录每个窗口上一次活跃的标签页，用于回跳逻辑
-const lastActiveTabNames = new Map();
-
-
 const tabHistory = new Map();
 
 async function toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
   try {
-    const escapedPattern = pattern.replace(/"/g, '\\"');
+    // 处理 JS 层的单引号，防止破坏 PowerShell 字符串包裹
+    const safePattern = pattern.replace(/'/g, "''");
     const lastTabName = tabHistory.get(pattern) || "";
+    const safeLastTabName = lastTabName.replace(/'/g, "''");
 
     const script = `
       $ErrorActionPreference = 'SilentlyContinue'
@@ -1024,60 +1042,110 @@ async function toggleTab(pattern: string): Promise<{ success: boolean; action?: 
                 [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
                 [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
                 [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+                [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
             }
 "@
       }
 
-      $edge = Get-Process -Name "msedge" -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
-      if (!$edge) { "NOT_RUNNING"; exit }
+      function Select-Tab($t) {
+          if (!$t) { return $false }
+          $selPattern = $null
+          if ($t.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selPattern)) {
+              try { $selPattern.Select(); return $true } catch {}
+          }
+          $invPattern = $null
+          if ($t.TryGetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern, [ref]$invPattern)) {
+              try { $invPattern.Invoke(); return $true } catch {}
+          }
+          $legPattern = $null
+          if ($t.TryGetCurrentPattern([System.Windows.Automation.LegacyIAccessiblePattern]::Pattern, [ref]$legPattern)) {
+              try { $legPattern.DoDefaultAction(); return $true } catch {}
+          }
+          return $false
+      }
 
-      $hwnd = $edge.MainWindowHandle
-      $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-      $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlTypes]::TabItem)
-      $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+      # 安全获取目标浏览器进程
+      $procs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne 0 }
       
+      if (!$procs) { "NOT_RUNNING"; exit }
+
       $targetTab = $null
       $currentTab = $null
       $returnTab = $null
+      $targetHwnd = [IntPtr]::Zero
 
-      foreach ($t in $tabs) {
-          $name = $t.Current.Name
-          if ($name -match "${escapedPattern}") { $targetTab = $t }
-          if ($name -eq "${lastTabName}") { $returnTab = $t }
-          $selPattern = $null
-          if ($t.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selPattern)) {
-              if ($selPattern.Current.IsSelected) { $currentTab = $t }
+      # [修复2]：使用 [regex]::Escape 彻底免疫特殊字符（如括号）导致的解析崩溃
+      $escapedPattern = [regex]::Escape('${safePattern}')
+      $escapedLastTab = if ('${safeLastTabName}') { [regex]::Escape('${safeLastTabName}') } else { "" }
+
+      $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlTypes]::TabItem)
+      
+      # 遍历所有进程窗口寻找目标标签
+      foreach ($p in $procs) {
+          $hwnd = $p.MainWindowHandle
+          $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+          $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+          
+          foreach ($t in $tabs) {
+              $name = $t.Current.Name
+              if ($name -match $escapedPattern) { 
+                  $targetTab = $t 
+                  $targetHwnd = $hwnd
+              }
+              if ($escapedLastTab -and $name -match $escapedLastTab) { 
+                  $returnTab = $t 
+              }
+              
+              $selPattern = $null
+              if ($t.TryGetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern, [ref]$selPattern)) {
+                  if ($selPattern.Current.IsSelected) { $currentTab = $t }
+              }
           }
+          # 如果找到了目标，跳出进程循环以提升执行速度
+          if ($targetTab) { break }
       }
 
-      $fgHwnd = [Win32]::GetForegroundWindow()
       if ($targetTab) {
-          $sel = $targetTab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)
-          if ($fgHwnd -eq $hwnd) {
-              if ($currentTab -and $currentTab.Current.Name -match "${escapedPattern}") {
+          $fgHwnd = [Win32]::GetForegroundWindow()
+          
+          if ($fgHwnd -eq $targetHwnd) {
+              # [状态机 - 回跳]：浏览器在前台
+              if ($currentTab -and $currentTab.Current.Name -match $escapedPattern) {
                   if ($returnTab) {
-                      $returnTab.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern).Select()
+                      Select-Tab($returnTab) | Out-Null
                       "ACTION:RETURN|NAME:" + $returnTab.Current.Name
                   } else { "ACTION:ALREADY_HERE" }
               } else {
+                  # [状态机 - 切去]：浏览器在前台，但不在目标标签
                   $oldName = if ($currentTab) { $currentTab.Current.Name } else { "" }
-                  $sel.Select()
+                  Select-Tab($targetTab) | Out-Null
                   "ACTION:SWITCH|NAME:" + $oldName
               }
           } else {
-              [Win32]::ShowWindow($hwnd, 9) | Out-Null
-              [Win32]::ShowWindow($hwnd, 5) | Out-Null
-              [Win32]::SetForegroundWindow($hwnd) | Out-Null
-              $sel.Select()
+              # [状态机 - 切去]：浏览器在后台
+              if ([Win32]::IsIconic($targetHwnd)) {
+                  [Win32]::ShowWindow($targetHwnd, 9) | Out-Null # Restore
+              }
+              [Win32]::ShowWindow($targetHwnd, 5) | Out-Null # Show
+              [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
+              
+              # [修复3]：必须增加微小延迟，等待窗口获得系统焦点后再激活标签
+              Start-Sleep -Milliseconds 80 
+              Select-Tab($targetTab) | Out-Null
               "ACTION:ACTIVATE|NAME:" + (if ($currentTab) { $currentTab.Current.Name } else { "" })
           }
       } else { "NOT_FOUND" }
     `;
 
     const result = await execPowerShell(script);
+    
     if (result.includes('ACTION:SWITCH') || result.includes('ACTION:ACTIVATE')) {
         const parts = result.split('NAME:');
-        if (parts.length > 1) tabHistory.set(pattern, parts[1].trim());
+        if (parts.length > 1) {
+            let name = parts[1].trim();
+            name = name.replace(/^\\(\\d+\\)\\s*/, '').split(' - ')[0].trim();
+            if (name) tabHistory.set(pattern, name);
+        }
         return { success: true, action: 'activated' };
     }
     if (result.includes('ACTION:RETURN')) {
@@ -1206,7 +1274,7 @@ function createTray(): void {
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(__dirname, '../../resources/icon.png')
   
-  let icon: nativeImage
+  let icon: NativeImage
   if (fs.existsSync(iconPath)) {
     icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
   } else {
@@ -1432,7 +1500,7 @@ function createWindow(): void {
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(__dirname, '../../resources/icon.png')
   
-  let windowIcon: nativeImage | undefined
+  let windowIcon: NativeImage | undefined
   if (fs.existsSync(iconPath)) {
     windowIcon = nativeImage.createFromPath(iconPath)
   }
@@ -1755,6 +1823,30 @@ const stopColorPicker = () => {
 
 let colorPickerWindow: BrowserWindow | null = null
 
+async function captureScreen(): Promise<string | null> {
+  const { desktopCapturer, screen } = require('electron')
+  const cursorPoint = screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(cursorPoint)
+  
+  try {
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize: {
+        width: Math.round(display.bounds.width * display.scaleFactor),
+        height: Math.round(display.bounds.height * display.scaleFactor)
+      }
+    })
+    
+    const source = sources.find(s => s.display_id === display.id.toString()) || 
+                   sources[0] // 兜底使用第一个源
+    
+    return source ? source.thumbnail.toDataURL() : null
+  } catch (error) {
+    console.error('Capture screen error:', error)
+    return null
+  }
+}
+
 function createColorPickerWindow(): void {
   if (colorPickerWindow) {
     return
@@ -1783,7 +1875,6 @@ function createColorPickerWindow(): void {
     skipTaskbar: true,
     resizable: false,
     focusable: true,
-    cursor: 'none', // 隐藏系统光标，我们自己画放大镜
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
@@ -1824,30 +1915,29 @@ async function captureAllScreens(): Promise<Map<number, string>> {
   const screenshotMap = new Map<number, string>()
 
   try {
+    // 找到所有显示器中的最大宽度和高度，用于一次性获取高质量截图
+    let maxWidth = 0
+    let maxHeight = 0
+    displays.forEach(display => {
+      maxWidth = Math.max(maxWidth, Math.round(display.bounds.width * display.scaleFactor))
+      maxHeight = Math.max(maxHeight, Math.round(display.bounds.height * display.scaleFactor))
+    })
+
     const sources = await desktopCapturer.getSources({
       types: ['screen'],
       thumbnailSize: {
-        width: 1,
-        height: 1
+        width: maxWidth,
+        height: maxHeight
       }
     })
 
     for (const display of displays) {
+      // 优先匹配 display_id，如果没找到则按索引匹配（某些系统下 display_id 可能不一致）
       const source = sources.find(s => s.display_id === display.id.toString()) || 
                      sources[displays.indexOf(display)]
 
       if (source) {
-        const qualitySources = await desktopCapturer.getSources({
-          types: ['screen'],
-          thumbnailSize: {
-            width: Math.round(display.bounds.width * display.scaleFactor),
-            height: Math.round(display.bounds.height * display.scaleFactor)
-          }
-        })
-        const match = qualitySources.find(s => s.id === source.id)
-        if (match) {
-          screenshotMap.set(display.id, match.thumbnail.toDataURL())
-        }
+        screenshotMap.set(display.id, source.thumbnail.toDataURL())
       }
     }
   } catch (error) {
@@ -1860,6 +1950,9 @@ ipcMain.handle('color-picker:pick', async () => {
   const { screen } = require('electron')
   const displays = screen.getAllDisplays()
   
+  // 先隐藏主窗口，减少干扰并提升截图速度感
+  if (mainWindow) mainWindow.hide()
+
   const screenshotMap = await captureAllScreens()
 
   colorPickerWindows = displays.map(display => {
@@ -1899,17 +1992,21 @@ ipcMain.handle('color-picker:pick', async () => {
       }
     })
 
+    // 窗口准备好后立即显示
+    win.once('ready-to-show', () => {
+      win.show()
+    })
+
     return win
   })
-
-  setTimeout(() => {
-    colorPickerWindows.forEach(win => win.show())
-    if (mainWindow) mainWindow.hide()
-  }, 100)
 
   return new Promise((resolve) => {
     const onPicked = (_event, data) => {
       cleanup()
+      // 发送回主窗口以触发更新
+      if (mainWindow) {
+        mainWindow.webContents.send('color-picker:selected', data)
+      }
       resolve({ success: true, color: data })
     }
     const onCancelled = () => {
@@ -1935,19 +2032,7 @@ ipcMain.handle('color-picker:pick', async () => {
   })
 })
 
-ipcMain.on('color-picker:confirm-pick', (_event, data) => {
-  if (colorPickerWindows.length > 0) {
-    // 这个事件会被上面的 once 监听到
-  }
-  stopColorPicker()
-  if (mainWindow) {
-    mainWindow.webContents.send('color-picker:selected', data)
-  }
-})
-
-ipcMain.on('color-picker:cancel-pick', () => {
-  stopColorPicker()
-})
+// 下面的两个冗余监听器已移除，因为它们已在 pick Promise 内部处理
 
 ipcMain.handle('network:ping', async (_event, host: string) => {
   return new Promise((resolve) => {

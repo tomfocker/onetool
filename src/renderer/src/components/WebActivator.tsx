@@ -22,6 +22,7 @@ interface WindowInfo {
   title: string
   processName: string
   hwnd: number
+  type: 'window' | 'tab'
 }
 
 const WebActivator: React.FC = () => {

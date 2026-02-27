@@ -189,13 +189,16 @@ export const AutoClickerTool: React.FC = () => {
     const handleStopped = () => setIsRunning(false)
     
     if (window.electron.ipcRenderer) {
-      window.electron.ipcRenderer.on('autoclicker-started', handleStarted)
-      window.electron.ipcRenderer.on('autoclicker-stopped', handleStopped)
+      const unsub1 = window.electron.ipcRenderer.on('autoclicker-started', handleStarted)
+      const unsub2 = window.electron.ipcRenderer.on('autoclicker-stopped', handleStopped)
       return () => {
+        if (typeof unsub1 === 'function') unsub1()
+        if (typeof unsub2 === 'function') unsub2()
         window.electron.ipcRenderer.removeListener('autoclicker-started', handleStarted)
         window.electron.ipcRenderer.removeListener('autoclicker-stopped', handleStopped)
       }
     }
+    return () => {}
   }, [])
 
   const checkStatus = useCallback(async () => {
