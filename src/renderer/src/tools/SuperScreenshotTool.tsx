@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { Camera, Layers, Copy, Check, Info, RotateCcw, ArrowRight } from 'lucide-react'
+import { Camera, Layers, Copy, Check, Info, RotateCcw, Save } from 'lucide-react'
 
 export const SuperScreenshotTool: React.FC = () => {
   const [enhancedMode, setEnhancedMode] = useState(false)
@@ -154,8 +154,43 @@ export const SuperScreenshotTool: React.FC = () => {
       const relW = secondBounds.width * scaleX
       const relH = secondBounds.height * scaleY
 
-      // 4. 在底图上方绘制 100% 不透明的高亮图块
+      // 4. 在底图上方绘制带有圆角和投影的高亮图块
+      const radius = 12 // 圆角半径
+
+      // 开启投影
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.65)'
+      ctx.shadowBlur = 24
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 12
+
+      // 创建带圆角的剪裁路径
+      ctx.save()
+      ctx.beginPath()
+      ctx.moveTo(relX + radius, relY)
+      ctx.lineTo(relX + relW - radius, relY)
+      ctx.quadraticCurveTo(relX + relW, relY, relX + relW, relY + radius)
+      ctx.lineTo(relX + relW, relY + relH - radius)
+      ctx.quadraticCurveTo(relX + relW, relY + relH, relX + relW - radius, relY + relH)
+      ctx.lineTo(relX + radius, relY + relH)
+      ctx.quadraticCurveTo(relX, relY + relH, relX, relY + relH - radius)
+      ctx.lineTo(relX, relY + radius)
+      ctx.quadraticCurveTo(relX, relY, relX + radius, relY)
+      ctx.closePath()
+
+      // 为了让阴影正确渲染，我们先填充一个和图块一样大小的路径
+      ctx.fillStyle = 'white'
+      ctx.fill()
+      
+      // 关闭阴影避免影响图片本身
+      ctx.shadowColor = 'transparent'
+      ctx.shadowBlur = 0
+      ctx.shadowOffsetX = 0
+      ctx.shadowOffsetY = 0
+
+      // 剪裁并在其中绘制图片
+      ctx.clip()
       ctx.drawImage(imgOverlay, relX, relY, relW, relH)
+      ctx.restore()
 
       const resultDataUrl = canvas.toDataURL('image/png')
       setCapturedImage(resultDataUrl)
@@ -336,6 +371,51 @@ export const SuperScreenshotTool: React.FC = () => {
               </button>
             </div>
 
+            <div className="flex flex-col gap-3 p-4 rounded-xl bg-purple-500/10 border border-purple-500/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-500 rounded-lg shadow-lg shadow-purple-500/40">
+                    <Save className="text-white" size={20} />
+                  </div>
+                  <div>
+                    <div className="font-bold">自动保存</div>
+                    <div className="text-xs text-purple-400/80 font-medium">截图完成后自动保存到本地</div>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!savePath && !autoSave) {
+                      if (!(window.electron as any).ipcRenderer) return
+                      const result = await (window.electron as any).ipcRenderer.invoke('select-directory')
+                      if (result.success && !result.canceled) {
+                        handleUpdateSettings(result.path, true)
+                      }
+                    } else {
+                      handleUpdateSettings(savePath, !autoSave)
+                    }
+                  }}
+                  className={`relative inline-flex h-7 w-12 items-center rounded-full transition-all focus:outline-none ${
+                    autoSave ? 'bg-purple-500 shadow-[0_0_15px_rgba(168,85,247,0.5)]' : 'bg-white/10'
+                  }`}
+                >
+                  <span className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
+                    autoSave ? 'translate-x-6' : 'translate-x-1'
+                  }`} />
+                </button>
+              </div>
+              <div className="flex gap-2 items-center mt-1">
+                <div className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[10px] text-muted-foreground overflow-hidden truncate">
+                  {savePath || '未设置保存路径'}
+                </div>
+                <button
+                  onClick={handleSelectPath}
+                  className="px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-[10px] font-medium transition-colors whitespace-nowrap"
+                >
+                  更改目录
+                </button>
+              </div>
+            </div>
+
             {enhancedMode && (
               <div className="p-4 rounded-xl bg-white/5 border border-white/5 space-y-4 animate-in fade-in slide-in-from-top-2">
                 <div className="space-y-2">
@@ -368,38 +448,6 @@ export const SuperScreenshotTool: React.FC = () => {
                 {step === 'idle' ? '开始截图' : step === 'capturing-base' ? '正在截取底图...' : '正在截取高亮...'}
               </span>
             </button>
-          </div>
-
-          <div className="bg-card rounded-2xl p-6 border border-white/10 shadow-soft space-y-4">
-            <h2 className="text-sm font-semibold flex items-center gap-2 text-muted-foreground uppercase tracking-wider">
-              <span>📂</span> 保存设置
-            </h2>
-            
-            <div className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
-              <span className="text-xs font-medium text-muted-foreground">自动保存到目录</span>
-              <button
-                onClick={() => handleUpdateSettings(savePath, !autoSave)}
-                className={`relative inline-flex h-6 w-10 items-center rounded-full transition-all focus:outline-none ${
-                  autoSave ? 'bg-blue-500' : 'bg-white/10'
-                }`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  autoSave ? 'translate-x-5' : 'translate-x-1'
-                }`} />
-              </button>
-            </div>
-
-            <div className="flex gap-2">
-              <div className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-[10px] text-muted-foreground flex items-center overflow-hidden truncate">
-                {savePath || '未设置保存路径'}
-              </div>
-              <button
-                onClick={handleSelectPath}
-                className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-xl text-xs font-medium transition-colors whitespace-nowrap"
-              >
-                更改
-              </button>
-            </div>
           </div>
 
           <div className="bg-card rounded-2xl p-6 border border-white/10 shadow-soft">
