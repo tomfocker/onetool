@@ -1,13 +1,15 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import { execPowerShell } from '../utils/processUtils'
 import { IpcResponse, SystemConfig } from '../../shared/types'
+import { taskQueueService } from './TaskQueueService'
 
 export class SystemService {
   constructor() {}
 
   async getSystemConfig(): Promise<IpcResponse<SystemConfig>> {
-    try {
-      const hwScript = `
+    return taskQueueService.enqueue('HardwareAudit', async () => {
+      try {
+        const hwScript = `
 $ErrorActionPreference = 'SilentlyContinue'
 $cpu = (Get-WmiObject Win32_Processor | Select-Object -First 1).Name
 $mb_raw = Get-WmiObject Win32_BaseBoard | Select-Object -First 1
@@ -61,45 +63,46 @@ Write-Output "---HW_JSON_START---"
 $info | ConvertTo-Json -Compress
 Write-Output "---HW_JSON_END---"
 `
-      const rawResult = await execPowerShell(hwScript)
-      let data: any = {}
-      const match = rawResult.match(/---HW_JSON_START---(.*?)---HW_JSON_END---/s)
-      if (match && match[1]) {
+        const rawResult = await execPowerShell(hwScript)
+        let data: any = {}
+        const match = rawResult.match(/---HW_JSON_START---(.*?)---HW_JSON_END---/s)
+        if (match && match[1]) {
+          try {
+            data = JSON.parse(match[1].trim())
+          } catch (e) {
+            console.error('SystemService: JSON Parse Error:', e)
+          }
+        }
+
+        let monitorValue = ''
         try {
-          data = JSON.parse(match[1].trim())
+          const monLines = data.mon ? data.mon.split(/\r?\n/).filter((l: string) => l.includes('|')) : []
+          if (monLines.length > 0) {
+            monitorValue = monLines.join('\n')
+          } else {
+            const { screen } = require('electron')
+            monitorValue = screen.getAllDisplays().map((d: any, i: number) => `Unknown|Display ${i}|${Math.round(d.bounds.width * d.scaleFactor)}x${Math.round(d.bounds.height * d.scaleFactor)}`).join('\n')
+          }
         } catch (e) {
-          console.error('SystemService: JSON Parse Error:', e)
+          monitorValue = data.mon || 'Unknown'
         }
-      }
 
-      let monitorValue = ''
-      try {
-        const monLines = data.mon ? data.mon.split(/\r?\n/).filter((l: string) => l.includes('|')) : []
-        if (monLines.length > 0) {
-          monitorValue = monLines.join('\n')
-        } else {
-          const { screen } = require('electron')
-          monitorValue = screen.getAllDisplays().map((d: any, i: number) => `Unknown|Display ${i}|${Math.round(d.bounds.width * d.scaleFactor)}x${Math.round(d.bounds.height * d.scaleFactor)}`).join('\n')
+        return {
+          success: true,
+          data: {
+            cpu: data.cpu || 'Unknown Processor',
+            motherboard: data.mb || 'Unknown Motherboard',
+            memory: data.ram || '',
+            gpu: data.gpu || 'Unknown GPU',
+            monitor: monitorValue,
+            disk: data.disk || 'Unknown Storage',
+            os: data.os || 'Windows'
+          }
         }
-      } catch (e) {
-        monitorValue = data.mon || 'Unknown'
+      } catch (error) {
+        return { success: false, error: (error as Error).message }
       }
-
-      return {
-        success: true,
-        data: {
-          cpu: data.cpu || 'Unknown Processor',
-          motherboard: data.mb || 'Unknown Motherboard',
-          memory: data.ram || '',
-          gpu: data.gpu || 'Unknown GPU',
-          monitor: monitorValue,
-          disk: data.disk || 'Unknown Storage',
-          os: data.os || 'Windows'
-        }
-      }
-    } catch (error) {
-      return { success: false, error: (error as Error).message }
-    }
+    })
   }
 
   getAutoStartStatus(): IpcResponse<{ enabled: boolean }> {

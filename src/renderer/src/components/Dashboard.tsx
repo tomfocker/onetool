@@ -3,7 +3,7 @@ import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock,
   Search, Filter, Download, Check, RefreshCw, Cloud, HardDrive,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
-  Zap, ArrowRight, LayoutGrid, Star, History, Info
+  Zap, ArrowRight, LayoutGrid, Star, History, Info, Languages, Camera, Inbox
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,25 +12,15 @@ import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToolUsage, ToolUsage } from '@/lib/useToolUsage'
-import { toolComponents, toolCategories, ToolComponent } from '@/data/toolComponents'
+import { tools } from '@/data/tools'
+import { ToolDefinition } from '../../../shared/types'
 
 interface DashboardProps {
   onNavigate?: (page: string) => void
 }
 
-const iconMap: Record<string, React.ReactNode> = {
-  'Package': <Package className="h-5 w-5" />,
-  'Terminal': <Terminal className="h-5 w-5" />,
-  'MousePointer': <MousePointer className="h-5 w-5" />,
-  'Mic': <Mic className="h-5 w-5" />,
-  'Image': <Image className="h-5 w-5" />,
-  'Globe': <Globe className="h-5 w-5" />,
-  'Clock': <Clock className="h-5 w-5" />,
-  'Scan': <Settings className="h-5 w-5" />,
-  'Video': <Video className="h-5 w-5" />,
-  'Clipboard': <Clipboard className="h-5 w-5" />,
-  'Palette': <Palette className="h-5 w-5" />,
-  'QrCode': <QrCode className="h-5 w-5" />,
+const iconMap: Record<string, any> = {
+  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox
 }
 
 const toolGradientMap: Record<string, string> = {
@@ -46,6 +36,9 @@ const toolGradientMap: Record<string, string> = {
   'clipboard-manager': 'from-yellow-500 to-amber-600',
   'color-picker': 'from-pink-500 to-fuchsia-600',
   'qr-generator': 'from-green-500 to-emerald-600',
+  'screenshot-tool': 'from-blue-400 to-cyan-500',
+  'file-dropover': 'from-indigo-400 to-purple-500',
+  'translator': 'from-purple-500 to-pink-500'
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
@@ -54,6 +47,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('全部')
   const [systemInfo, setSystemInfo] = useState<any>(null)
+
+  const toolCategories = useMemo(() => Array.from(new Set(tools.map(t => t.category))), [])
 
   const greeting = useMemo(() => {
     const hour = new Date().getHours()
@@ -78,7 +73,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
   }, [fetchSystemInfo])
 
   const filteredTools = useMemo(() => {
-    return toolComponents.filter(tool => {
+    return tools.filter(tool => {
       const matchesSearch = tool.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
                            tool.description.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesCategory = selectedCategory === '全部' || tool.category === selectedCategory
@@ -86,7 +81,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
     })
   }, [searchTerm, selectedCategory])
 
-  const handleToolClick = (tool: ToolComponent) => {
+  const handleToolClick = (tool: ToolDefinition) => {
     recordUsage({ id: tool.id, name: tool.name, icon: tool.icon })
     onNavigate?.(tool.id)
   }
@@ -154,7 +149,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredTools.map(tool => {
-                const Icon = iconMap[tool.icon] || <Package />
+                const Icon = iconMap[tool.icon] || Package
                 const gradient = toolGradientMap[tool.id] || 'from-zinc-500 to-zinc-600'
                 return (
                   <Card 
@@ -164,7 +159,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                   >
                     <CardContent className="p-6 flex items-center gap-5">
                       <div className={cn("w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:rotate-12", gradient)}>
-                        {React.cloneElement(Icon as React.ReactElement, { size: 24, className: "fill-white/20" })}
+                        <Icon size={24} className="fill-white/20" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <h3 className="font-black text-base tracking-tight mb-0.5">{tool.name}</h3>
@@ -197,8 +192,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                       onClick={() => handleRecentClick(tool)}
                       className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-muted/30 hover:bg-indigo-500/10 hover:text-indigo-500 transition-all group"
                     >
-                      <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-110", toolGradientMap[tool.id])}>
-                        {React.cloneElement((iconMap[tool.icon] || <Package />) as React.ReactElement, { size: 18 })}
+                      <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-110", toolGradientMap[tool.id] || 'from-zinc-500 to-zinc-600')}>
+                        {(() => {
+                          const Icon = iconMap[tool.icon] || Package
+                          return <Icon size={18} />
+                        })()}
                       </div>
                       <span className="text-[10px] font-black truncate w-full text-center">{tool.name}</span>
                     </button>
@@ -237,7 +235,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
                   <div className="pt-4 flex items-center justify-between border-t border-white/10">
                     <div className="flex items-center gap-2">
                       <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
-                      <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Core Engine V1</span>
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-60">Engine V1.0.4</span>
                     </div>
                     <Button variant="ghost" size="sm" onClick={fetchSystemInfo} className="h-8 w-8 p-0 hover:bg-white/10 rounded-full">
                       <RefreshCw size={14} />

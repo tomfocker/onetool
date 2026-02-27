@@ -113,6 +113,18 @@ export interface NetworkInterfaceInfo {
   ip: string
 }
 
+/**
+ * 工具定义 (插件系统元数据)
+ */
+export interface ToolDefinition {
+  id: string
+  name: string
+  description: string
+  category: '系统维护' | '日常办公' | '媒体处理' | '实用工具'
+  icon: string // 对应 Lucide 图标名称
+  componentPath: string // 组件相对于 tools 目录的路径
+}
+
 export interface LanDevice {
   ip: string
   mac: string

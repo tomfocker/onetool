@@ -1,35 +1,50 @@
-import React, { useState, useEffect, useLayoutEffect } from 'react'
+import React, { useState, useLayoutEffect, Suspense, useMemo, useCallback } from 'react'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { NotificationProvider } from '@/context/NotificationContext'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
 import { TitleBar } from '@/components/TitleBar'
 import { Dashboard } from '@/components/Dashboard'
-import { RenameTool } from '@/tools/RenameTool'
-import { CapsWriterTool } from '@/tools/CapsWriterTool'
-import { QuickInstaller } from '@/tools/QuickInstaller'
-import { AutoClickerTool } from '@/tools/AutoClickerTool'
-import { SettingsPage } from '@/components/SettingsPage'
-import ConfigChecker from '@/components/ConfigChecker'
-import ScreenSaverTool from '@/tools/ScreenSaverTool'
-import WebActivator from '@/components/WebActivator'
-import { ImageProcessorTool } from '@/tools/ImageProcessorTool'
-import NetworkRadarTool from '@/tools/NetworkRadarTool'
-import ClipboardManager from '@/tools/ClipboardManager'
-import { QRCodeTool } from '@/tools/QRCodeTool'
-import { ColorPickerTool } from '@/tools/ColorPickerTool'
-import { FileDropoverTool } from '@/tools/FileDropoverTool'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
-import { ScreenOverlayTranslatorTool } from '@/tools/ScreenOverlayTranslatorTool'
-import { ScreenRecorderTool, RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
-import { SuperScreenshotTool } from '@/tools/SuperScreenshotTool'
+import { RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
+import { tools } from '@/data/tools'
+import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
+
+// 动态导入组件的辅助函数
+const loadToolComponent = (path: string) => {
+  if (path.startsWith('../components/')) {
+    const componentName = path.split('/').pop();
+    // 针对 components 目录的动态映射
+    if (componentName === 'ConfigChecker') return React.lazy(() => import('./components/ConfigChecker'));
+    if (componentName === 'WebActivator') return React.lazy(() => import('./components/WebActivator'));
+    if (componentName === 'SettingsPage') return React.lazy(() => import('./components/SettingsPage'));
+  }
+  // 针对 tools 目录的动态导入
+  return React.lazy(() => import(`./tools/${path}`));
+};
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
+  const [retryKey, setRetryKey] = useState(0)
   const [isScreenOverlay, setIsScreenOverlay] = useState(false)
   const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
   const [isRecorderSelection, setIsRecorderSelection] = useState(false)
+
+  const handleToolReset = useCallback(() => {
+    setRetryKey(prev => prev + 1)
+  }, [])
+
+  // 预加载所有工具组件映射
+  const ToolComponentsMap = useMemo(() => {
+    const map: Record<string, React.LazyExoticComponent<any>> = {};
+    tools.forEach(tool => {
+      map[tool.id] = loadToolComponent(tool.componentPath);
+    });
+    // 补齐非工具类的标准页面
+    map['settings'] = React.lazy(() => import('./components/SettingsPage'));
+    return map;
+  }, []);
 
   useLayoutEffect(() => {
     const handleHashChange = () => {
@@ -38,23 +53,8 @@ function AppContent(): React.JSX.Element {
       setIsColorPickerOverlay(hash.startsWith('#/color-picker-overlay'))
       setIsRecorderSelection(hash.startsWith('#/recorder-selection'))
     }
-
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
-
-    const registerShortcutsOnStartup = async () => {
-      try {
-        const saved = localStorage.getItem('web-activator-v4')
-        if (saved) {
-          const configs = JSON.parse(saved)
-          if (Array.isArray(configs) && configs.length > 0 && window.electron?.webActivator?.registerShortcuts) {
-            await window.electron.webActivator.registerShortcuts(configs)
-          }
-        }
-      } catch (e) { console.error('App: Failed to register shortcuts:', e) }
-    }
-    registerShortcutsOnStartup()
-
     return () => window.removeEventListener('hashchange', handleHashChange)
   }, [])
 
@@ -62,39 +62,31 @@ function AppContent(): React.JSX.Element {
   if (isColorPickerOverlay) return <ColorPickerOverlay />
   if (isRecorderSelection) return <RecorderSelectionOverlay />
 
-  const renderContent = () => {
-    switch (currentPage) {
-      case 'dashboard': return <Dashboard onNavigate={setCurrentPage} />
-      case 'quick-installer': return <QuickInstaller />
-      case 'rename-tool': return <RenameTool />
-      case 'autoclicker': return <AutoClickerTool />
-      case 'capswriter': return <CapsWriterTool />
-      case 'web-activator': return <WebActivator />
-      case 'flip-clock': return <ScreenSaverTool />
-      case 'config-checker': return <ConfigChecker />
-      case 'settings': return <SettingsPage />
-      case 'image-processor': return <ImageProcessorTool />
-      case 'network-radar': return <NetworkRadarTool />
-      case 'clipboard-manager': return <ClipboardManager />
-      case 'qrcode-tool': return <QRCodeTool />
-      case 'color-picker': return <ColorPickerTool />
-      case 'file-dropover': return <FileDropoverTool />
-      case 'screenshot-tool': return <SuperScreenshotTool />
-      case 'screen-recorder': return <ScreenRecorderTool />
-      case 'translator': return <ScreenOverlayTranslatorTool />
-      default: return <Dashboard onNavigate={setCurrentPage} />
-    }
-  }
+  const ActiveComponent = currentPage === 'dashboard' ? Dashboard : ToolComponentsMap[currentPage];
 
   return (
     <div className='flex h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-primary/10'>
-      <Sidebar currentPage={currentPage} onNavigate={setCurrentPage} />
+      <Sidebar currentPage={currentPage} onNavigate={(page) => { setCurrentPage(page); setRetryKey(0); }} />
       <div className='flex-1 flex flex-col min-w-0 relative'>
         <TitleBar />
         <Header />
         <main className='flex-1 overflow-y-auto overflow-x-hidden p-6 scrollbar-thin'>
-          <div className='max-w-[1600px] mx-auto animate-in fade-in duration-500'>
-            {renderContent()}
+          <div className='max-w-[1600px] mx-auto'>
+            <Suspense fallback={
+              <div className="flex items-center justify-center h-full py-20">
+                <div className="w-10 h-10 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+              </div>
+            }>
+              <ToolErrorBoundary key={`${currentPage}-${retryKey}`} toolId={currentPage} onReset={handleToolReset}>
+                {currentPage === 'dashboard' ? (
+                  <Dashboard onNavigate={setCurrentPage} />
+                ) : ActiveComponent ? (
+                  <ActiveComponent />
+                ) : (
+                  <div className="text-center py-20 text-muted-foreground">页面不存在</div>
+                )}
+              </ToolErrorBoundary>
+            </Suspense>
           </div>
         </main>
       </div>

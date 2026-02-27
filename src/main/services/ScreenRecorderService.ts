@@ -212,6 +212,18 @@ export class ScreenRecorderService {
       })
 
       this.recorderProcess.on('close', (code) => {
+        // Self-healing check: if we were supposed to be recording but process died
+        if (this.isRecording) {
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.webContents.send('app-notification', {
+              type: 'error',
+              title: '录制异常中断',
+              message: `FFmpeg 进程意外退出 (错误码: ${code})，录制已停止。`,
+              duration: 5000
+            })
+          }
+        }
+
         this.isRecording = false
         this.recorderProcess = null
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
