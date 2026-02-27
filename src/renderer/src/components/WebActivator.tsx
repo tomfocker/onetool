@@ -4,93 +4,27 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-
-type TargetType = 'app' | 'tab'
-
-interface ActivatorConfig {
-  id: string
-  name: string
-  type: TargetType
-  pattern: string
-  shortcut: string
-  isActive: boolean
-  hwnd?: number 
-}
-
-interface WindowInfo {
-  id: number
-  title: string
-  processName: string
-  hwnd: number
-  type: 'window' | 'tab'
-}
+import { useWebActivator, ActivatorConfig, WindowInfo, TargetType } from '../hooks/useWebActivator'
 
 const WebActivator: React.FC = () => {
+  const {
+    configs, setConfigs,
+    windowList, fetchWindowList,
+    statusMessage, showStatus,
+    registerShortcuts,
+    toggleTarget
+  } = useWebActivator()
+
   const [activeTab, setActiveTab] = useState<TargetType>('app')
-  const [configs, setConfigs] = useState<ActivatorConfig[]>(() => {
-    const saved = localStorage.getItem('web-activator-v4')
-    if (saved) {
-      try { return JSON.parse(saved) } catch { return [] }
-    }
-    return []
-  })
-  
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editForm, setEditForm] = useState<Partial<ActivatorConfig>>({})
   const [isAddingNew, setIsAddingNew] = useState(false)
   const [newForm, setNewForm] = useState<Partial<ActivatorConfig>>({
     name: '', pattern: '', type: 'app', shortcut: 'Alt+Shift+Q'
   })
-  const [statusMessage, setStatusMessage] = useState<string>('')
   const [isListeningShortcut, setIsListeningShortcut] = useState<string | null>(null)
-  const [windowList, setWindowList] = useState<WindowInfo[]>([])
   const [showPicker, setShowPicker] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
-
-  const showStatus = useCallback((message: string) => {
-    setStatusMessage(message)
-    setTimeout(() => setStatusMessage(''), 3000)
-  }, [])
-
-  useEffect(() => {
-    localStorage.setItem('web-activator-v4', JSON.stringify(configs))
-  }, [configs])
-
-  useEffect(() => {
-    // 组件加载时自动注册一次已保存的快捷键
-    if (configs.length > 0) {
-      registerShortcuts(configs)
-      syncVisibility()
-    }
-    const timer = setInterval(syncVisibility, 3000)
-    return () => clearInterval(timer)
-  }, [])
-
-  const syncVisibility = useCallback(async () => {
-    if (!window.electron?.webActivator?.checkVisibility || configs.length === 0) return
-    try {
-      const results = await window.electron.webActivator.checkVisibility(configs)
-      setConfigs(prev => prev.map((c, idx) => ({ ...c, isActive: results[idx] })))
-    } catch (e) {
-      console.error('Failed to sync visibility:', e)
-    }
-  }, [configs])
-
-  const registerShortcuts = useCallback(async (currentConfigs: ActivatorConfig[]) => {
-    if (!window.electron?.webActivator?.registerShortcuts) return
-    const result = await window.electron.webActivator.registerShortcuts(currentConfigs)
-    if (result.success) showStatus('快捷键配置已更新')
-  }, [showStatus])
-
-  useEffect(() => {
-    if (!window.electron?.webActivator?.onShortcutTriggered) return
-    const unsubscribe = window.electron.webActivator.onShortcutTriggered(({ id, action }) => {
-      setConfigs(prev => prev.map(c => 
-        c.id === id ? { ...c, isActive: action === 'activated' } : c
-      ))
-    })
-    return () => { if (unsubscribe) unsubscribe() }
-  }, [])
 
   useEffect(() => {
     if (showPicker) {
@@ -99,7 +33,7 @@ const WebActivator: React.FC = () => {
       return () => clearInterval(timer)
     }
     return undefined
-  }, [showPicker])
+  }, [showPicker, fetchWindowList])
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     if (!isListeningShortcut) return
@@ -138,61 +72,6 @@ const WebActivator: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown, true)
   }, [handleKeyDown])
 
-  const fetchWindowList = async () => {
-    if (!window.electron?.webActivator?.getWindowList) return
-    const result = await window.electron.webActivator.getWindowList()
-    if (result.success) setWindowList(result.windows || [])
-  }
-
-  const toggleTarget = async (config: ActivatorConfig) => {
-    if (!window.electron?.webActivator?.toggleWindow) return
-    try {
-      const result = await window.electron.webActivator.toggleWindow({
-        type: config.type,
-        pattern: config.pattern,
-        id: config.hwnd
-      })
-      if (result.success) {
-        setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, isActive: result.action === 'activated' } : c))
-      }
-    } catch (error) { console.error(error) }
-  }
-
-  const pickWindow = (win: WindowInfo) => {
-    let cleanTitle = win.title || '(无标题)'
-    let pattern = win.processName
-
-    if (activeTab === 'tab') {
-      // 清理浏览器后缀 (Edge, Chrome, etc.)
-      cleanTitle = cleanTitle.replace(/ - (Microsoft Edge|Google Chrome|Firefox|Brave)$/, '')
-      // 提取前两个词或直到第一个横杠，避免匹配太长
-      const parts = cleanTitle.split(' - ')
-      pattern = parts[0].trim()
-      cleanTitle = pattern
-    } else {
-      cleanTitle = win.processName.charAt(0).toUpperCase() + win.processName.slice(1)
-      pattern = win.processName
-    }
-
-    if (editingId) {
-      setEditForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
-    } else {
-      setNewForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
-    }
-    setShowPicker(false)
-    showStatus('已获取标签信息')
-  }
-
-  const handleSaveEdit = async () => {
-    if (!editForm.name?.trim() || !editForm.pattern?.trim()) return
-    const newConfigs = configs.map(c => c.id === editingId ? { ...c, ...editForm } as ActivatorConfig : c)
-    setConfigs(newConfigs)
-    setEditingId(null)
-    setEditForm({})
-    showStatus('保存成功')
-    await registerShortcuts(newConfigs)
-  }
-
   const handleAddNew = async () => {
     if (!newForm.name?.trim() || !newForm.pattern?.trim()) return
     const newConfig: ActivatorConfig = {
@@ -207,140 +86,297 @@ const WebActivator: React.FC = () => {
     const newConfigs = [...configs, newConfig]
     setConfigs(newConfigs)
     setIsAddingNew(false)
-    setNewForm({ name: '', pattern: '', type: activeTab, shortcut: 'Alt+Shift+Q' })
-    showStatus('添加成功')
+    setNewForm({ name: '', pattern: '', type: 'app', shortcut: 'Alt+Shift+Q' })
     await registerShortcuts(newConfigs)
   }
 
-  const filteredWindows = windowList.filter(win => {
-    const isSearchMatch = win.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         win.processName.toLowerCase().includes(searchTerm.toLowerCase())
-    if (!isSearchMatch) return false
+  const handleDelete = async (id: string) => {
+    const newConfigs = configs.filter(c => c.id !== id)
+    setConfigs(newConfigs)
+    await registerShortcuts(newConfigs)
+  }
 
-    if (activeTab === 'tab') {
-      // 在标签页模式下，只显示标记为 'tab' 的项
-      return win.type === 'tab'
+  const startEdit = (config: ActivatorConfig) => {
+    setEditingId(config.id)
+    setEditForm({ ...config })
+  }
+
+  const saveEdit = async () => {
+    if (!editingId || !editForm.name?.trim() || !editForm.pattern?.trim()) return
+    const newConfigs = configs.map(c => c.id === editingId ? { ...c, ...editForm } as ActivatorConfig : c)
+    setConfigs(newConfigs)
+    setEditingId(null)
+    await registerShortcuts(newConfigs)
+  }
+
+  const pickFromList = (win: WindowInfo) => {
+    let cleanTitle = win.title.trim()
+    let pattern = cleanTitle
+    if (win.type === 'tab') {
+      cleanTitle = cleanTitle.replace(/ - (Microsoft Edge|Google Chrome|Firefox|Brave)$/, '')
+      const parts = cleanTitle.split(' - ')
+      pattern = parts[0].trim()
+      cleanTitle = pattern
     } else {
-      // 在应用模式下，只显示标记为 'window' 的项
-      return win.type === 'window'
+      pattern = win.processName
     }
-  })
+
+    if (editingId) {
+      setEditForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
+    } else {
+      setNewForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
+    }
+    setShowPicker(false)
+  }
+
+  const filteredWindows = windowList.filter(w => 
+    w.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    w.processName.toLowerCase().includes(searchTerm.toLowerCase())
+  )
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto pb-12 relative">
-      <div className="text-center mb-8">
-        <div className="inline-flex items-center gap-3 mb-4">
-          <div className="p-3 rounded-2xl bg-primary/10 border border-primary/20 backdrop-blur-sm">
-            <Command className="w-8 h-8 text-primary" />
-          </div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-purple-500 bg-clip-text text-transparent">一键激活器</h1>
-        </div>
-        <p className="text-muted-foreground font-medium">绑定快捷键，瞬间呼出常用软件或标签</p>
+    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in p-4 pb-20">
+      <div className="text-center space-y-2 mb-8">
+        <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-cyan-600 dark:from-blue-400 dark:to-cyan-400 bg-clip-text text-transparent">
+          网页与应用唤醒
+        </h1>
+        <p className="text-muted-foreground text-sm font-medium">为任何网页标签或本地应用绑定全局快捷键，一键切换</p>
       </div>
 
-      {statusMessage && (
-        <div className="fixed top-24 right-8 z-[100] px-6 py-3 rounded-xl bg-primary text-primary-foreground shadow-2xl border border-white/20 animate-in fade-in zoom-in-95">{statusMessage}</div>
-      )}
-
-      {/* 窗口选择器面板 - 改为容器内相对布局，避免遮挡侧边栏 */}
-      {showPicker && (
-        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:pl-72">
-          <div className="fixed inset-0 bg-background/40 backdrop-blur-md" onClick={() => setShowPicker(false)} />
-          <Card className="w-full max-w-3xl max-h-[80vh] flex flex-col shadow-2xl border-white/20 bg-card/90 backdrop-blur-2xl relative z-10 overflow-hidden animate-in zoom-in-95">
-            <CardHeader className="pb-4 border-b border-white/5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-xl flex items-center gap-2">
-                    <Search className="w-5 h-5 text-primary" /> 选择活动窗口
-                  </CardTitle>
-                  <CardDescription>点击下方卡片自动填充配置信息</CardDescription>
-                </div>
-                <Button variant="ghost" size="icon" onClick={() => setShowPicker(false)} className="rounded-full"><X className="w-5 h-5" /></Button>
-              </div>
-              <div className="relative mt-4">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input placeholder="搜索进程或标题..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10 h-11 bg-white/5" autoFocus />
-              </div>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 space-y-6">
+          <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md overflow-hidden rounded-3xl">
+            <CardHeader className="pb-4">
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <Plus className="w-5 h-5 text-blue-500" />
+                添加新项
+              </CardTitle>
+              <CardDescription>配置一个新的唤醒目标</CardDescription>
             </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto p-6 grid grid-cols-1 sm:grid-cols-2 gap-3 custom-scrollbar">
-              {filteredWindows.length === 0 ? (
-                <div className="col-span-full py-20 text-center opacity-40"><Box className="w-12 h-12 mx-auto mb-2" />未发现窗口</div>
-              ) : filteredWindows.map((win, idx) => (
-                <div key={`${win.id}-${idx}`} onClick={() => pickWindow(win)} className="group p-4 rounded-2xl bg-white/5 border border-white/5 hover:border-primary/50 hover:bg-primary/5 cursor-pointer transition-all flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                    {activeTab === 'app' ? <AppWindow className="w-5 h-5 text-primary" /> : <Globe className="w-5 h-5 text-primary" />}
+            <CardContent className="space-y-4">
+              <div className="flex bg-muted/50 p-1 rounded-xl">
+                <button 
+                  onClick={() => setActiveTab('app')}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'app' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
+                >
+                  <AppWindow className="w-3.5 h-3.5 inline mr-1.5" /> 本地应用
+                </button>
+                <button 
+                  onClick={() => setActiveTab('tab')}
+                  className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'tab' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
+                >
+                  <Globe className="w-3.5 h-3.5 inline mr-1.5" /> 浏览器标签
+                </button>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">显示名称</label>
+                  <Input 
+                    placeholder="例如：开发文档" 
+                    value={newForm.name} 
+                    onChange={e => setNewForm({...newForm, name: e.target.value})}
+                    className="rounded-xl border-none bg-muted/50 focus-visible:ring-blue-500"
+                  />
+                </div>
+                
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center px-1">
+                    <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">匹配模式 (正则)</label>
+                    <button onClick={() => setShowPicker(true)} className="text-[10px] font-bold text-blue-500 hover:underline">从当前打开项选取</button>
                   </div>
-                  <div className="overflow-hidden text-left">
-                    <div className="font-bold text-sm truncate">{win.title || '(无标题)'}</div>
-                    <div className="text-[10px] text-muted-foreground uppercase mt-1 opacity-60 font-mono">{win.processName}</div>
+                  <Input 
+                    placeholder={activeTab === 'app' ? "例如：Code.exe" : "例如：Github"} 
+                    value={newForm.pattern} 
+                    onChange={e => setNewForm({...newForm, pattern: e.target.value})}
+                    className="rounded-xl border-none bg-muted/50 focus-visible:ring-blue-500 font-mono text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">全局快捷键</label>
+                  <div 
+                    onClick={() => setIsListeningShortcut('new')}
+                    className={cn(
+                      "w-full h-10 rounded-xl flex items-center justify-center font-mono font-bold text-sm cursor-pointer border-2 transition-all",
+                      isListeningShortcut === 'new' ? "border-blue-500 bg-blue-500/10 text-blue-500" : "border-transparent bg-muted/50 text-muted-foreground"
+                    )}
+                  >
+                    <Keyboard className="w-4 h-4 mr-2" />
+                    {isListeningShortcut === 'new' ? "请在键盘按下..." : newForm.shortcut}
                   </div>
                 </div>
-              ))}
+
+                <Button 
+                  className="w-full mt-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20"
+                  onClick={handleAddNew}
+                  disabled={!newForm.name || !newForm.pattern}
+                >
+                  确认添加
+                </Button>
+              </div>
             </CardContent>
           </Card>
+
+          {statusMessage && (
+            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-500 text-xs font-bold text-center animate-bounce">
+              {statusMessage}
+            </div>
+          )}
         </div>
-      )}
 
-      <div className="flex justify-center p-1.5 bg-white/5 backdrop-blur-md rounded-2xl w-fit mx-auto border border-white/10 mb-8">
-        <button onClick={() => { setActiveTab('app'); setIsAddingNew(false); }} className={cn("px-8 py-2.5 rounded-xl transition-all font-bold text-sm", activeTab === 'app' ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:text-foreground")}>软件窗口</button>
-        <button onClick={() => { setActiveTab('tab'); setIsAddingNew(false); }} className={cn("px-8 py-2.5 rounded-xl transition-all font-bold text-sm", activeTab === 'tab' ? "bg-primary text-primary-foreground shadow-lg" : "text-muted-foreground hover:text-foreground")}>浏览器标签</button>
-      </div>
+        <div className="lg:col-span-2 space-y-4">
+          {configs.length === 0 ? (
+            <div className="h-64 flex flex-col items-center justify-center bg-muted/20 border-2 border-dashed border-muted-foreground/10 rounded-[2rem]">
+              <Box className="w-12 h-12 text-muted-foreground/20 mb-4" />
+              <p className="text-muted-foreground text-sm font-medium">暂无配置项，请在左侧添加</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {configs.map(config => (
+                <Card key={config.id} className={cn(
+                  "group border-none shadow-sm transition-all duration-300 rounded-3xl overflow-hidden hover:shadow-xl",
+                  config.isActive ? "bg-blue-500/5 ring-2 ring-blue-500/20" : "bg-white dark:bg-zinc-900"
+                )}>
+                  <div className="p-5 flex flex-col h-full">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={cn("p-2.5 rounded-2xl", config.type === 'app' ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500")}>
+                          {config.type === 'app' ? <AppWindow size={20} /> : <Globe size={20} />}
+                        </div>
+                        <div>
+                          <h3 className="font-black text-sm">{config.name}</h3>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            {config.isActive ? (
+                              <span className="flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> 活跃
+                              </span>
+                            ) : (
+                              <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-tighter">待命中</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEdit(config)} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground"><Edit2 size={14} /></button>
+                        <button onClick={() => handleDelete(config.id)} className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-lg text-muted-foreground"><Trash2 size={14} /></button>
+                      </div>
+                    </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {configs.filter(c => c.type === activeTab).map((config) => (
-          <Card key={config.id} className={cn("bg-white/5 border-white/10 rounded-[24px] transition-all group overflow-hidden", config.isActive ? "ring-2 ring-primary/50 bg-primary/5" : "hover:bg-white/10")}>
-            <CardContent className="p-6">
-              {editingId === config.id ? (
-                <div className="space-y-4 animate-in fade-in">
-                  <div className="flex justify-between items-center"><span className="text-xs font-bold text-primary">修改配置</span><Button variant="ghost" size="sm" onClick={() => setShowPicker(true)} className="h-7 text-[10px] bg-primary/10">从窗口选取</Button></div>
-                  <div className="grid grid-cols-1 gap-3">
-                    <Input value={editForm.name || ''} placeholder="名称" onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))} className="bg-white/5" />
-                    <Input value={editForm.pattern || ''} placeholder="匹配规则" onChange={(e) => setEditForm(prev => ({ ...prev, pattern: e.target.value }))} className="bg-white/5 font-mono text-xs" />
-                    <Button variant="outline" onClick={() => setIsListeningShortcut(editingId)} className="w-full justify-between h-11 bg-white/5 font-mono">
-                      <span>{isListeningShortcut === editingId ? '请按键...' : (editForm.shortcut || '未设置')}</span><Keyboard className="h-4 w-4 opacity-40" />
+                    <div className="bg-muted/30 rounded-2xl p-3 mb-4 space-y-2">
+                      <div className="flex items-center justify-between text-[10px]">
+                        <span className="text-muted-foreground font-bold">匹配</span>
+                        <span className="font-mono truncate max-w-[120px] text-foreground/70">{config.pattern}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-tighter">唤醒热键</span>
+                        <div className="flex items-center gap-1 px-2 py-0.5 bg-background rounded-md border border-border shadow-sm">
+                          <Command size={10} className="text-muted-foreground" />
+                          <span className="text-[10px] font-black font-mono">{config.shortcut}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <Button 
+                      variant={config.isActive ? "default" : "outline"} 
+                      className={cn("mt-auto rounded-xl font-black text-xs h-10 border-2 transition-all", config.isActive ? "bg-blue-500 hover:bg-blue-600 border-transparent shadow-lg shadow-blue-500/20" : "hover:bg-blue-500/5 hover:border-blue-500/30 hover:text-blue-500")}
+                      onClick={() => toggleTarget(config)}
+                    >
+                      {config.isActive ? "最小化 / 返回" : "立即唤醒"}
+                      <ArrowRight size={14} className="ml-2" />
                     </Button>
                   </div>
-                  <div className="flex justify-end gap-2 pt-2"><Button variant="ghost" size="sm" onClick={() => setEditingId(null)}>取消</Button><Button size="sm" onClick={handleSaveEdit}>保存配置</Button></div>
+                </Card>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showPicker && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <Card className="w-full max-w-2xl max-h-[80vh] flex flex-col border-none shadow-2xl rounded-[2.5rem] bg-white dark:bg-zinc-900 overflow-hidden">
+            <CardHeader className="border-b border-border/50 pb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-xl font-black">选取目标</CardTitle>
+                  <CardDescription>从当前打开的窗口或浏览器标签中快速选择</CardDescription>
                 </div>
+                <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-muted rounded-full transition-colors"><X size={20} /></button>
+              </div>
+              <div className="relative mt-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
+                <Input 
+                  placeholder="搜索窗口标题或进程名..." 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)}
+                  className="pl-10 rounded-2xl border-none bg-muted focus-visible:ring-blue-500"
+                />
+              </div>
+            </CardHeader>
+            <CardContent className="flex-1 overflow-y-auto p-4 space-y-2 scrollbar-thin">
+              {filteredWindows.length === 0 ? (
+                <div className="py-20 text-center text-muted-foreground font-medium">未找到匹配项</div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4 overflow-hidden text-left">
-                    <div className={cn("w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 transition-all duration-500", config.isActive ? "bg-primary text-primary-foreground shadow-lg" : "bg-white/5 text-muted-foreground group-hover:bg-white/10")}>
-                      {config.type === 'app' ? <Monitor className="w-7 h-7" /> : <Globe className="w-7 h-7" />}
+                filteredWindows.map((win, idx) => (
+                  <div 
+                    key={`${win.id}-${idx}`}
+                    onClick={() => pickFromList(win)}
+                    className="group flex items-center justify-between p-4 rounded-2xl hover:bg-blue-500/5 border-2 border-transparent hover:border-blue-500/20 cursor-pointer transition-all"
+                  >
+                    <div className="flex items-center gap-4 overflow-hidden">
+                      <div className={cn("p-2.5 rounded-xl shrink-0", win.type === 'tab' ? "bg-blue-500/10 text-blue-500" : "bg-zinc-500/10 text-zinc-500")}>
+                        {win.type === 'tab' ? <Globe size={18} /> : <Layout size={18} />}
+                      </div>
+                      <div className="overflow-hidden">
+                        <div className="font-bold text-sm truncate group-hover:text-blue-500 transition-colors">{win.title}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono mt-0.5">{win.processName} · {win.type === 'tab' ? '网页标签' : '系统窗口'}</div>
+                      </div>
                     </div>
-                    <div className="overflow-hidden">
-                      <div className="flex items-center gap-2"><h3 className="font-bold text-base truncate">{config.name}</h3><span className="px-2 py-0.5 rounded text-[10px] font-mono bg-primary/10 text-primary">{config.shortcut.replace('CommandOrControl', 'Ctrl')}</span></div>
-                      <p className="text-[11px] text-muted-foreground truncate mt-1 opacity-60">规则: {config.pattern}</p>
-                    </div>
+                    <ArrowRight size={16} className="text-muted-foreground opacity-0 group-hover:opacity-100 -translate-x-2 group-hover:translate-x-0 transition-all" />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button variant="ghost" size="icon" onClick={() => toggleTarget(config)} className={cn("h-9 w-9 rounded-xl", config.isActive ? "text-primary" : "text-muted-foreground")}>{config.isActive ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}</Button>
-                    <Button variant="ghost" size="icon" onClick={() => { setEditingId(config.id); setEditForm({...config}); setShowPicker(false); }} className="h-9 w-9 text-muted-foreground"><Edit2 className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={async () => { const nc = configs.filter(c => c.id !== config.id); setConfigs(nc); await registerShortcuts(nc); showStatus('已删除'); }} className="h-9 w-9 text-muted-foreground hover:text-red-400"><Trash2 className="h-4 w-4" /></Button>
-                  </div>
-                </div>
+                ))
               )}
             </CardContent>
           </Card>
-        ))}
-        {isAddingNew ? (
-          <Card className="bg-primary/5 border-primary/30 rounded-[24px] animate-in zoom-in-95">
-            <CardContent className="p-6 space-y-4 text-left">
-              <div className="flex justify-between items-center"><span className="text-xs font-bold text-primary uppercase">新增配置</span><Button variant="ghost" size="sm" onClick={() => setShowPicker(true)} className="h-7 text-[10px] bg-primary/10">从窗口选取</Button></div>
-              <div className="grid grid-cols-1 gap-3">
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">识别名称</label><Input placeholder="手动输入或从上方选取" value={newForm.name || ''} onChange={(e) => setNewForm(prev => ({ ...prev, name: e.target.value }))} className="bg-white/5 h-11" /></div>
-                <div className="space-y-1"><label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">快捷键</label><Button variant="outline" onClick={() => setIsListeningShortcut('new')} className="w-full justify-between h-11 bg-white/5 font-mono rounded-xl"><span>{isListeningShortcut === 'new' ? '请按键...' : (newForm.shortcut || '点击设置')}</span><Keyboard className="h-4 w-4 opacity-40" /></Button></div>
+        </div>
+      )}
+
+      {editingId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <Card className="w-full max-w-md border-none shadow-2xl rounded-[2.5rem] bg-white dark:bg-zinc-900 overflow-hidden">
+            <CardHeader>
+              <CardTitle className="font-black text-xl">编辑唤醒项</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">显示名称</label>
+                <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500" />
               </div>
-              <div className="flex justify-end gap-2 pt-2"><Button variant="ghost" size="sm" onClick={() => setIsAddingNew(false)}>取消</Button><Button size="sm" onClick={handleAddNew} className="px-8">添加</Button></div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">匹配模式</label>
+                <Input value={editForm.pattern} onChange={e => setEditForm({...editForm, pattern: e.target.value})} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500 font-mono text-xs" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">快捷键</label>
+                <div 
+                  onClick={() => setIsListeningShortcut('edit')}
+                  className={cn(
+                    "w-full h-10 rounded-xl flex items-center justify-center font-mono font-bold text-sm cursor-pointer border-2",
+                    isListeningShortcut === 'edit' ? "border-blue-500 bg-blue-500/10 text-blue-500" : "border-transparent bg-muted text-muted-foreground"
+                  )}
+                >
+                  {isListeningShortcut === 'edit' ? "请在键盘按下..." : editForm.shortcut}
+                </div>
+              </div>
+              <div className="flex gap-3 pt-4">
+                <Button variant="outline" className="flex-1 rounded-xl font-bold" onClick={() => setEditingId(null)}>取消</Button>
+                <Button className="flex-1 rounded-xl font-bold bg-blue-600" onClick={saveEdit}>保存修改</Button>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <button onClick={() => { setIsAddingNew(true); setShowPicker(true); }} className="h-full min-h-[160px] rounded-[32px] border-2 border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/5 transition-all flex flex-col items-center justify-center gap-3 text-muted-foreground hover:text-primary group">
-            <div className="p-4 rounded-full bg-white/5 group-hover:bg-primary/10 group-hover:scale-110 transition-all duration-500"><Plus className="h-8 w-8" /></div>
-            <div className="flex flex-col items-center"><span className="text-sm font-bold">快速绑定</span><span className="text-[10px] opacity-40 mt-1 uppercase">Identify Window Instance</span></div>
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

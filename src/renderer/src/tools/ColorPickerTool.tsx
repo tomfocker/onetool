@@ -124,9 +124,9 @@ export const ColorPickerTool: React.FC = () => {
 
     try {
       const result = await window.electron.colorPicker.pick()
-      if (result.success && result.color) {
-        updateColorFromData(result.color)
-        saveToHistory(result.color.hex)
+      if (result.success && result.data?.color) {
+        updateColorFromData(result.data.color)
+        saveToHistory(result.data.color.hex)
       }
     } catch (error) {
       console.error('Failed to pick color:', error)

@@ -88,6 +88,16 @@ const autoStartAPI = {
   }
 }
 
+const settingsAPI = {
+  getAll: () => ipcRenderer.invoke('settings-get-all'),
+  update: (updates: any) => ipcRenderer.invoke('settings-update', updates),
+  onChanged: (callback: (newSettings: any) => void) => {
+    const subscription = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('settings-changed', subscription)
+    return () => ipcRenderer.removeListener('settings-changed', subscription)
+  }
+}
+
 const systemConfigAPI = {
   getSystemConfig: () => {
     return ipcRenderer.invoke('get-system-config')
@@ -261,6 +271,17 @@ const screenOverlayAPI = {
   }
 }
 
+const screenshotAPI = {
+  getSettings: () => ipcRenderer.invoke('screenshot-settings-get'),
+  setSettings: (settings: { savePath: string; autoSave: boolean }) => ipcRenderer.invoke('screenshot-settings-set', settings),
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+  capture: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('screenshot-capture', bounds),
+  saveImage: (dataUrl: string, customPath?: string) => ipcRenderer.invoke('save-image', dataUrl, customPath),
+  copyToClipboard: (dataUrl: string) => ipcRenderer.invoke('copy-to-clipboard-image', dataUrl),
+  getHotkey: () => ipcRenderer.invoke('screenshot-hotkey-get'),
+  setHotkey: (hotkey: string) => ipcRenderer.invoke('screenshot-hotkey-set', hotkey)
+}
+
 const colorPickerAPI = {
   enable: () => {
     return ipcRenderer.invoke('color-picker:enable')
@@ -316,11 +337,21 @@ if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', {
       ...electronAPI,
+      ipcRenderer: {
+        on: (channel: string, func: (...args: any[]) => void) => {
+          const subscription = (_event: any, ...args: any[]) => func(...args)
+          ipcRenderer.on(channel, subscription)
+          return () => ipcRenderer.removeListener(channel, subscription)
+        },
+        send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+        invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
+      },
       rename: renameAPI,
       capswriter: capswriterAPI,
       quickInstaller: quickInstallerAPI,
       autoClicker: autoClickerAPI,
       autoStart: autoStartAPI,
+      settings: settingsAPI,
       systemConfig: systemConfigAPI,
       screenSaver: screenSaverAPI,
       webActivator: webActivatorAPI,
@@ -329,6 +360,7 @@ if (process.contextIsolated) {
       window: windowAPI,
       floatBall: floatBallAPI,
       screenOverlay: screenOverlayAPI,
+      screenshot: screenshotAPI,
       colorPicker: colorPickerAPI,
       network: networkAPI
     })

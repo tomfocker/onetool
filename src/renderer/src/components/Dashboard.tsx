@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock,
   Search, Filter, Download, Check, RefreshCw, Cloud, HardDrive,
-  Globe, Image, Video, Clipboard, Palette, QrCode, Settings
+  Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
+  Zap, ArrowRight, LayoutGrid, Star, History, Info
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -33,361 +34,235 @@ const iconMap: Record<string, React.ReactNode> = {
 }
 
 const toolGradientMap: Record<string, string> = {
-  'quick-installer': 'from-blue-500 to-cyan-400',
-  'rename-tool': 'from-violet-500 to-purple-400',
-  'autoclicker': 'from-amber-500 to-orange-400',
-  'capswriter': 'from-rose-500 to-pink-400',
-  'image-processor': 'from-emerald-500 to-teal-400',
-  'web-activator': 'from-indigo-500 to-blue-400',
-  'flip-clock': 'from-slate-500 to-gray-400',
-  'config-checker': 'from-cyan-500 to-blue-400',
-  'screen-recorder': 'from-red-500 to-orange-400',
-  'clipboard-manager': 'from-yellow-500 to-amber-400',
-  'color-picker': 'from-pink-500 to-rose-400',
-  'qr-generator': 'from-green-500 to-emerald-400',
-}
-
-const getUsageTime = (): { days: number; hours: number } => {
-  const storedDate = localStorage.getItem('toolbox-first-use')
-  const now = new Date()
-  
-  if (!storedDate) {
-    localStorage.setItem('toolbox-first-use', now.toISOString())
-    return { days: 0, hours: 0 }
-  }
-  
-  const firstUse = new Date(storedDate)
-  const diffMs = now.getTime() - firstUse.getTime()
-  const days = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-  const hours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  
-  return { days, hours }
-}
-
-const getGreeting = (): string => {
-  const hour = new Date().getHours()
-  if (hour < 6) return '夜深了'
-  if (hour < 9) return '早上好'
-  if (hour < 12) return '上午好'
-  if (hour < 14) return '中午好'
-  if (hour < 18) return '下午好'
-  if (hour < 22) return '晚上好'
-  return '夜深了'
-}
-
-interface RecentToolCardProps {
-  tool: ToolUsage
-  onClick?: () => void
-}
-
-const RecentToolCard: React.FC<RecentToolCardProps> = ({ tool, onClick }) => {
-  const gradient = toolGradientMap[tool.id] || 'from-gray-500 to-gray-400'
-  const icon = iconMap[tool.icon] || <Package className="h-5 w-5" />
-  
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'flex flex-col items-center gap-2 p-3 rounded-xl',
-        'bg-white/40 dark:bg-white/5 backdrop-blur-sm',
-        'border border-white/20 dark:border-white/10',
-        'hover:bg-white/60 dark:hover:bg-white/10',
-        'transition-all duration-300 ease-apple',
-        'hover:-translate-y-1 hover:shadow-soft',
-        'group'
-      )}
-    >
-      <div className={cn(
-        'p-3 rounded-xl backdrop-blur-sm border border-white/20 dark:border-white/10 shadow-soft-sm',
-        'transition-all duration-500 ease-apple',
-        'group-hover:scale-110 group-hover:shadow-soft',
-        'bg-gradient-to-br',
-        gradient
-      )}>
-        <div className="text-white">{icon}</div>
-      </div>
-      <span className="text-xs font-medium text-center truncate w-full">{tool.name}</span>
-    </button>
-  )
-}
-
-interface ToolComponentCardProps {
-  component: ToolComponent
-  isDownloading: boolean
-  downloadProgress: number
-  onDownload: () => void
-  onOpen: () => void
-  onCheckUpdate: () => void
-}
-
-const ToolComponentCard: React.FC<ToolComponentCardProps> = ({
-  component,
-  isDownloading,
-  downloadProgress,
-  onDownload,
-  onOpen,
-  onCheckUpdate
-}) => {
-  const icon = iconMap[component.icon] || <Package className="h-5 w-5" />
-  const sizeText = component.size >= 100 ? `${component.size}MB (云端)` : `${component.size}MB`
-  
-  return (
-    <Card className={cn(
-      'group overflow-hidden transition-all duration-300',
-      'hover:-translate-y-1 hover:shadow-soft-lg',
-      component.installed && 'ring-2 ring-primary/30'
-    )}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-primary/10 rounded-lg">
-              {icon}
-            </div>
-            <div>
-              <h4 className="font-medium text-sm">{component.name}</h4>
-              <p className="text-xs text-muted-foreground">{component.category}</p>
-            </div>
-          </div>
-          {component.installed && (
-            <Badge variant="secondary" className="text-xs">
-              <Check className="h-3 w-3 mr-1" />
-              已安装
-            </Badge>
-          )}
-        </div>
-        
-        <p className="text-xs text-muted-foreground mb-3 line-clamp-2">
-          {component.description}
-        </p>
-        
-        <div className="flex items-center justify-between text-xs text-muted-foreground mb-3">
-          <div className="flex items-center gap-1">
-            {component.size >= 100 ? (
-              <Cloud className="h-3 w-3" />
-            ) : (
-              <HardDrive className="h-3 w-3" />
-            )}
-            <span>{sizeText}</span>
-          </div>
-          <span>v{component.version}</span>
-        </div>
-        
-        {isDownloading && (
-          <div className="mb-3">
-            <Progress value={downloadProgress} className="h-1.5" />
-            <p className="text-xs text-muted-foreground mt-1 text-center">
-              下载中... {downloadProgress}%
-            </p>
-          </div>
-        )}
-        
-        <div className="flex gap-2">
-          {component.installed ? (
-            <>
-              <Button
-                size="sm"
-                className="flex-1 text-xs"
-                onClick={onOpen}
-              >
-                打开
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs"
-                onClick={onCheckUpdate}
-              >
-                <RefreshCw className="h-3 w-3" />
-              </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              className="flex-1 text-xs"
-              onClick={onDownload}
-              disabled={isDownloading}
-            >
-              <Download className="h-3 w-3 mr-1" />
-              {isDownloading ? '下载中' : '下载'}
-            </Button>
-          )}
-        </div>
-      </CardContent>
-    </Card>
-  )
+  'quick-installer': 'from-blue-500 to-indigo-500',
+  'rename-tool': 'from-violet-500 to-purple-600',
+  'autoclicker': 'from-amber-500 to-orange-600',
+  'capswriter': 'from-rose-500 to-pink-600',
+  'image-processor': 'from-emerald-500 to-teal-600',
+  'web-activator': 'from-indigo-500 to-blue-600',
+  'flip-clock': 'from-slate-500 to-gray-600',
+  'config-checker': 'from-cyan-500 to-blue-600',
+  'screen-recorder': 'from-red-500 to-rose-600',
+  'clipboard-manager': 'from-yellow-500 to-amber-600',
+  'color-picker': 'from-pink-500 to-fuchsia-600',
+  'qr-generator': 'from-green-500 to-emerald-600',
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
-  const [usageTime, setUsageTime] = useState({ days: 0, hours: 0 })
-  const [searchQuery, setSearchQuery] = useState('')
+  const { getRecentTools, recordUsage } = useToolUsage()
+  const recentTools = getRecentTools(6)
+  const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('全部')
-  const [installedComponents, setInstalledComponents] = useState<Set<string>>(new Set())
-  const [downloadingComponents, setDownloadingComponents] = useState<Map<string, number>>(new Map())
-  
-  const { getRecentTools } = useToolUsage()
-  const recentTools = getRecentTools(8)
+  const [systemInfo, setSystemInfo] = useState<any>(null)
 
-  useEffect(() => {
-    setUsageTime(getUsageTime())
-    const installed = toolComponents.filter(c => c.installed).map(c => c.id)
-    setInstalledComponents(new Set(installed))
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours()
+    if (hour < 6) return '夜深了'
+    if (hour < 9) return '早上好'
+    if (hour < 12) return '上午好'
+    if (hour < 14) return '中午好'
+    if (hour < 18) return '下午好'
+    if (hour < 22) return '晚上好'
+    return '夜深了'
   }, [])
 
-  const filteredComponents = useMemo(() => {
-    return toolComponents.filter(c => {
-      const matchesSearch = c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.description.toLowerCase().includes(searchQuery.toLowerCase())
-      const matchesCategory = selectedCategory === '全部' || c.category === selectedCategory
+  const fetchSystemInfo = useCallback(async () => {
+    if (window.electron?.systemConfig) {
+      const res = await window.electron.systemConfig.getSystemConfig()
+      if (res.success && res.data) setSystemInfo(res.data)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchSystemInfo()
+  }, [fetchSystemInfo])
+
+  const filteredTools = useMemo(() => {
+    return toolComponents.filter(tool => {
+      const matchesSearch = tool.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                           tool.description.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesCategory = selectedCategory === '全部' || tool.category === selectedCategory
       return matchesSearch && matchesCategory
     })
-  }, [searchQuery, selectedCategory])
+  }, [searchTerm, selectedCategory])
 
-  const handleDownload = async (component: ToolComponent) => {
-    setDownloadingComponents(prev => new Map(prev).set(component.id, 0))
-    
-    for (let i = 0; i <= 100; i += 10) {
-      await new Promise(resolve => setTimeout(resolve, 200))
-      setDownloadingComponents(prev => new Map(prev).set(component.id, i))
-    }
-    
-    setDownloadingComponents(prev => {
-      const newMap = new Map(prev)
-      newMap.delete(component.id)
-      return newMap
-    })
-    
-    setInstalledComponents(prev => new Set(prev).add(component.id))
+  const handleToolClick = (tool: ToolComponent) => {
+    recordUsage({ id: tool.id, name: tool.name, icon: tool.icon })
+    onNavigate?.(tool.id)
   }
 
-  const handleOpen = (componentId: string) => {
-    onNavigate?.(componentId)
-  }
-
-  const handleCheckUpdate = (component: ToolComponent) => {
-    console.log('检查更新:', component.name)
+  const handleRecentClick = (tool: ToolUsage) => {
+    recordUsage({ id: tool.id, name: tool.name, icon: tool.icon })
+    onNavigate?.(tool.id)
   }
 
   return (
-    <div className='space-y-6'>
-      <div className='space-y-3'>
-        <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-gradient-to-br from-primary/20 to-purple-500/10 backdrop-blur-sm border border-white/20 dark:border-white/10">
-            <Sparkles className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h2 className='text-2xl font-bold'>仪表盘</h2>
-            <p className='text-muted-foreground text-sm'>
-              {getGreeting()}，onetool 已陪伴您 {usageTime.days} 天 {usageTime.hours} 小时
-            </p>
+    <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
+        <div className="space-y-2">
+          <h1 className="text-5xl font-black tracking-tighter">
+            {greeting}, <span className="bg-gradient-to-r from-indigo-500 to-purple-600 bg-clip-text text-transparent italic">Explorer</span>
+          </h1>
+          <p className="text-muted-foreground font-bold flex items-center gap-2">
+            <Sparkles size={16} className="text-amber-500 fill-amber-500" />
+            今天想处理点什么？OneTool 已为你准备就绪。
+          </p>
+        </div>
+        <div className="flex bg-white/50 dark:bg-white/5 backdrop-blur-md p-1 rounded-2xl border border-white/10">
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-[10px] font-black uppercase tracking-widest opacity-60">System Online</span>
           </div>
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-primary" />
-              <CardTitle className="text-base">最近使用</CardTitle>
-            </div>
-            <span className="text-xs text-muted-foreground">
-              按使用频率排序
-            </span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <div className="lg:col-span-8 space-y-8">
+          <div className="relative group">
+            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-primary" />
+            <Input 
+              placeholder="搜索工具、功能或关键字..." 
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="h-16 pl-14 pr-6 rounded-[2rem] border-none bg-white dark:bg-zinc-900 shadow-2xl shadow-black/5 text-lg font-medium focus-visible:ring-2 focus-visible:ring-primary/20 transition-all"
+            />
           </div>
-        </CardHeader>
-        <CardContent>
-          {recentTools.length > 0 ? (
-            <div className="grid grid-cols-4 sm:grid-cols-8 gap-3">
-              {recentTools.map(tool => (
-                <RecentToolCard
-                  key={tool.id}
-                  tool={tool}
-                  onClick={() => onNavigate?.(tool.id)}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              <Clock className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">暂无使用记录</p>
-              <p className="text-xs">开始使用工具后，这里会显示您常用的工具</p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Package className="h-4 w-4 text-primary" />
-              <CardTitle className="text-base">工具组件</CardTitle>
-            </div>
-          </div>
-          <CardDescription>浏览并安装 onetool 扩展组件</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="搜索工具..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
-              <Filter className="h-4 w-4 text-muted-foreground shrink-0" />
-              <div className="flex gap-1.5">
-                <Button
-                  variant={selectedCategory === '全部' ? 'default' : 'outline'}
-                  size="sm"
-                  className="text-xs h-7"
-                  onClick={() => setSelectedCategory('全部')}
-                >
-                  全部
-                </Button>
-                {toolCategories.map(cat => (
-                  <Button
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-black flex items-center gap-2">
+                <LayoutGrid size={20} className="text-indigo-500" />
+                工具库
+              </h2>
+              <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
+                {['全部', ...toolCategories].map(cat => (
+                  <button
                     key={cat}
-                    variant={selectedCategory === cat ? 'default' : 'outline'}
-                    size="sm"
-                    className="text-xs h-7 whitespace-nowrap"
                     onClick={() => setSelectedCategory(cat)}
+                    className={cn(
+                      "px-4 py-1.5 rounded-full text-xs font-black transition-all whitespace-nowrap border-2",
+                      selectedCategory === cat 
+                        ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                        : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
+                    )}
                   >
                     {cat}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredComponents.map(component => (
-              <ToolComponentCard
-                key={component.id}
-                component={{
-                  ...component,
-                  installed: installedComponents.has(component.id)
-                }}
-                isDownloading={downloadingComponents.has(component.id)}
-                downloadProgress={downloadingComponents.get(component.id) || 0}
-                onDownload={() => handleDownload(component)}
-                onOpen={() => handleOpen(component.id)}
-                onCheckUpdate={() => handleCheckUpdate(component)}
-              />
-            ))}
-          </div>
-
-          {filteredComponents.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
-              <Search className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p className="text-sm">未找到匹配的工具</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {filteredTools.map(tool => {
+                const Icon = iconMap[tool.icon] || <Package />
+                const gradient = toolGradientMap[tool.id] || 'from-zinc-500 to-zinc-600'
+                return (
+                  <Card 
+                    key={tool.id} 
+                    onClick={() => handleToolClick(tool)}
+                    className="glass-card group cursor-pointer border-none transition-all duration-500 hover:scale-[1.02] hover:shadow-indigo-500/10"
+                  >
+                    <CardContent className="p-6 flex items-center gap-5">
+                      <div className={cn("w-14 h-14 rounded-2xl bg-gradient-to-br flex items-center justify-center text-white shadow-lg transition-transform duration-500 group-hover:rotate-12", gradient)}>
+                        {React.cloneElement(Icon as React.ReactElement, { size: 24, className: "fill-white/20" })}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-black text-base tracking-tight mb-0.5">{tool.name}</h3>
+                        <p className="text-xs text-muted-foreground font-medium line-clamp-1">{tool.description}</p>
+                      </div>
+                      <ArrowRight size={18} className="text-muted-foreground opacity-0 -translate-x-4 transition-all duration-300 group-hover:opacity-100 group-hover:translate-x-0" />
+                    </CardContent>
+                  </Card>
+                )
+              })}
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+
+        <div className="lg:col-span-4 space-y-8">
+          <Card className="glass-card border-none overflow-hidden relative">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-3xl -mr-16 -mt-16" />
+            <CardHeader>
+              <CardTitle className="text-lg font-black flex items-center gap-2">
+                <History size={18} className="text-purple-500" />
+                最近使用
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {recentTools.length > 0 ? (
+                <div className="grid grid-cols-3 gap-3">
+                  {recentTools.slice(0, 6).map(tool => (
+                    <button
+                      key={tool.id}
+                      onClick={() => handleRecentClick(tool)}
+                      className="flex flex-col items-center gap-2 p-3 rounded-2xl bg-muted/30 hover:bg-indigo-500/10 hover:text-indigo-500 transition-all group"
+                    >
+                      <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md transition-transform group-hover:scale-110", toolGradientMap[tool.id])}>
+                        {React.cloneElement((iconMap[tool.icon] || <Package />) as React.ReactElement, { size: 18 })}
+                      </div>
+                      <span className="text-[10px] font-black truncate w-full text-center">{tool.name}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8">
+                  <p className="text-xs font-bold text-muted-foreground opacity-50 italic">尚未开启任何工具</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card className="glass-card border-none bg-gradient-to-br from-zinc-900 to-black text-white rounded-[2rem]">
+            <CardHeader>
+              <CardTitle className="text-lg font-black flex items-center gap-2">
+                <Zap size={18} className="text-amber-400 fill-amber-400" />
+                系统状态
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {systemInfo ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-black uppercase opacity-50">
+                      <span>Processor</span>
+                    </div>
+                    <div className="text-sm font-bold truncate tracking-tight">{systemInfo.cpu}</div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-[10px] font-black uppercase opacity-50">
+                      <span>Graphics</span>
+                    </div>
+                    <div className="text-sm font-bold truncate tracking-tight">{systemInfo.gpu.split('\n')[0]}</div>
+                  </div>
+                  <div className="pt-4 flex items-center justify-between border-t border-white/10">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                      <span className="text-[10px] font-black uppercase tracking-widest opacity-50">Core Engine V1</span>
+                    </div>
+                    <Button variant="ghost" size="sm" onClick={fetchSystemInfo} className="h-8 w-8 p-0 hover:bg-white/10 rounded-full">
+                      <RefreshCw size={14} />
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center py-10 animate-pulse">
+                  <div className="text-xs font-black uppercase tracking-widest opacity-30">Auditing Hardware...</div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <div className="p-6 rounded-[2rem] bg-indigo-500/5 border border-indigo-500/10 space-y-4">
+            <h4 className="text-xs font-black text-indigo-500 uppercase tracking-widest flex items-center gap-2">
+              <Info size={14} />
+              快捷提示
+            </h4>
+            <p className="text-[11px] font-bold text-muted-foreground leading-relaxed">
+              所有工具均支持全局快捷键。您可以在设置中自定义这些热键，以获得最快的工作流体验。
+            </p>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

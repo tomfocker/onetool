@@ -69,6 +69,7 @@ export const ColorPickerOverlay: React.FC = () => {
     if (screenshot && window.electron?.colorPicker) {
       window.electron.colorPicker.confirm({
         hex: currentColor.hex,
+        rgb: `rgb(${currentColor.r}, ${currentColor.g}, ${currentColor.b})`,
         r: currentColor.r,
         g: currentColor.g,
         b: currentColor.b,

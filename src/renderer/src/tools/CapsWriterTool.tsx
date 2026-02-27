@@ -1,15 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState } from 'react'
 import { Mic, Server, Play, Square, AlertCircle, CheckCircle, Info, ChevronDown, ChevronUp, Terminal } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { cn } from '@/lib/utils'
-
-interface ServiceStatus {
-  serverRunning: boolean
-  clientRunning: boolean
-}
+import { useCapsWriter } from '../hooks/useCapsWriter'
 
 const StatusBadge: React.FC<{ running: boolean }> = ({ running }) => (
   <div className={cn(
@@ -29,341 +25,224 @@ const StatusBadge: React.FC<{ running: boolean }> = ({ running }) => (
 )
 
 export const CapsWriterTool: React.FC = () => {
-  const [status, setStatus] = useState<ServiceStatus>({
-    serverRunning: false,
-    clientRunning: false
-  })
-  const [message, setMessage] = useState<string>('')
-  const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info')
-  const [isLoading, setIsLoading] = useState(false)
+  const {
+    status,
+    message,
+    messageType,
+    isLoading,
+    logs,
+    startAll,
+    stopAll,
+    startServer,
+    stopServer,
+    startClient,
+    stopClient
+  } = useCapsWriter()
+
   const [showHelp, setShowHelp] = useState(false)
-  const [logs, setLogs] = useState<string[]>([
-    '[系统] CapsWriter 控制台已就绪',
-    '[提示] 点击启动按钮开始服务...'
-  ])
-
-  const fetchStatus = useCallback(async () => {
-    try {
-      const result = await window.electron.capswriter.getStatus()
-      if (result.success) {
-        setStatus({
-          serverRunning: result.serverRunning,
-          clientRunning: result.clientRunning
-        })
-      }
-    } catch (error) {
-      console.error('获取状态失败:', error)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchStatus()
-    const interval = setInterval(fetchStatus, 2000)
-    return () => clearInterval(interval)
-  }, [fetchStatus])
-
-  const addLog = (log: string) => {
-    const timestamp = new Date().toLocaleTimeString()
-    setLogs(prev => [...prev.slice(-50), `[${timestamp}] ${log}`])
-  }
-
-  const showMessage = (text: string, type: 'success' | 'error' | 'info') => {
-    setMessage(text)
-    setMessageType(type)
-    setTimeout(() => setMessage(''), 5000)
-  }
-
-  const handleStartAll = async () => {
-    setIsLoading(true)
-    addLog('正在启动所有服务...')
-    try {
-      const result = await window.electron.capswriter.startAll()
-      if (result.success) {
-        showMessage('服务端和客户端已启动', 'success')
-        addLog('✓ 服务端和客户端启动成功')
-      } else {
-        let errorMsg = '启动失败'
-        if (result.serverError) errorMsg += ` - 服务端: ${result.serverError}`
-        if (result.clientError) errorMsg += ` - 客户端: ${result.clientError}`
-        if (result.error) errorMsg = result.error
-        showMessage(errorMsg, 'error')
-        addLog(`✗ ${errorMsg}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`启动失败: ${error}`, 'error')
-      addLog(`✗ 启动失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStopAll = async () => {
-    setIsLoading(true)
-    addLog('正在停止所有服务...')
-    try {
-      const result = await window.electron.capswriter.stopAll()
-      if (result.success) {
-        showMessage('服务端和客户端已停止', 'success')
-        addLog('✓ 服务端和客户端已停止')
-      } else {
-        showMessage(`停止失败: ${result.error}`, 'error')
-        addLog(`✗ 停止失败: ${result.error}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`停止失败: ${error}`, 'error')
-      addLog(`✗ 停止失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStartServer = async () => {
-    setIsLoading(true)
-    addLog('正在启动服务端...')
-    try {
-      const result = await window.electron.capswriter.startServer()
-      if (result.success) {
-        showMessage('服务端已启动', 'success')
-        addLog('✓ 服务端启动成功')
-      } else {
-        showMessage(`启动失败: ${result.error}`, 'error')
-        addLog(`✗ 服务端启动失败: ${result.error}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`启动失败: ${error}`, 'error')
-      addLog(`✗ 服务端启动失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStopServer = async () => {
-    setIsLoading(true)
-    addLog('正在停止服务端...')
-    try {
-      const result = await window.electron.capswriter.stopServer()
-      if (result.success) {
-        showMessage('服务端已停止', 'success')
-        addLog('✓ 服务端已停止')
-      } else {
-        showMessage(`停止失败: ${result.error}`, 'error')
-        addLog(`✗ 服务端停止失败: ${result.error}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`停止失败: ${error}`, 'error')
-      addLog(`✗ 服务端停止失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStartClient = async () => {
-    setIsLoading(true)
-    addLog('正在启动客户端...')
-    try {
-      const result = await window.electron.capswriter.startClient()
-      if (result.success) {
-        showMessage('客户端已启动', 'success')
-        addLog('✓ 客户端启动成功')
-      } else {
-        showMessage(`启动失败: ${result.error}`, 'error')
-        addLog(`✗ 客户端启动失败: ${result.error}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`启动失败: ${error}`, 'error')
-      addLog(`✗ 客户端启动失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  const handleStopClient = async () => {
-    setIsLoading(true)
-    addLog('正在停止客户端...')
-    try {
-      const result = await window.electron.capswriter.stopClient()
-      if (result.success) {
-        showMessage('客户端已停止', 'success')
-        addLog('✓ 客户端已停止')
-      } else {
-        showMessage(`停止失败: ${result.error}`, 'error')
-        addLog(`✗ 客户端停止失败: ${result.error}`)
-      }
-      fetchStatus()
-    } catch (error) {
-      showMessage(`停止失败: ${error}`, 'error')
-      addLog(`✗ 客户端停止失败: ${error}`)
-    } finally {
-      setIsLoading(false)
-    }
-  }
 
   return (
-    <div className='space-y-6'>
-      {/* 标题栏 + 快捷控制按钮 */}
-      <div className='flex items-center justify-between'>
-        <div>
-          <h2 className='text-2xl font-bold'>CapsWriter 语音输入</h2>
-          <p className='text-sm text-muted-foreground'>按住 CapsLock 说话，松开就上屏</p>
-        </div>
-        <div className='flex items-center gap-2'>
-          <Button
-            size='icon'
-            variant='outline'
-            onClick={handleStartAll}
-            disabled={isLoading || (status.serverRunning && status.clientRunning)}
-            title='启动全部'
-            className='h-9 w-9'
-          >
-            <Play className='h-4 w-4' />
-          </Button>
-          <Button
-            size='icon'
-            variant='outline'
-            onClick={handleStopAll}
-            disabled={isLoading || (!status.serverRunning && !status.clientRunning)}
-            title='停止全部'
-            className='h-9 w-9'
-          >
-            <Square className='h-4 w-4' />
-          </Button>
-        </div>
+    <div className='max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700'>
+      <div className='flex flex-col gap-2 mb-2'>
+        <h1 className='text-3xl font-extrabold tracking-tight bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent'>
+          CapsWriter 离线语音
+        </h1>
+        <p className='text-muted-foreground'>
+          基于开源 CapsWriter-Offline 引擎的高效率离线语音输入方案
+        </p>
       </div>
 
-      {/* 消息提示 */}
       {message && (
         <Alert className={cn(
-          messageType === 'success' ? 'bg-green-500/10 border-green-500 text-green-500' :
-          messageType === 'error' ? 'bg-red-500/10 border-red-500 text-red-500' :
-          'bg-blue-500/10 border-blue-500 text-blue-500'
+          'border-l-4 transition-all duration-500',
+          messageType === 'success' ? 'bg-green-500/5 border-green-500 text-green-700 dark:text-green-400' :
+          messageType === 'error' ? 'bg-red-500/5 border-red-500 text-red-700 dark:text-red-400' :
+          'bg-blue-500/5 border-blue-500 text-blue-700 dark:text-blue-400'
         )}>
-          {messageType === 'success' && <CheckCircle className='h-4 w-4' />}
-          {messageType === 'error' && <AlertCircle className='h-4 w-4' />}
-          {messageType === 'info' && <Info className='h-4 w-4' />}
-          <AlertTitle>{message}</AlertTitle>
+          {messageType === 'success' ? <CheckCircle className='h-4 w-4' /> : 
+           messageType === 'error' ? <AlertCircle className='h-4 w-4' /> : <Info className='h-4 w-4' />}
+          <AlertTitle className='font-bold'>{messageType === 'success' ? '成功' : messageType === 'error' ? '错误' : '提示'}</AlertTitle>
+          <AlertDescription>{message}</AlertDescription>
         </Alert>
       )}
 
-      {/* 服务卡片 */}
-      <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
-        <Card className='overflow-hidden'>
-          <CardHeader className='pb-3'>
-            <div className='flex items-center justify-between'>
-              <CardTitle className='flex items-center gap-2 text-base'>
-                <Server className='h-4 w-4' />
-                服务端
-              </CardTitle>
-              <StatusBadge running={status.serverRunning} />
-            </div>
-            <CardDescription className='text-xs'>语音识别模型服务</CardDescription>
-          </CardHeader>
-          <CardContent className='pt-0'>
-            <div className='flex gap-2'>
-              <Button
-                size='sm'
-                className='flex-1 h-8'
-                onClick={handleStartServer}
-                disabled={isLoading || status.serverRunning}
-              >
-                <Play className='mr-1.5 h-3.5 w-3.5' />
-                启动
-              </Button>
-              <Button
-                size='sm'
-                variant='destructive'
-                className='flex-1 h-8'
-                onClick={handleStopServer}
-                disabled={isLoading || !status.serverRunning}
-              >
-                <Square className='mr-1.5 h-3.5 w-3.5' />
-                停止
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className='overflow-hidden'>
-          <CardHeader className='pb-3'>
-            <div className='flex items-center justify-between'>
-              <CardTitle className='flex items-center gap-2 text-base'>
-                <Mic className='h-4 w-4' />
-                客户端
-              </CardTitle>
-              <StatusBadge running={status.clientRunning} />
-            </div>
-            <CardDescription className='text-xs'>键盘监听和输入客户端</CardDescription>
-          </CardHeader>
-          <CardContent className='pt-0'>
-            <div className='flex gap-2'>
-              <Button
-                size='sm'
-                className='flex-1 h-8'
-                onClick={handleStartClient}
-                disabled={isLoading || status.clientRunning}
-              >
-                <Play className='mr-1.5 h-3.5 w-3.5' />
-                启动
-              </Button>
-              <Button
-                size='sm'
-                variant='destructive'
-                className='flex-1 h-8'
-                onClick={handleStopClient}
-                disabled={isLoading || !status.clientRunning}
-              >
-                <Square className='mr-1.5 h-3.5 w-3.5' />
-                停止
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* 实时日志控制台 */}
-      <Card className='overflow-hidden'>
-        <CardHeader className='py-3 px-4 bg-muted/50'>
-          <CardTitle className='flex items-center gap-2 text-sm'>
-            <Terminal className='h-4 w-4' />
-            实时日志控制台
-          </CardTitle>
-        </CardHeader>
-        <CardContent className='p-0'>
-          <div className='bg-black font-mono text-green-400 text-xs p-4 h-48 overflow-y-auto leading-relaxed'>
-            {logs.map((log, index) => (
-              <div key={index} className='whitespace-pre-wrap'>
-                {log}
+      <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+        <div className='lg:col-span-2 space-y-6'>
+          <Card className='border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md overflow-hidden'>
+            <CardHeader className='pb-4'>
+              <div className='flex items-center justify-between'>
+                <div className='space-y-1'>
+                  <CardTitle className='flex items-center gap-2'>
+                    <Mic className='w-5 h-5 text-blue-500' />
+                    服务控制
+                  </CardTitle>
+                  <CardDescription>一键启停语音输入全套组件</CardDescription>
+                </div>
+                <div className='flex gap-2'>
+                  <Button 
+                    variant='outline' 
+                    size='sm' 
+                    className='rounded-full'
+                    onClick={() => setShowHelp(!showHelp)}
+                  >
+                    {showHelp ? <ChevronUp className='w-4 h-4 mr-1' /> : <ChevronDown className='w-4 h-4 mr-1' />}
+                    {showHelp ? '收起帮助' : '查看帮助'}
+                  </Button>
+                </div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardHeader>
+            <CardContent className='space-y-6'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 gap-4'>
+                <div className='p-4 rounded-2xl bg-zinc-100/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 space-y-4'>
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center gap-2'>
+                      <div className='p-2 rounded-lg bg-blue-500/10 text-blue-500'>
+                        <Server size={18} />
+                      </div>
+                      <span className='font-bold'>服务端引擎</span>
+                    </div>
+                    <StatusBadge running={status.serverRunning} />
+                  </div>
+                  <div className='flex gap-2'>
+                    <Button 
+                      className='flex-1 rounded-xl' 
+                      size='sm'
+                      onClick={startServer}
+                      disabled={isLoading || status.serverRunning}
+                    >
+                      启动
+                    </Button>
+                    <Button 
+                      variant='outline' 
+                      className='flex-1 rounded-xl' 
+                      size='sm'
+                      onClick={stopServer}
+                      disabled={isLoading || !status.serverRunning}
+                    >
+                      停止
+                    </Button>
+                  </div>
+                </div>
 
-      {/* 使用说明 - 可折叠 */}
-      <div className='border rounded-lg overflow-hidden'>
-        <button
-          onClick={() => setShowHelp(!showHelp)}
-          className='w-full flex items-center justify-between px-4 py-2.5 bg-muted/30 hover:bg-muted/50 transition-colors text-sm'
-        >
-          <span className='text-muted-foreground'>使用说明</span>
-          {showHelp ? (
-            <ChevronUp className='h-4 w-4 text-muted-foreground' />
-          ) : (
-            <ChevronDown className='h-4 w-4 text-muted-foreground' />
-          )}
-        </button>
-        {showHelp && (
-          <div className='px-4 py-3 text-xs text-muted-foreground space-y-2 bg-muted/10'>
-            <p>• <strong>启动服务：</strong>先启动服务端，等待模型加载完成后再启动客户端</p>
-            <p>• <strong>开始听写：</strong>按住 CapsLock 键说话，松开后识别结果会自动上屏</p>
-            <p>• <strong>模型配置：</strong>在 CapsWriter-Offline 目录下的 config_server.py 和 config_client.py 中进行配置</p>
-          </div>
-        )}
+                <div className='p-4 rounded-2xl bg-zinc-100/50 dark:bg-zinc-800/50 border border-zinc-200 dark:border-zinc-700 space-y-4'>
+                  <div className='flex items-center justify-between'>
+                    <div className='flex items-center gap-2'>
+                      <div className='p-2 rounded-lg bg-indigo-500/10 text-indigo-500'>
+                        <Mic size={18} />
+                      </div>
+                      <span className='font-bold'>语音客户端</span>
+                    </div>
+                    <StatusBadge running={status.clientRunning} />
+                  </div>
+                  <div className='flex gap-2'>
+                    <Button 
+                      className='flex-1 rounded-xl bg-indigo-600 hover:bg-indigo-700' 
+                      size='sm'
+                      onClick={startClient}
+                      disabled={isLoading || status.clientRunning}
+                    >
+                      启动
+                    </Button>
+                    <Button 
+                      variant='outline' 
+                      className='flex-1 rounded-xl' 
+                      size='sm'
+                      onClick={stopClient}
+                      disabled={isLoading || !status.clientRunning}
+                    >
+                      停止
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className='pt-2'>
+                <Button 
+                  className={cn(
+                    'w-full h-14 rounded-2xl text-lg font-bold transition-all duration-500 shadow-lg',
+                    status.serverRunning && status.clientRunning
+                      ? 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
+                      : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:opacity-90 shadow-blue-500/20'
+                  )}
+                  onClick={status.serverRunning || status.clientRunning ? stopAll : startAll}
+                  disabled={isLoading}
+                >
+                  {isLoading ? (
+                    <div className='flex items-center gap-2'>
+                      <div className='w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin' />
+                      <span>正在处理...</span>
+                    </div>
+                  ) : (
+                    <div className='flex items-center gap-2'>
+                      {status.serverRunning || status.clientRunning ? (
+                        <>
+                          <Square className='w-5 h-5 fill-current' />
+                          <span>停止所有服务</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className='w-5 h-5 fill-current' />
+                          <span>一键启动完整服务</span>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </Button>
+              </div>
+
+              {showHelp && (
+                <div className='mt-4 p-4 rounded-xl bg-blue-500/5 border border-blue-500/10 space-y-3 animate-in fade-in slide-in-from-top-2 duration-300'>
+                  <h4 className='text-sm font-bold text-blue-600 dark:text-blue-400 flex items-center gap-2'>
+                    <Info size={16} />
+                    使用指南
+                  </h4>
+                  <ul className='text-xs space-y-2 text-muted-foreground leading-relaxed'>
+                    <li className='flex items-start gap-2'>
+                      <span className='font-bold text-blue-500'>1.</span>
+                      <span>确保已在 C 盘根目录安装了 <b>CapsWriter-Offline</b>。</span>
+                    </li>
+                    <li className='flex items-start gap-2'>
+                      <span className='font-bold text-blue-500'>2.</span>
+                      <span>启动后，长按键盘上的 <b>Caps Lock</b> 键即可开始说话。</span>
+                    </li>
+                    <li className='flex items-start gap-2'>
+                      <span className='font-bold text-blue-500'>3.</span>
+                      <span>松开按键后，语音将自动转为文字并输入到当前焦点位置。</span>
+                    </li>
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className='space-y-6'>
+          <Card className='border-none shadow-xl bg-zinc-900 text-zinc-100 h-[400px] flex flex-col rounded-3xl'>
+            <CardHeader className='pb-2'>
+              <CardTitle className='text-sm font-bold flex items-center gap-2 text-zinc-400'>
+                <Terminal size={16} />
+                运行日志
+              </CardTitle>
+            </CardHeader>
+            <CardContent className='flex-1 overflow-hidden p-4'>
+              <div className='bg-black/40 rounded-2xl p-4 h-full font-mono text-[11px] overflow-y-auto scrollbar-thin scrollbar-thumb-zinc-700 space-y-1'>
+                {logs.map((log, i) => (
+                  <div key={i} className={cn(
+                    'break-all',
+                    log.includes('✓') ? 'text-green-400' :
+                    log.includes('✗') ? 'text-red-400' :
+                    log.includes('[系统]') ? 'text-blue-400' : 'text-zinc-400'
+                  )}>
+                    {log}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   )
 }
+
+export default CapsWriterTool

@@ -9,7 +9,9 @@ export function TitleBar(): React.JSX.Element {
       const electron = window.electron as any
       if (electron?.window?.isMaximized) {
         const result = await electron.window.isMaximized()
-        setIsMaximized(result.maximized)
+        if (result.success && result.data) {
+          setIsMaximized(result.data.maximized)
+        }
       }
     }
     checkMaximized()
@@ -26,7 +28,9 @@ export function TitleBar(): React.JSX.Element {
     const electron = window.electron as any
     if (electron?.window?.maximize) {
       const result = await electron.window.maximize()
-      setIsMaximized(result.maximized)
+      if (result.success && result.data) {
+        setIsMaximized(result.data.maximized)
+      }
     }
   }
 

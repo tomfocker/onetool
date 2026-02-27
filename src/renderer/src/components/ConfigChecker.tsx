@@ -115,7 +115,7 @@ export const ConfigChecker: React.FC = () => {
     setLoading(true)
     try {
       const result = await window.electron.systemConfig.getSystemConfig()
-      if (result.success) setConfig(result.config)
+      if (result.success && result.data) setConfig(result.data)
     } finally {
       setLoading(false)
     }
