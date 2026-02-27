@@ -17,22 +17,24 @@ import NetworkRadarTool from '@/tools/NetworkRadarTool'
 import ClipboardManager from '@/tools/ClipboardManager'
 import { QRCodeTool } from '@/tools/QRCodeTool'
 import { ColorPickerTool } from '@/tools/ColorPickerTool'
-import { ScreenRecorderTool } from '@/tools/ScreenRecorderTool'
 import { FileDropoverTool } from '@/tools/FileDropoverTool'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { ScreenOverlayTranslatorTool } from '@/tools/ScreenOverlayTranslatorTool'
+import { ScreenRecorderTool, RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
   const [isScreenOverlay, setIsScreenOverlay] = useState(false)
   const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
+  const [isRecorderSelection, setIsRecorderSelection] = useState(false)
 
   useLayoutEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash
       setIsScreenOverlay(hash.startsWith('#/screen-overlay'))
       setIsColorPickerOverlay(hash.startsWith('#/color-picker-overlay'))
+      setIsRecorderSelection(hash.startsWith('#/recorder-selection'))
     }
 
     handleHashChange()
@@ -64,6 +66,10 @@ function AppContent(): React.JSX.Element {
 
   if (isColorPickerOverlay) {
     return <ColorPickerOverlay />
+  }
+
+  if (isRecorderSelection) {
+    return <RecorderSelectionOverlay />
   }
 
   const renderContent = () => {

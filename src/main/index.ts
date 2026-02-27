@@ -186,6 +186,94 @@ function loadClipboardHistory(): void {
   }
 }
 
+function getSettingsPath(): string {
+  const userDataPath = app.getPath('userData')
+  return path.join(userDataPath, 'settings.json')
+}
+
+let appSettings = {
+  recorderHotkey: 'Alt+Shift+R'
+}
+
+function loadSettings() {
+  try {
+    const settingsPath = getSettingsPath()
+    if (fs.existsSync(settingsPath)) {
+      const data = fs.readFileSync(settingsPath, 'utf-8')
+      const parsed = JSON.parse(data)
+      appSettings = { ...appSettings, ...parsed }
+    }
+  } catch (e) {
+    console.error('Failed to load settings:', e)
+  }
+}
+
+function saveSettings() {
+  try {
+    const settingsPath = getSettingsPath()
+    fs.writeFileSync(settingsPath, JSON.stringify(appSettings, null, 2))
+  } catch (e) {
+    console.error('Failed to save settings:', e)
+  }
+}
+
+function registerRecorderShortcut() {
+  try {
+    // 先注销可能的旧快捷键
+    globalShortcut.unregister(appSettings.recorderHotkey)
+    
+    const success = globalShortcut.register(appSettings.recorderHotkey, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('screen-recorder-toggle-hotkey')
+      }
+    })
+    
+    if (!success) {
+      console.warn(`Failed to register recorder shortcut: ${appSettings.recorderHotkey}`)
+      // 如果自定义的失败了，尝试回退到默认的
+      if (appSettings.recorderHotkey !== 'Alt+Shift+R') {
+        globalShortcut.register('Alt+Shift+R', () => {
+           if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('screen-recorder-toggle-hotkey')
+          }
+        })
+      }
+    }
+  } catch (e) {
+    console.error('Error registering recorder shortcut:', e)
+  }
+}
+
+ipcMain.handle('recorder-hotkey-get', () => {
+  return appSettings.recorderHotkey
+})
+
+ipcMain.handle('recorder-hotkey-set', (_event, hotkey: string) => {
+  try {
+    // 尝试注销旧的
+    globalShortcut.unregister(appSettings.recorderHotkey)
+    
+    // 尝试注册新的
+    const success = globalShortcut.register(hotkey, () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('screen-recorder-toggle-hotkey')
+      }
+    })
+
+    if (success) {
+      appSettings.recorderHotkey = hotkey
+      saveSettings()
+      return { success: true }
+    } else {
+      // 注册失败，还原旧的
+      registerRecorderShortcut()
+      return { success: false, error: '快捷键已被占用或无效' }
+    }
+  } catch (e) {
+    return { success: false, error: (e as Error).message }
+  }
+})
+
 ipcMain.on('get-clipboard-history', (event) => {
   event.reply('clipboard-history', clipboardHistory)
 })
@@ -1586,9 +1674,99 @@ ipcMain.handle('screen-recorder-select-output', async () => {
   }
 })
 
-ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps = 30, quality = 'medium' }: { outputPath: string; format: string; fps?: number; quality?: string }) => {
+let recorderProcess: ChildProcess | null = null
+
+let selectionWindow: BrowserWindow | null = null
+
+ipcMain.handle('recorder-selection-open', async () => {
+  if (selectionWindow || !mainWindow) return
+  
+  const { screen } = require('electron')
+  // 锁定在工具箱所在的屏幕
+  const targetDisplay = screen.getDisplayMatching(mainWindow.getBounds())
+  const { x, y, width, height } = targetDisplay.bounds
+
+  selectionWindow = new BrowserWindow({
+    x,
+    y,
+    width,
+    height,
+    transparent: true,
+    frame: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    movable: false,
+    hasShadow: false,
+    enableLargerThanScreen: true, // 允许在某些环境下铺满
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      sandbox: false
+    }
+  })
+
+  // 关键：确保窗口在 Windows 下不会因为任务栏等因素被偏移
+  selectionWindow.setBounds({ x, y, width, height })
+  selectionWindow.setIgnoreMouseEvents(false)
+  selectionWindow.setAlwaysOnTop(true, 'screen-saver')
+  
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    selectionWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/recorder-selection`)
+  } else {
+    selectionWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '/recorder-selection'
+    })
+  }
+
+  selectionWindow.on('closed', () => {
+    selectionWindow = null
+  })
+})
+
+ipcMain.handle('recorder-selection-close', (_event, bounds) => {
+  if (selectionWindow) {
+    const winBounds = selectionWindow.getBounds()
+    selectionWindow.close()
+    selectionWindow = null
+    
+    if (bounds && mainWindow) {
+      // 将窗口相对坐标转换为屏幕绝对坐标
+      const finalBounds = {
+        x: bounds.x + winBounds.x,
+        y: bounds.y + winBounds.y,
+        width: bounds.width,
+        height: bounds.height
+      }
+      mainWindow.webContents.send('recorder-selection-result', finalBounds)
+    }
+  }
+})
+
+ipcMain.handle('screen-recorder-get-windows', async () => {
+  const { desktopCapturer } = require('electron')
   try {
-    if (isRecording) {
+    const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 150, height: 150 } })
+    return sources.map(s => ({
+      id: s.id,
+      name: s.name,
+      thumbnail: s.thumbnail.toDataURL()
+    }))
+  } catch (e) {
+    return []
+  }
+})
+
+ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps = 30, quality = 'medium', bounds, windowTitle }: { 
+  outputPath: string; 
+  format: string; 
+  fps?: number; 
+  quality?: string;
+  bounds?: { x: number; y: number; width: number; height: number };
+  windowTitle?: string;
+}) => {
+  try {
+    if (isRecording || recorderProcess) {
       return { success: false, error: '录制已在进行中' }
     }
 
@@ -1597,176 +1775,168 @@ ipcMain.handle('screen-recorder-start', async (_event, { outputPath, format, fps
       return { success: false, error: 'FFmpeg 未正确安装或路径无效' }
     }
     
-    console.log('Using FFmpeg path:', ffmpegPath)
-
-    const outputDir = path.dirname(outputPath)
-    if (!fs.existsSync(outputDir)) {
-      return { success: false, error: '输出目录不存在' }
-    }
-
-    try {
-      fs.accessSync(outputDir, fs.constants.W_OK)
-    } catch {
-      return { success: false, error: '没有写入权限，请选择其他目录' }
-    }
-
     isRecording = true
     if (mainWindow) mainWindow.minimize()
 
-    let command = ffmpeg()
-      .input('desktop')
-      .inputFormat('gdigrab')
-      .inputOptions([
-        `-framerate ${fps}`,
-        '-draw_mouse 1'
-      ])
+    const { screen } = require('electron')
+    const primaryDisplay = screen.getPrimaryDisplay()
+    const scaleFactor = primaryDisplay.scaleFactor
 
-    if (format === 'mp4') {
-      const crf = quality === 'high' ? 23 : quality === 'medium' ? 28 : 32
-      command = command
-        .outputOptions([
-          '-vcodec libx264',
-          `-crf ${crf}`,
-          '-pix_fmt yuv420p',
-          '-preset ultrafast',
-          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2' // 确保宽高为偶数，libx264 强制要求
-        ])
-        .format('mp4')
-    } else if (format === 'gif') {
-      command = command
-        .outputOptions([
-          '-vf fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse'
-        ])
-        .format('gif')
-    } else if (format === 'webm') {
-      const crf = quality === 'high' ? 30 : quality === 'medium' ? 35 : 40
-      command = command
-        .outputOptions([
-          '-vcodec libvpx',
-          `-crf ${crf}`,
-          '-b:v 0',
-          '-cpu-used 4',
-          '-vf scale=trunc(iw/2)*2:trunc(ih/2)*2'
-        ])
-        .format('webm')
+    // 构建 FFmpeg 命令参数
+    const args = ['-y', '-f', 'gdigrab', '-framerate', fps.toString()]
+
+    if (windowTitle) {
+      // 窗口录制模式 - 注意：如果窗口标题含有特殊字符，gdigrab 可能会失败
+      // 我们通过 iconv 或简单的字符串过滤确保标题基本可用
+      args.push('-i', `title=${windowTitle}`)
+    } else if (bounds) {
+      // 区域录制模式 (需要考虑 DPI 缩放)
+      // 使用 Math.floor 确保不溢出边界，并确保宽高为偶数
+      let realX = Math.floor(bounds.x * scaleFactor)
+      let realY = Math.floor(bounds.y * scaleFactor)
+      let realW = Math.floor(bounds.width * scaleFactor)
+      let realH = Math.floor(bounds.height * scaleFactor)
+      
+      // 关键：确保宽高为偶数 (libx264 强制要求)
+      realW = realW % 2 === 0 ? realW : realW - 1
+      realH = realH % 2 === 0 ? realH : realH - 1
+      
+      // 防止越界 (基于日志中的报错进行动态修正)
+      // 日志显示显示器范围是 (-1920, 0) 到 (3440, 1440)
+      // 如果计算出的宽度+偏移量 > 物理宽度，则减小宽度
+      const screenWidth = Math.floor(primaryDisplay.size.width * scaleFactor)
+      const screenHeight = Math.floor(primaryDisplay.size.height * scaleFactor)
+
+      if (realX + realW > screenWidth) realW = screenWidth - realX
+      if (realY + realH > screenHeight) realH = screenHeight - realY
+
+      args.push(
+        '-offset_x', realX.toString(),
+        '-offset_y', realY.toString(),
+        '-video_size', `${realW}x${realH}`,
+        '-i', 'desktop'
+      )
+    } else {
+      // 全屏录制模式 (考虑缩放)
+      const { width, height } = primaryDisplay.size
+      let realW = Math.floor(width * scaleFactor)
+      let realH = Math.floor(height * scaleFactor)
+      
+      // 确保宽高为偶数并稍微减小 1-2 像素，防止溢出边缘引发的 I/O Error
+      realW = (realW % 2 === 0 ? realW : realW - 1) - 2
+      realH = (realH % 2 === 0 ? realH : realH - 1) - 2
+      
+      args.push(
+        '-offset_x', '0',
+        '-offset_y', '0',
+        '-video_size', `${realW}x${realH}`,
+        '-i', 'desktop'
+      )
     }
 
-    recordingCommand = command
+    args.push('-draw_mouse', '1')
 
-    command.on('start', (commandLine) => {
-      console.log('FFmpeg 开始执行, 命令:', commandLine)
-      // 异步获取 ffmpegProc 避免同步访问可能产生的 null 错误
-      setTimeout(() => {
-        try {
-          const proc = (recordingCommand as any).ffmpegProc
-          if (!proc) {
-            console.warn('无法获取 FFmpeg 进程句柄')
-            return
-          }
+    if (format === 'mp4') {
+      const crf = quality === 'high' ? '23' : quality === 'medium' ? '28' : '32'
+      args.push(
+        '-c:v', 'libx264',
+        '-preset', 'ultrafast',
+        '-crf', crf,
+        '-pix_fmt', 'yuv420p',
+        '-tune', 'zerolatency',
+        '-movflags', '+faststart',
+        '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2', // 确保宽高为偶数
+        outputPath
+      )
+    } else if (format === 'gif') {
+      args.push(
+        '-vf', 'fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse',
+        outputPath
+      )
+    } else {
+      args.push(outputPath)
+    }
 
-          proc.stderr.on('data', (data: Buffer) => {
-            const msg = data.toString()
-            console.log('[FFmpeg Stderr]', msg)
-            // 过滤关键错误行，避免发送过多无关日志
-            const errorLines = msg.split('\n').filter(line => 
-              line.toLowerCase().includes('error') || 
-              line.toLowerCase().includes('failed') ||
-              line.toLowerCase().includes('cannot')
-            )
-            
-            if (errorLines.length > 0 && mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('screen-recorder-error', { 
-                message: errorLines[0].trim().substring(0, 200) // 限制长度
-              })
-            }
-          })
-          
-          let exitHandled = false
-          proc.on('exit', (code: number, signal: string) => {
-            if (exitHandled) return
-            exitHandled = true
-            console.log(`FFmpeg 进程退出, code: ${code}, signal: ${signal}`)
-            
-            if (isRecording) {
-              isRecording = false
-              if (mainWindow && !mainWindow.isDestroyed()) {
-                  mainWindow.show()
-                  mainWindow.focus()
-                  if (code !== 0 && code !== null) {
-                    mainWindow.webContents.send('screen-recorder-stopped', { 
-                      success: false, 
-                      error: `FFmpeg 异常退出 (退出码: ${code})。可能是因为权限不足、编码器不支持、路径无效或目标文件被占用。` 
-                    })
-                  }
-              }
-            }
-          })
-        } catch (e) {
-          console.error('初始化 FFmpeg 进程监听失败:', e)
-        }
-      }, 500)
+    console.log('Starting FFmpeg with args:', args.join(' '))
+    
+    recorderProcess = spawn(ffmpegPath, args, {
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
 
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('screen-recorder-started')
+    if (!recorderProcess || !recorderProcess.stdin || !recorderProcess.stderr) {
+      isRecording = false
+      recorderProcess = null
+      return { success: false, error: '无法启动录制进程' }
+    }
+
+    recorderProcess.stderr.on('data', (data) => {
+      const msg = data.toString()
+      // 这里可以解析进度，例如: time=00:00:05.12
+      const timeMatch = msg.match(/time=(\d{2}:\d{2}:\d{2})/);
+      if (timeMatch && mainWindow) {
+        mainWindow.webContents.send('screen-recorder-progress', { timemark: timeMatch[1] })
+      }
+      
+      // 检查启动错误
+      if (msg.toLowerCase().includes('error') || msg.toLowerCase().includes('failed')) {
+        console.error('[FFmpeg Error]', msg)
+        // 注意：有些是警告，不需要立即停止
       }
     })
 
-    command.save(outputPath)
+    recorderProcess.on('error', (err) => {
+      console.error('Failed to start ffmpeg:', err)
+      isRecording = false
+      recorderProcess = null
+      if (mainWindow) mainWindow.webContents.send('screen-recorder-stopped', { success: false, error: err.message })
+    })
 
-    command.on('progress', (progress) => {
-      if (mainWindow) {
-        mainWindow.webContents.send('screen-recorder-progress', {
-          timemark: progress.timemark
+    recorderProcess.on('close', (code) => {
+      console.log(`FFmpeg process closed with code ${code}`)
+      isRecording = false
+      recorderProcess = null
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.show()
+        mainWindow.webContents.send('screen-recorder-stopped', { 
+          success: code === 0 || code === null, 
+          outputPath 
         })
       }
     })
 
-    command.on('end', () => {
-      isRecording = false
-      recordingCommand = null
-      if (mainWindow) {
-        mainWindow.show()
-        mainWindow.webContents.send('screen-recorder-stopped', { success: true, outputPath })
-      }
-    })
-
-    command.on('error', (err) => {
-      console.error('FFmpeg 错误:', err)
-      isRecording = false
-      recordingCommand = null
-      if (mainWindow) mainWindow.show()
-      let errorMessage = err.message
-      if (err.message.includes('Permission denied') || err.message.includes('Access is denied')) {
-        errorMessage = '没有写入权限，请尝试选择其他目录或以管理员身份运行程序'
-      } else if (err.message.includes('No such file or directory')) {
-        errorMessage = '文件路径无效，请重新选择保存位置'
-      } else if (err.message.includes('gdigrab') || err.message.includes('desktop')) {
-        errorMessage = '无法访问屏幕，请检查是否有其他程序占用屏幕'
-      }
-      if (mainWindow) {
-        mainWindow.webContents.send('screen-recorder-stopped', { success: false, error: errorMessage })
-      }
-    })
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('screen-recorder-started')
+    }
 
     return { success: true }
   } catch (error) {
     isRecording = false
-    recordingCommand = null
+    recorderProcess = null
     return { success: false, error: (error as Error).message }
   }
 })
 
 ipcMain.handle('screen-recorder-stop', async () => {
   try {
-    if (!isRecording) {
+    if (!isRecording || !recorderProcess) {
       return { success: false, error: '没有正在进行的录制' }
     }
 
-    if (recordingCommand && recordingCommand.ffmpegProc) {
-      recordingCommand.ffmpegProc.kill('SIGINT')
+    if (recorderProcess.stdin && recorderProcess.stdin.writable) {
+      console.log('Sending "q" to FFmpeg...')
+      recorderProcess.stdin.write('q')
+      
+      // 增加一个强行杀掉的超时兜底
+      const processToKill = recorderProcess
+      setTimeout(() => {
+        if (isRecording && recorderProcess === processToKill) {
+          console.log('FFmpeg did not stop in time, killing...')
+          processToKill.kill('SIGKILL')
+        }
+      }, 5000)
+    } else {
+      recorderProcess.kill('SIGINT')
     }
-    isRecording = false
-    recordingCommand = null
 
     return { success: true }
   } catch (error) {
@@ -2425,6 +2595,7 @@ ipcMain.handle('window-is-maximized', async () => {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.onetool')
   
+  loadSettings()
   initFfmpeg()
 
   app.on('browser-window-created', (_, window) => {
@@ -2432,6 +2603,7 @@ app.whenReady().then(() => {
   })
 
   registerAutoClickerShortcuts()
+  registerRecorderShortcut()
 
   // 延迟一秒再次尝试注册，防止启动冲突
   setTimeout(() => {
@@ -2500,12 +2672,6 @@ app.whenReady().then(() => {
       })
     } catch (error) {
       console.error('Start screen overlay via shortcut error:', error)
-    }
-  })
-
-  globalShortcut.register('Alt+Shift+R', () => {
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('screen-recorder-toggle-hotkey')
     }
   })
 

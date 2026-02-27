@@ -179,6 +179,15 @@ const screenRecorderAPI = {
   getDefaultPath: () => {
     return ipcRenderer.invoke('screen-recorder-get-default-path')
   },
+  getHotkey: () => {
+    return ipcRenderer.invoke('recorder-hotkey-get')
+  },
+  setHotkey: (hotkey: string) => {
+    return ipcRenderer.invoke('recorder-hotkey-set', hotkey)
+  },
+  getWindows: () => {
+    return ipcRenderer.invoke('screen-recorder-get-windows')
+  },
   onStarted: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('screen-recorder-started', handler)

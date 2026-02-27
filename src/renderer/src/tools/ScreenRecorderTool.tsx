@@ -50,9 +50,17 @@ export const ScreenRecorderTool: React.FC = () => {
   const [format, setFormat] = useState<'mp4' | 'gif' | 'webm'>('mp4')
   const [fps, setFps] = useState(30)
   const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium')
+  const [recordingMode, setRecordingMode] = useState<'full' | 'area' | 'window'>('full')
+  const [selectedWindow, setSelectedWindow] = useState<{ id: string; name: string } | null>(null)
+  const [windowList, setWindowList] = useState<Array<{ id: string; name: string; thumbnail: string }>>([])
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState('00:00:00')
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [recorderHotkey, setRecorderHotkey] = useState('Alt+Shift+R')
+  const [isSavingHotkey, setIsSavingHotkey] = useState(false)
+  const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
+  
   const recordingStartTime = useRef<number | null>(null)
   const recordingInterval = useRef<NodeJS.Timeout | null>(null)
 
@@ -60,6 +68,76 @@ export const ScreenRecorderTool: React.FC = () => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
   }, [])
+
+  const handleModeChange = async (mode: 'full' | 'area' | 'window') => {
+    setRecordingMode(mode)
+    if (mode === 'window') {
+      const windows = await (window.electron.screenRecorder as any).getWindows()
+      setWindowList(windows)
+    } else {
+      setSelectedWindow(null)
+    }
+  }
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (!isRecordingHotkey) return
+    
+    e.preventDefault()
+    e.stopPropagation()
+
+    const modifiers: string[] = []
+    if (e.ctrlKey) modifiers.push('Control')
+    if (e.altKey) modifiers.push('Alt')
+    if (e.shiftKey) modifiers.push('Shift')
+    if (e.metaKey) modifiers.push('Command')
+
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) {
+      return
+    }
+
+    let key = e.key.toUpperCase()
+    if (key === ' ') key = 'Space'
+    if (key === 'ESCAPE') key = 'Esc'
+    if (key === 'ARROWUP') key = 'Up'
+    if (key === 'ARROWDOWN') key = 'Down'
+    if (key === 'ARROWLEFT') key = 'Left'
+    if (key === 'ARROWRIGHT') key = 'Right'
+    
+    const hotkeyStr = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key
+    setRecorderHotkey(hotkeyStr)
+    setIsRecordingHotkey(false)
+  }, [isRecordingHotkey])
+
+  useEffect(() => {
+    if (isRecordingHotkey) {
+      window.addEventListener('keydown', handleKeyDown)
+    } else {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [isRecordingHotkey, handleKeyDown])
+
+  const handleSaveHotkey = async () => {
+    if (!window.electron?.screenRecorder?.setHotkey) return
+    
+    setIsSavingHotkey(true)
+    try {
+      const result = await window.electron.screenRecorder.setHotkey(recorderHotkey)
+      if (result.success) {
+        showToast('热键设置已更新', 'success')
+      } else {
+        showToast(`热键设置失败: ${result.error}`, 'error')
+        if (window.electron.screenRecorder.getHotkey) {
+          const current = await window.electron.screenRecorder.getHotkey()
+          setRecorderHotkey(current)
+        }
+      }
+    } catch (error) {
+      showToast(`设置出错: ${(error as Error).message}`, 'error')
+    } finally {
+      setIsSavingHotkey(false)
+    }
+  }
 
   const startRecordingTimer = useCallback(() => {
     if (recordingInterval.current) {
@@ -107,23 +185,40 @@ export const ScreenRecorderTool: React.FC = () => {
         showToast('请先选择保存位置', 'error')
         return
       }
-      if (!window.electron?.screenRecorder) {
-        showToast('API 不可用', 'error')
-        return
-      }
-      const result = await window.electron.screenRecorder.startRecording({
+      
+      const config: any = {
         outputPath,
         format,
         fps,
         quality
-      })
+      }
+
+      if (recordingMode === 'area') {
+        if (!selectionRect) {
+          showToast('请先选择录制区域', 'error')
+          return
+        }
+        config.bounds = selectionRect
+      } else if (recordingMode === 'window') {
+        if (!selectedWindow) {
+          showToast('请选择录制窗口', 'error')
+          return
+        }
+        config.windowTitle = selectedWindow.name
+      }
+
+      if (!window.electron?.screenRecorder) {
+        showToast('API 不可用', 'error')
+        return
+      }
+      const result = await window.electron.screenRecorder.startRecording(config)
       if (!result.success) {
         showToast(`启动录制失败: ${result.error}`, 'error')
       }
     } catch (error) {
       showToast(`启动录制失败: ${(error as Error).message}`, 'error')
     }
-  }, [outputPath, format, fps, quality, showToast])
+  }, [outputPath, format, fps, quality, recordingMode, selectionRect, selectedWindow, showToast])
 
   const handleStopRecording = useCallback(async () => {
     try {
@@ -155,10 +250,19 @@ export const ScreenRecorderTool: React.FC = () => {
         const path = await window.electron.screenRecorder.getDefaultPath()
         setOutputPath(path)
       }
+      if (window.electron?.screenRecorder?.getHotkey) {
+        const hotkey = await window.electron.screenRecorder.getHotkey()
+        setRecorderHotkey(hotkey)
+      }
     }
     initDefaultPath()
 
     if (!window.electron?.screenRecorder) return
+
+    const unsubscribeSelection = (window.electron as any).ipcRenderer?.on('recorder-selection-result', (_event, bounds) => {
+      setSelectionRect(bounds)
+      showToast('录制区域已设定', 'success')
+    })
 
     const unsubscribeStarted = window.electron.screenRecorder.onStarted(() => {
       setIsRecording(true)
@@ -183,12 +287,10 @@ export const ScreenRecorderTool: React.FC = () => {
       }
     })
 
-    // 监听运行中的错误
     const unsubscribeError = (window.electron.screenRecorder as any).onError?.((data: { message: string }) => {
       showToast(`录制中出错: ${data.message}`, 'error')
     })
 
-    // 监听全局热键触发
     const unsubscribeHotkey = window.electron.screenRecorder.onToggleHotkey?.(() => {
       if (isRecording) {
         handleStopRecording()
@@ -198,6 +300,7 @@ export const ScreenRecorderTool: React.FC = () => {
     })
 
     return () => {
+      if (unsubscribeSelection) unsubscribeSelection()
       unsubscribeStarted()
       unsubscribeProgress()
       unsubscribeStopped()
@@ -205,6 +308,12 @@ export const ScreenRecorderTool: React.FC = () => {
       if (unsubscribeHotkey) unsubscribeHotkey()
     }
   }, [isRecording, handleStartRecording, handleStopRecording, startRecordingTimer, stopRecordingTimer, showToast])
+
+  const handleOpenSelection = async () => {
+    if ((window.electron as any).ipcRenderer) {
+      await (window.electron as any).ipcRenderer.invoke('recorder-selection-open')
+    }
+  }
 
   const formatOptions = [
     { value: 'mp4', label: 'MP4', desc: '高质量视频' },
@@ -234,9 +343,85 @@ export const ScreenRecorderTool: React.FC = () => {
         <div className="space-y-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
           <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <span>💾</span> 保存设置
+              <span>🎯</span> 录制模式
             </h2>
-            
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {(['full', 'area', 'window'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => handleModeChange(mode)}
+                  disabled={isRecording}
+                  className={`p-4 rounded-xl border-2 transition-all duration-200 ${
+                    recordingMode === mode
+                      ? 'format-button-active text-white'
+                      : 'bg-white/30 dark:bg-white/5 border-white/20 dark:border-white/10 hover:border-purple-500/30'
+                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                >
+                  <div className="font-medium">
+                    {mode === 'full' ? '全屏录制' : mode === 'area' ? '区域录制' : '窗口录制'}
+                  </div>
+                  <div className="text-xs opacity-70 mt-1">
+                    {mode === 'full' ? '录制整个桌面' : mode === 'area' ? '拖拽选择区域' : '录制特定应用'}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {recordingMode === 'window' && (
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-60 overflow-y-auto p-2 border border-white/10 rounded-xl mb-6">
+                {windowList.map((win) => (
+                  <button
+                    key={win.id}
+                    onClick={() => setSelectedWindow(win)}
+                    className={`p-2 rounded-lg border transition-all text-left group ${
+                      selectedWindow?.id === win.id
+                        ? 'border-purple-500 bg-purple-500/10'
+                        : 'border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    <img src={win.thumbnail} className="w-full h-24 object-contain mb-2 rounded bg-black/20" alt={win.name} />
+                    <div className="text-xs truncate font-medium group-hover:text-purple-400">{win.name}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {recordingMode === 'area' && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-muted-foreground">录制区域</label>
+                  {selectionRect && (
+                    <span className="text-xs text-purple-400">
+                      {selectionRect.width} x {selectionRect.height} (at {selectionRect.x}, {selectionRect.y})
+                    </span>
+                  )}
+                </div>
+                {!selectionRect ? (
+                  <button
+                    onClick={handleOpenSelection}
+                    className="w-full p-8 border-2 border-dashed border-white/20 rounded-xl hover:border-purple-500/50 hover:bg-purple-500/5 transition-all text-muted-foreground"
+                  >
+                    点击此处开启全屏选区 (支持跨窗口选择)
+                  </button>
+                ) : (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleOpenSelection}
+                      className="flex-1 p-3 bg-white/10 hover:bg-white/20 rounded-xl text-sm transition-colors"
+                    >
+                      重新选择区域
+                    </button>
+                    <button
+                      onClick={() => setSelectionRect(null)}
+                      className="p-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-sm transition-colors"
+                    >
+                      清除
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             <div className="mb-6">
               <label className="block text-sm font-medium text-muted-foreground mb-2">保存位置</label>
               <div className="flex gap-3">
@@ -364,6 +549,43 @@ export const ScreenRecorderTool: React.FC = () => {
 
           <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <span>⌨️</span> 热键设置
+            </h2>
+            <div className="space-y-4">
+              <div className="flex gap-3">
+                <div 
+                  onClick={() => setIsRecordingHotkey(true)}
+                  className={`flex-1 bg-white/50 dark:bg-white/10 border ${
+                    isRecordingHotkey 
+                      ? 'border-red-500 ring-2 ring-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.2)]' 
+                      : 'border-white/20 dark:border-white/10'
+                  } rounded-xl px-4 py-3 cursor-pointer transition-all duration-200 flex items-center justify-between group`}
+                >
+                  <span className={`font-mono ${isRecordingHotkey ? 'text-red-500 animate-pulse' : 'text-foreground'}`}>
+                    {isRecordingHotkey ? '请按下按键...' : recorderHotkey}
+                  </span>
+                  {!isRecordingHotkey && (
+                    <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity">
+                      点击录制
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleSaveHotkey}
+                  disabled={isSavingHotkey || isRecording || isRecordingHotkey}
+                  className="px-6 py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-xl font-medium transition-colors text-white whitespace-nowrap"
+                >
+                  {isSavingHotkey ? '保存中...' : '确认修改'}
+                </button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                点击上方区域后直接按下你想要的热键（如 Ctrl+Shift+S）。支持大部分组合键。
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
+            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span>ℹ️</span> 提示
             </h2>
             <ul className="space-y-2 text-sm text-muted-foreground">
@@ -408,6 +630,108 @@ export const ScreenRecorderTool: React.FC = () => {
             )}
             <span>{toast.message}</span>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export const RecorderSelectionOverlay: React.FC = () => {
+  const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const startPos = useRef<{ x: number; y: number } | null>(null)
+
+  useEffect(() => {
+    // 强制透明背景，防止 Electron 窗口继承全局样式
+    const originalBg = document.body.style.backgroundColor
+    document.body.style.backgroundColor = 'transparent'
+    
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        (window.electron as any).ipcRenderer.invoke('recorder-selection-close', null)
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => {
+      window.removeEventListener('keydown', handleEsc)
+      document.body.style.backgroundColor = originalBg
+    }
+  }, [])
+
+  const onStart = (e: React.MouseEvent) => {
+    // 右键点击直接退出选区
+    if (e.button === 2) {
+      (window.electron as any).ipcRenderer.invoke('recorder-selection-close', null)
+      return
+    }
+    setIsDragging(true)
+    startPos.current = { x: e.clientX, y: e.clientY }
+    setRect({ x: e.clientX, y: e.clientY, width: 0, height: 0 })
+  }
+
+  const onMove = (e: React.MouseEvent) => {
+    if (!isDragging || !startPos.current) return
+    const currentX = e.clientX
+    const currentY = e.clientY
+    const startX = startPos.current.x
+    const startY = startPos.current.y
+    
+    setRect({
+      x: Math.min(startX, currentX),
+      y: Math.min(startY, currentY),
+      width: Math.abs(currentX - startX),
+      height: Math.abs(currentY - startY)
+    })
+  }
+
+  const onEnd = () => {
+    if (!isDragging || !rect) {
+      setIsDragging(false)
+      return
+    }
+    setIsDragging(false)
+    if (rect.width > 10 && rect.height > 10) {
+      (window.electron as any).ipcRenderer.invoke('recorder-selection-close', rect)
+    } else {
+      setRect(null)
+    }
+  }
+
+  return (
+    <div 
+      className="fixed inset-0 z-[9999] cursor-crosshair select-none overflow-hidden bg-transparent"
+      style={{ 
+        width: '100vw', 
+        height: '100vh',
+        backgroundColor: rect ? 'transparent' : 'rgba(0,0,0,0.2)' 
+      }}
+      onMouseDown={onStart}
+      onMouseMove={onMove}
+      onMouseUp={onEnd}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-2xl text-sm font-medium border border-white/20 shadow-2xl pointer-events-none z-[100] animate-fade-in whitespace-nowrap">
+        请在当前屏幕拖拽选择录制区域 (Esc 或 右键取消)
+      </div>
+
+      {rect && (
+        <div 
+          className="absolute border-2 border-red-500 bg-transparent transition-none"
+          style={{
+            left: rect.x,
+            top: rect.y,
+            width: rect.width,
+            height: rect.height,
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.5)' // 完美的、无偏移的遮罩方案
+          }}
+        >
+          <div className="absolute -top-8 left-0 bg-red-500 text-white text-[10px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap flex items-center gap-1 font-mono">
+            {Math.round(rect.width)} × {Math.round(rect.height)}
+          </div>
+          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-red-500" />
+          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-red-500" />
+          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-red-500" />
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-red-500" />
         </div>
       )}
     </div>
