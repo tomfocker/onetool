@@ -277,6 +277,12 @@ const floatBallAPI = {
   },
   startDrag: (filePath: string) => {
     ipcRenderer.send('ondragstart', filePath)
+  },
+  hideWindow: () => {
+    ipcRenderer.send('floatball-hide-window')
+  },
+  showWindow: () => {
+    ipcRenderer.send('floatball-show-window')
   }
 }
 

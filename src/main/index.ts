@@ -38,6 +38,7 @@ import { registerDoctorIpc } from './ipc/doctorIpc'
 import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
+import { registerFloatBallIpc } from './ipc/floatBallIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -153,6 +154,7 @@ app.whenReady().then(() => {
   registerDoctorIpc()
   registerSystemIpc(() => mainWindow)
   registerScreenshotIpc()
+  registerFloatBallIpc()
 
   // Silent system health check
   setTimeout(async () => {
@@ -185,6 +187,7 @@ app.whenReady().then(() => {
   hotkeyService.registerRecorderShortcut()
   hotkeyService.registerScreenshotShortcut()
   hotkeyService.registerTranslatorShortcut()
+  hotkeyService.registerFloatBallShortcut()
 
   // Retry shortcut registration after 1s to avoid conflicts
   setTimeout(() => {

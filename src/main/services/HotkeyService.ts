@@ -6,7 +6,7 @@ import { IpcResponse } from '../../shared/types'
 export class HotkeyService {
   private mainWindow: BrowserWindow | null = null
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -49,6 +49,22 @@ export class HotkeyService {
       })
     } catch (e) {
       console.error('HotkeyService: Error registering translator shortcut:', e)
+    }
+  }
+
+  registerFloatBallShortcut() {
+    try {
+      const settings = settingsService.getSettings()
+      globalShortcut.unregister(settings.floatBallHotkey)
+      globalShortcut.register(settings.floatBallHotkey, () => {
+        const { windowManagerService } = require('./WindowManagerService')
+        const floatBall = windowManagerService.getFloatBallWindow()
+        if (floatBall && !floatBall.isDestroyed()) {
+          floatBall.webContents.send('floatball-toggle')
+        }
+      })
+    } catch (e) {
+      console.error('HotkeyService: Error registering floatball shortcut:', e)
     }
   }
 
@@ -97,6 +113,34 @@ export class HotkeyService {
         return { success: true }
       } else {
         this.registerScreenshotShortcut()
+        return { success: false, error: '快捷键已被占用或无效' }
+      }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+  }
+
+  getFloatBallHotkey(): IpcResponse<string> {
+    return { success: true, data: settingsService.getSettings().floatBallHotkey }
+  }
+
+  setFloatBallHotkey(hotkey: string): IpcResponse {
+    try {
+      const settings = settingsService.getSettings()
+      globalShortcut.unregister(settings.floatBallHotkey)
+      const success = globalShortcut.register(hotkey, () => {
+        const { windowManagerService } = require('./WindowManagerService')
+        const floatBall = windowManagerService.getFloatBallWindow()
+        if (floatBall && !floatBall.isDestroyed()) {
+          floatBall.webContents.send('floatball-toggle')
+        }
+      })
+
+      if (success) {
+        settingsService.updateSettings({ floatBallHotkey: hotkey })
+        return { success: true }
+      } else {
+        this.registerFloatBallShortcut()
         return { success: false, error: '快捷键已被占用或无效' }
       }
     } catch (e) {

@@ -60,15 +60,23 @@ export class WindowManagerService {
     return { success: false, error: '主窗口不存在' }
   }
 
+  getFloatBallWindow() {
+    return this.floatBallWindow
+  }
+
   createFloatBallWindow(): void {
     if (this.floatBallWindow) return
 
     this.floatBallWindow = new BrowserWindow({
-      width: 60,
-      height: 60,
+      width: 120,
+      height: 120,
       type: 'toolbar',
       frame: false,
       transparent: true,
+      hasShadow: false,
+      thickFrame: false,
+      roundedCorners: false,
+      backgroundColor: '#00000000',
       alwaysOnTop: true,
       resizable: false,
       skipTaskbar: true,

@@ -4,6 +4,7 @@
 export interface AppSettings {
   recorderHotkey: string
   screenshotHotkey: string
+  floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
 }
@@ -79,7 +80,7 @@ export interface ActivatorConfig {
   pattern: string
   shortcut: string
   isActive: boolean
-  hwnd?: number 
+  hwnd?: number
 }
 
 export interface WindowInfo {

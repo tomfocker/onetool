@@ -6,6 +6,7 @@ import { EventEmitter } from 'events'
 export interface AppSettings {
   recorderHotkey: string
   screenshotHotkey: string
+  floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
 }
@@ -14,6 +15,7 @@ export class SettingsService extends EventEmitter {
   private settings: AppSettings = {
     recorderHotkey: 'Alt+Shift+R',
     screenshotHotkey: 'Alt+Shift+S',
+    floatBallHotkey: 'Alt+Shift+F',
     screenshotSavePath: '',
     autoSaveScreenshot: false
   }
