@@ -1,8 +1,13 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
-import { Camera, Languages } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Camera, Languages, Settings2 } from 'lucide-react'
+import { useSettings } from '../hooks/useSettings'
 
 export const ScreenOverlayTranslatorTool: React.FC = () => {
+  const { settings, updateSettings, isLoading } = useSettings()
+
   const handleStartTranslation = async () => {
     try {
       await window.electron?.screenOverlay?.start?.()
@@ -11,8 +16,12 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
     }
   }
 
+  if (isLoading || !settings) {
+    return <div className="p-4 text-center text-muted-foreground">加载配置中...</div>
+  }
+
   return (
-    <div className='space-y-6'>
+    <div className='space-y-6 pb-10'>
       <div className='flex items-center gap-4'>
         <div className='w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center shadow-soft'>
           <Languages className='h-6 w-6 text-white' />
@@ -64,12 +73,54 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
         </div>
       </div>
 
+      <Card className="border-none shadow-soft bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-2xl">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base font-bold">
+            <Settings2 className="w-4 h-4 text-blue-500" />
+            翻译 API 配置 (大模型)
+          </CardTitle>
+          <CardDescription className="text-xs">配置视觉大模型接口 (推荐使用 gpt-4o 或兼容 OpenAI 标准的视觉模型)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">API URL</label>
+              <Input
+                value={settings.translateApiUrl}
+                onChange={(e) => updateSettings({ translateApiUrl: e.target.value })}
+                placeholder="https://api.openai.com/v1"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">模型名称</label>
+              <Input
+                value={settings.translateModel}
+                onChange={(e) => updateSettings({ translateModel: e.target.value })}
+                placeholder="gpt-4o"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">API Key</label>
+            <Input
+              type="password"
+              value={settings.translateApiKey}
+              onChange={(e) => updateSettings({ translateApiKey: e.target.value })}
+              placeholder="sk-..."
+              className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <div className='flex gap-4'>
         <Button
           onClick={handleStartTranslation}
-          className='flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300'
+          className='flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl py-6'
         >
-          <Camera className='mr-2 h-4 w-4' />
+          <Camera className='mr-2 h-5 w-5' />
           启动截屏翻译
         </Button>
       </div>

@@ -149,6 +149,7 @@ export class WebActivatorService {
     const configBase64 = Buffer.from(JSON.stringify({ pattern })).toString('base64');
     try {
       const script = `
+        $ErrorActionPreference = 'SilentlyContinue'
         Add-Type -AssemblyName UIAutomationClient
         Add-Type -AssemblyName UIAutomationTypes
         Add-Type @"
@@ -159,43 +160,60 @@ export class WebActivatorService {
             [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
             [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
             [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+            [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
           }
 "@
         function Select-Tab($tab) {
             try {
-                $pattern = [System.Windows.Automation.SelectionItemPattern]::SelectionItemPattern
-                $p = $tab.GetCurrentPattern($pattern)
+                $patt = [System.Windows.Automation.SelectionItemPattern]::SelectionItemPattern
+                $p = $tab.GetCurrentPattern($patt)
                 if ($p) { $p.Select() }
             } catch {}
         }
 
         $jsonRaw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${configBase64}"))
         $cfgData = $jsonRaw | ConvertFrom-Json
-        $escapedPattern = $cfgData.pattern
+        $targetName = $cfgData.pattern
 
-        $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
         $browserNameRegex = "^(msedge|chrome|brave|firefox|360chrome|sogouexplorer|vivaldi|opera|yandex|thor)$"
+        $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
 
-        function Get-TargetTab {
+        function Find-And-Activate {
             $procs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
             $hnds = @()
             foreach ($p in $procs) {
                 if ($p.MainWindowHandle -ne 0) { $hnds += $p.MainWindowHandle }
+                # 某些窗口可能不在 MainWindowHandle 中
                 try {
-                    $pWindows = Get-Process -Id $p.Id | Select-Object -ExpandProperty MainWindowHandle -ErrorAction SilentlyContinue
-                    if ($pWindows) { $hnds += $pWindows }
+                    $allWins = Get-Process -Id $p.Id | Select-Object -ExpandProperty MainWindowHandle -ErrorAction SilentlyContinue
+                    $hnds += $allWins
                 } catch {}
             }
             $hnds = $hnds | Where-Object { $_ -ne 0 } | Select-Object -Unique
+
             foreach ($hwnd in $hnds) {
+                if (-not [Win32]::IsWindow($hwnd)) { continue }
+                
+                # 特殊逻辑：如果窗口标题直接包含 pattern，且该窗口已经在前台，直接成功
+                $fg = [Win32]::GetForegroundWindow()
+                if ($fg -eq $hwnd) {
+                   try {
+                     $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+                     if ($root.Current.Name -match [regex]::Escape($targetName)) { return "ALREADY_ACTIVE" }
+                   } catch {}
+                }
+
                 try {
                     $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
-                    if ($root) {
-                        $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
-                        foreach ($t in $tabs) {
-                            if ($t.Current.Name -match [regex]::Escape($escapedPattern)) { 
-                                return @{ tab = $t; hwnd = $hwnd }
-                            }
+                    # 深度搜索：不限制路径，因为 Edge 的布局版本差异太大
+                    $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+                    foreach ($t in $tabs) {
+                        if ($t.Current.Name -match [regex]::Escape($targetName)) {
+                            # 找到了！
+                            if ([Win32]::IsIconic($hwnd)) { [Win32]::ShowWindow($hwnd, 9) | Out-Null }
+                            Select-Tab($t) | Out-Null
+                            [Win32]::SetForegroundWindow($hwnd) | Out-Null
+                            return "SUCCESS"
                         }
                     }
                 } catch {}
@@ -203,38 +221,29 @@ export class WebActivatorService {
             return $null
         }
 
-        $found = Get-TargetTab
-        if (!$found) {
-            $browserProcs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
-            foreach ($p in $browserProcs) {
-                if ($p.MainWindowHandle -ne 0) {
-                    [Win32]::ShowWindow($p.MainWindowHandle, 9) | Out-Null # SW_RESTORE
-                    [Win32]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
-                }
-            }
-            Start-Sleep -Milliseconds 800
-            $found = Get-TargetTab
+        # 尝试第一次搜索
+        $res = Find-And-Activate
+        if ($res) { 
+            Write-Output "ACTION:ACTIVATE"
+            exit 
         }
 
-        if ($found) {
-            $targetTab = $found.tab
-            $targetHwnd = $found.hwnd
-            $fgHwnd = [Win32]::GetForegroundWindow()
-            if ($fgHwnd -eq $targetHwnd) {
-                Select-Tab($targetTab) | Out-Null
-                "ACTION:ACTIVATED"
-            } else {
-                if ([Win32]::IsIconic($targetHwnd)) { [Win32]::ShowWindow($targetHwnd, 9) | Out-Null }
-                else { [Win32]::ShowWindow($targetHwnd, 5) | Out-Null }
-                [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
-                Start-Sleep -Milliseconds 450
-                Select-Tab($targetTab) | Out-Null
-                "ACTION:ACTIVATE"
+        # 如果没找到，尝试“最后通牒”：还原所有的浏览器窗口再搜一次
+        $procs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
+        foreach ($p in $procs) {
+            if ($p.MainWindowHandle -ne 0) {
+                [Win32]::ShowWindow($p.MainWindowHandle, 9) | Out-Null
+                [Win32]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
             }
-        } else { "NOT_FOUND" }
+        }
+        Start-Sleep -Milliseconds 600
+        $res = Find-And-Activate
+        
+        if ($res) { Write-Output "ACTION:ACTIVATE" }
+        else { Write-Output "NOT_FOUND" }
       `;
       const result = await execPowerShellEncoded(script, 15000);
-      if (result.includes('ACTION:ACTIVATE') || result.includes('ACTION:ACTIVATED')) return { success: true, action: 'activated' }
+      if (result.includes('ACTION:ACTIVATE') || result.includes('ALREADY_ACTIVE')) return { success: true, action: 'activated' }
       return { success: false, error: 'Tab not found' }
     } catch (e) { return { success: false, error: (e as Error).message } }
   }

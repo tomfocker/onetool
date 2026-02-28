@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Rocket, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2, Languages } from 'lucide-react'
+import { Rocket, Info, Github, Heart, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2, Languages } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -36,7 +36,6 @@ export const SettingsPage: React.FC = () => {
   const { settings, updateSettings, isLoading } = useSettings()
   const [autoStartEnabled, setAutoStartEnabled] = useState(false)
   const [minimizeToTray, setMinimizeToTray] = useState(true)
-  const [autoRemoveAfterDrag, setAutoRemoveAfterDrag] = useState(false)
   const [doctorReport, setDoctorReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
 
@@ -58,28 +57,12 @@ export const SettingsPage: React.FC = () => {
       }
     }
     checkAutoStart()
-
-    const savedAutoRemove = localStorage.getItem('floatball-autoRemoveAfterDrag')
-    if (savedAutoRemove !== null) setAutoRemoveAfterDrag(savedAutoRemove === 'true')
   }, [])
 
   const handleAutoStartChange = async (checked: boolean) => {
     if (window.electron?.autoStart) {
       const result = await window.electron.autoStart.set(checked)
       if (result.success) setAutoStartEnabled(checked)
-    }
-  }
-
-  const handleAutoRemoveChange = (checked: boolean) => {
-    setAutoRemoveAfterDrag(checked)
-    localStorage.setItem('floatball-autoRemoveAfterDrag', checked.toString())
-  }
-
-  const handleSelectScreenshotPath = async () => {
-    if (!window.electron?.screenshot) return
-    const res = await window.electron.screenshot.selectDirectory()
-    if (res.success && res.data && !res.data.canceled && res.data.path) {
-      updateSettings({ screenshotSavePath: res.data.path })
     }
   }
 
@@ -94,61 +77,28 @@ export const SettingsPage: React.FC = () => {
         <p className="text-muted-foreground text-sm">管理应用通用行为与各工具偏好</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">通用</CardTitle>
-            <CardDescription>应用级基本行为配置</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1">
-            <SettingItem
-              icon={<Rocket size={18} className="text-blue-500" />}
-              title="开机自启"
-              description="系统启动时自动运行 onetool"
-              checked={autoStartEnabled}
-              onCheckedChange={handleAutoStartChange}
-            />
-            <SettingItem
-              icon={<Minimize2 size={18} className="text-purple-500" />}
-              title="最小化到托盘"
-              description="点击关闭按钮时隐藏到托盘"
-              checked={minimizeToTray}
-              onCheckedChange={setMinimizeToTray}
-            />
-          </CardContent>
-        </Card>
-
-        <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">截图设置</CardTitle>
-            <CardDescription>自动化与存储偏好</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-4">
-              <SettingItem
-                icon={<Camera size={18} className="text-cyan-500" />}
-                title="自动保存"
-                description="截图完成后自动写入文件"
-                checked={settings.autoSaveScreenshot}
-                onCheckedChange={(val) => updateSettings({ autoSaveScreenshot: val })}
-              />
-
-              <div className="space-y-2 pt-2">
-                <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">默认保存目录</label>
-                <div className="flex gap-2">
-                  <Input
-                    value={settings.screenshotSavePath}
-                    readOnly
-                    placeholder="系统图片目录 (默认)"
-                    className="rounded-xl border-none bg-muted/50 text-xs font-mono"
-                  />
-                  <Button variant="outline" size="sm" onClick={handleSelectScreenshotPath} className="rounded-xl">更改</Button>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold">通用</CardTitle>
+          <CardDescription>应用级基本行为配置</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-1">
+          <SettingItem
+            icon={<Rocket size={18} className="text-blue-500" />}
+            title="开机自启"
+            description="系统启动时自动运行 onetool"
+            checked={autoStartEnabled}
+            onCheckedChange={handleAutoStartChange}
+          />
+          <SettingItem
+            icon={<Minimize2 size={18} className="text-purple-500" />}
+            title="最小化到托盘"
+            description="点击关闭按钮时隐藏到托盘"
+            checked={minimizeToTray}
+            onCheckedChange={setMinimizeToTray}
+          />
+        </CardContent>
+      </Card>
 
       <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
         <CardHeader>
@@ -186,66 +136,6 @@ export const SettingsPage: React.FC = () => {
         </CardContent>
       </Card>
 
-      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg font-bold">
-            <Languages className="w-5 h-5 text-blue-500" />
-            沉浸式翻译 API (大模型)
-          </CardTitle>
-          <CardDescription>配置用于截图翻译的视觉大模型接口 (推荐使用 gpt-4o 或其他兼容 OpenAI 标准的视觉模型)</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">API URL (Base URL)</label>
-              <Input
-                value={settings.translateApiUrl}
-                onChange={(e) => updateSettings({ translateApiUrl: e.target.value })}
-                placeholder="https://api.openai.com/v1"
-                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">模型名称</label>
-              <Input
-                value={settings.translateModel}
-                onChange={(e) => updateSettings({ translateModel: e.target.value })}
-                placeholder="gpt-4o"
-                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
-              />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">API Key</label>
-              <Input
-                type="password"
-                value={settings.translateApiKey}
-                onChange={(e) => updateSettings({ translateApiKey: e.target.value })}
-                placeholder="sk-..."
-                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg font-bold">
-            <Inbox className="w-5 h-5 text-indigo-500" />
-            文件传送门 (Dropover)
-          </CardTitle>
-          <CardDescription>配置悬浮窗与文件处理逻辑</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SettingItem
-            icon={<Save size={18} className="text-indigo-500" />}
-            title="拖拽后自动移除"
-            description="文件成功拖出到其他应用后，自动从传送门列表中移除"
-            checked={autoRemoveAfterDrag}
-            onCheckedChange={handleAutoRemoveChange}
-          />
-        </CardContent>
-      </Card>
 
       <Card className="border-none shadow-2xl bg-gradient-to-br from-indigo-600 to-purple-700 text-white rounded-[2rem] overflow-hidden">
         <CardContent className="p-8">
@@ -270,7 +160,7 @@ export const SettingsPage: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </div >
   )
 }
 
