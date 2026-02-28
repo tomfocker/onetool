@@ -88,7 +88,6 @@ export const ImageProcessorTool: React.FC = () => {
   const [processingProgress, setProcessingProgress] = useState(0)
   const [processingText, setProcessingText] = useState('')
   const [isDragging, setIsDragging] = useState(false)
-  const [showDropZone, setShowDropZone] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -240,7 +239,6 @@ export const ImageProcessorTool: React.FC = () => {
 
     setIsProcessing(true)
     setProcessingProgress(0)
-    setShowDropZone(false)
     setCurrentSubpage('output')
 
     const newProcessedImages: ProcessedImage[] = []
@@ -345,61 +343,10 @@ export const ImageProcessorTool: React.FC = () => {
     <div className="space-y-3">
       <div className="animate-fade-in-up">
         <h2 className="text-lg font-semibold mb-0.5">图片处理</h2>
-        <p className="text-xs text-muted-foreground">本地压缩、格式转换，保护隐私</p>
+        <p className="text-xs text-muted-foreground italic">💡 请先在下方设置压缩参数，然后再拖入图片即可获得结果</p>
       </div>
 
-      {showDropZone && !isProcessing && (
-        <div
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onClick={() => fileInputRef.current?.click()}
-          className={cn(
-            "relative h-[180px] rounded-lg overflow-hidden cursor-pointer transition-all duration-200 animate-scale-in",
-            "bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20",
-            "border border-border/50",
-            isDragging 
-              ? "border-primary bg-primary/5 scale-[1.01] shadow-md shadow-primary/10" 
-              : "hover:border-primary/30 hover:bg-primary/5"
-          )}
-        >
-          {isDragging && (
-            <div className="absolute inset-0 bg-primary/10 animate-pulse-ring rounded-lg" />
-          )}
 
-          <div className="relative w-full h-full flex items-center justify-center p-4">
-            <div className="text-center flex items-center gap-4">
-              <div className={cn(
-                "w-12 h-12 rounded-lg flex items-center justify-center transition-all duration-200 flex-shrink-0",
-                "bg-gradient-to-br from-primary/10 to-primary/5",
-                isDragging ? "scale-110 animate-float" : ""
-              )}>
-                <svg className="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <div className="text-left">
-                <p className="text-sm font-medium mb-1">
-                  {isDragging ? '松开上传' : '拖放或点击选择图片'}
-                </p>
-                <p className="text-xs text-muted-foreground flex flex-wrap gap-1">
-                  {['jpg', 'png', 'webp', 'gif', 'svg', 'ico'].map(ext => (
-                    <span key={ext} className="px-1.5 py-0.5 bg-muted rounded text-[10px]">{ext}</span>
-                  ))}
-                </p>
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".svg,.gif,.jpg,.jpeg,.png,.webp,.ico"
-                multiple
-                onChange={handleFileInput}
-                className="hidden"
-              />
-            </div>
-          </div>
-        </div>
-      )}
 
       {isProcessing && (
         <Card className="animate-scale-in overflow-hidden">
@@ -461,6 +408,50 @@ export const ImageProcessorTool: React.FC = () => {
 
       {currentSubpage === 'settings' && (
         <div className="space-y-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+          {!isProcessing && (
+            <div
+              onDrop={handleDrop}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onClick={() => fileInputRef.current?.click()}
+              className={cn(
+                "relative h-[160px] rounded-lg overflow-hidden cursor-pointer transition-all duration-200",
+                "bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/20 dark:to-purple-950/20",
+                "border border-border/50",
+                isDragging
+                  ? "border-primary bg-primary/5 scale-[1.01] shadow-md shadow-primary/10"
+                  : "hover:border-primary/30 hover:bg-primary/5"
+              )}
+            >
+              <div className="relative w-full h-full flex items-center justify-center p-4">
+                <div className="text-center flex items-center gap-4">
+                  <div className={cn(
+                    "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 flex-shrink-0",
+                    "bg-gradient-to-br from-primary/10 to-primary/5",
+                    isDragging ? "scale-110 animate-float" : ""
+                  )}>
+                    <svg className="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium mb-0.5">
+                      {isDragging ? '松开即刻处理' : '拖放或点击增加图片'}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">已选参数将自动应用</p>
+                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".svg,.gif,.jpg,.jpeg,.png,.webp,.ico"
+                    multiple
+                    onChange={handleFileInput}
+                    className="hidden"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <Card>
             <CardHeader className="p-4 pb-2">
               <CardTitle className="text-sm">优化方式</CardTitle>
@@ -767,7 +758,6 @@ export const ImageProcessorTool: React.FC = () => {
             variant="outline"
             size="sm"
             onClick={() => {
-              setShowDropZone(true)
               setCurrentSubpage('settings')
             }}
             className="gap-1.5 h-7 text-xs"

@@ -128,7 +128,7 @@ export const AutoClickerTool: React.FC = () => {
   } = useAutoClicker()
 
   const [merits, setMerits] = useState<Merit[]>([])
-  const [ripples, setRipples] = useState<{id: number, x: number, y: number}[]>([])
+  const [ripples, setRipples] = useState<{ id: number, x: number, y: number }[]>([])
   const [meritCount, setMeritCount] = useState(0)
 
   useEffect(() => {
@@ -205,7 +205,7 @@ export const AutoClickerTool: React.FC = () => {
                     {clickInterval}ms
                   </span>
                 </div>
-                
+
                 <div className="px-2">
                   <input
                     type="range"
@@ -236,9 +236,9 @@ export const AutoClickerTool: React.FC = () => {
                   </div>
                   <Label className="text-base font-bold">点击按键</Label>
                 </div>
-                
-                <RadioGroup 
-                  value={button} 
+
+                <RadioGroup
+                  value={button}
                   onValueChange={(val: any) => {
                     setButton(val)
                     updateConfig({ button: val })
@@ -252,8 +252,8 @@ export const AutoClickerTool: React.FC = () => {
                         htmlFor={b}
                         className={cn(
                           "flex flex-col items-center justify-center p-4 rounded-2xl border-2 cursor-pointer transition-all duration-300",
-                          button === b 
-                            ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/30 scale-[1.02]" 
+                          button === b
+                            ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/30 scale-[1.02]"
                             : "border-muted-foreground/10 hover:border-indigo-500/30 bg-muted/30"
                         )}
                       >
@@ -289,39 +289,33 @@ export const AutoClickerTool: React.FC = () => {
         </div>
 
         <div className="lg:col-span-5 space-y-6">
+          {/* 启动/停止控制区 */}
           <button
-            onClick={(e) => { spawnMerit(e); handleToggle(); }}
+            onClick={handleToggle}
             className={cn(
-              "w-full aspect-square rounded-[2.5rem] flex flex-col items-center justify-center gap-6 transition-all duration-500 relative group overflow-hidden border-4",
-              isRunning 
-                ? "bg-gradient-to-br from-indigo-600 to-purple-600 border-indigo-400 running-glow" 
-                : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 hover:border-purple-500/30"
+              "w-full py-10 rounded-[2.5rem] flex flex-col items-center justify-center gap-4 transition-all duration-500 relative group overflow-hidden border-4",
+              isRunning
+                ? "bg-gradient-to-br from-indigo-600 to-purple-600 border-indigo-400 running-glow"
+                : "bg-white dark:bg-zinc-900 border-zinc-100 dark:border-zinc-800 hover:border-purple-500/30 shadow-xl"
             )}
           >
-            {ripples.map(r => (
-              <div key={r.id} className="ripple-effect" style={{ left: r.x, top: r.y }} />
-            ))}
-            {merits.map(m => (
-              <span key={m.id} className="merit-text" style={{ left: m.x, top: m.y }}>{m.text}</span>
-            ))}
-
             <div className={cn(
-              "w-24 h-24 rounded-3xl flex items-center justify-center transition-all duration-500",
-              isRunning ? "bg-white/20 rotate-180" : "bg-purple-500/10"
+              "w-20 h-20 rounded-3xl flex items-center justify-center transition-all duration-500",
+              isRunning ? "bg-white/20 rotate-180 shadow-inner" : "bg-purple-500/10 shadow-sm"
             )}>
               {isRunning ? (
-                <Square className="w-10 h-10 text-white fill-white" />
+                <Square className="w-8 h-8 text-white fill-white" />
               ) : (
-                <Zap className="w-10 h-10 text-purple-500 fill-purple-500" />
+                <Play className="w-8 h-8 text-purple-500 fill-purple-500" />
               )}
             </div>
-            
+
             <div className="space-y-1 text-center">
-              <div className={cn("text-2xl font-black transition-colors duration-500", isRunning ? "text-white" : "text-foreground")}>
-                {isRunning ? "正在极速点击" : "启动连点引擎"}
+              <div className={cn("text-xl font-black transition-colors duration-500", isRunning ? "text-white" : "text-foreground")}>
+                {isRunning ? "连点引擎运行中" : "启动连点引擎"}
               </div>
-              <div className={cn("text-sm font-bold opacity-60", isRunning ? "text-white" : "text-muted-foreground")}>
-                {isRunning ? "点击按钮停止" : "或按快捷键启动"}
+              <div className={cn("text-xs font-bold opacity-60", isRunning ? "text-white" : "text-muted-foreground")}>
+                {isRunning ? "点击按钮或按快捷键停止" : "点击按钮或按快捷键启动"}
               </div>
             </div>
 
@@ -334,6 +328,33 @@ export const AutoClickerTool: React.FC = () => {
             )}
           </button>
 
+          {/* 模拟测试区 */}
+          <Card
+            className="glass-card border-none rounded-3xl overflow-hidden cursor-pointer relative h-[240px] group active:scale-[0.98] transition-all duration-150"
+            onClick={spawnMerit}
+          >
+            <div className="absolute inset-0 flex flex-col items-center justify-center p-6 text-center select-none">
+              {ripples.map(r => (
+                <div key={r.id} className="ripple-effect" style={{ left: r.x, top: r.y }} />
+              ))}
+              {merits.map(m => (
+                <span key={m.id} className="merit-text" style={{ left: m.x, top: m.y }}>{m.text}</span>
+              ))}
+
+              <div className="p-4 bg-purple-500/10 rounded-2xl mb-3 group-hover:scale-110 transition-transform duration-300">
+                <Zap className="w-8 h-8 text-purple-500 fill-purple-500" />
+              </div>
+              <h4 className="font-black text-sm mb-1 uppercase tracking-tight">点击此处进行测试</h4>
+              <p className="text-[10px] text-muted-foreground font-bold opacity-60">
+                累计点击: <span className="text-purple-500">{meritCount}</span> 次
+              </p>
+              <div className="mt-4 px-3 py-1 bg-muted/50 rounded-full border border-border/50 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                <span className="text-[9px] font-black text-muted-foreground uppercase tracking-widest">测试点击反馈及速度</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* 快捷键设置区 */}
           <Card className="glass-card border-none rounded-3xl p-6">
             <div className="space-y-4">
               <div className="flex items-center justify-between mb-2">
@@ -348,14 +369,14 @@ export const AutoClickerTool: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               <div className="relative group">
-                <div 
+                <div
                   onClick={() => setIsListeningShortcut(true)}
                   className={cn(
                     "w-full h-14 rounded-2xl flex items-center justify-center font-mono font-black text-lg transition-all duration-300 cursor-pointer border-2",
-                    isListeningShortcut 
-                      ? "bg-purple-500/10 border-purple-500 text-purple-500 scale-[1.02] shadow-lg shadow-purple-500/10" 
+                    isListeningShortcut
+                      ? "bg-purple-500/10 border-purple-500 text-purple-500 scale-[1.02] shadow-lg shadow-purple-500/10"
                       : "bg-muted/50 border-border text-muted-foreground hover:bg-muted"
                   )}
                 >
@@ -367,7 +388,7 @@ export const AutoClickerTool: React.FC = () => {
                   </div>
                 )}
               </div>
-              
+
               <p className="text-[10px] font-bold text-muted-foreground/60 text-center uppercase tracking-widest">
                 {isListeningShortcut ? "按下组合键完成设置" : "点击上方框块修改快捷键"}
               </p>
