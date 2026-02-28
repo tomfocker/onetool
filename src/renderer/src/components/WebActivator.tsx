@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react'
-import { Globe, Plus, Trash2, Edit2, Check, X, Keyboard, Eye, EyeOff, RefreshCw, Monitor, Layout, Search, Command, ArrowRight, AppWindow, Box } from 'lucide-react'
+import { Globe, Plus, Trash2, Edit2, X, Keyboard, ArrowRight, AppWindow, Box, Search, Command, Layout } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,10 +43,10 @@ const WebActivator: React.FC = () => {
     if (e.ctrlKey) modifiers.push('CommandOrControl')
     if (e.altKey) modifiers.push('Alt')
     if (e.shiftKey) modifiers.push('Shift')
-    
+
     let key = e.key.toUpperCase()
     if (['CONTROL', 'ALT', 'SHIFT', 'META'].includes(key)) return
-    
+
     // 处理特殊按键
     if (key === ' ') key = 'Space'
     if (key === 'ARROWUP') key = 'Up'
@@ -129,8 +129,8 @@ const WebActivator: React.FC = () => {
     setShowPicker(false)
   }
 
-  const filteredWindows = windowList.filter(w => 
-    w.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+  const filteredWindows = windowList.filter(w =>
+    w.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
     w.processName.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
@@ -155,13 +155,13 @@ const WebActivator: React.FC = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex bg-muted/50 p-1 rounded-xl">
-                <button 
+                <button
                   onClick={() => setActiveTab('app')}
                   className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'app' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
                 >
                   <AppWindow className="w-3.5 h-3.5 inline mr-1.5" /> 本地应用
                 </button>
-                <button 
+                <button
                   onClick={() => setActiveTab('tab')}
                   className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'tab' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
                 >
@@ -172,30 +172,30 @@ const WebActivator: React.FC = () => {
               <div className="space-y-3 pt-2">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">显示名称</label>
-                  <Input 
-                    placeholder="例如：开发文档" 
-                    value={newForm.name} 
-                    onChange={e => setNewForm({...newForm, name: e.target.value})}
+                  <Input
+                    placeholder="例如：开发文档"
+                    value={newForm.name}
+                    onChange={e => setNewForm({ ...newForm, name: e.target.value })}
                     className="rounded-xl border-none bg-muted/50 focus-visible:ring-blue-500"
                   />
                 </div>
-                
+
                 <div className="space-y-1.5">
                   <div className="flex justify-between items-center px-1">
                     <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider">匹配模式 (正则)</label>
                     <button onClick={() => setShowPicker(true)} className="text-[10px] font-bold text-blue-500 hover:underline">从当前打开项选取</button>
                   </div>
-                  <Input 
-                    placeholder={activeTab === 'app' ? "例如：Code.exe" : "例如：Github"} 
-                    value={newForm.pattern} 
-                    onChange={e => setNewForm({...newForm, pattern: e.target.value})}
+                  <Input
+                    placeholder={activeTab === 'app' ? "例如：Code.exe" : "例如：Github"}
+                    value={newForm.pattern}
+                    onChange={e => setNewForm({ ...newForm, pattern: e.target.value })}
                     className="rounded-xl border-none bg-muted/50 focus-visible:ring-blue-500 font-mono text-xs"
                   />
                 </div>
 
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">全局快捷键</label>
-                  <div 
+                  <div
                     onClick={() => setIsListeningShortcut('new')}
                     className={cn(
                       "w-full h-10 rounded-xl flex items-center justify-center font-mono font-bold text-sm cursor-pointer border-2 transition-all",
@@ -207,7 +207,7 @@ const WebActivator: React.FC = () => {
                   </div>
                 </div>
 
-                <Button 
+                <Button
                   className="w-full mt-4 rounded-xl font-bold bg-blue-600 hover:bg-blue-700 shadow-lg shadow-blue-500/20"
                   onClick={handleAddNew}
                   disabled={!newForm.name || !newForm.pattern}
@@ -277,8 +277,8 @@ const WebActivator: React.FC = () => {
                       </div>
                     </div>
 
-                    <Button 
-                      variant={config.isActive ? "default" : "outline"} 
+                    <Button
+                      variant={config.isActive ? "default" : "outline"}
                       className={cn("mt-auto rounded-xl font-black text-xs h-10 border-2 transition-all", config.isActive ? "bg-blue-500 hover:bg-blue-600 border-transparent shadow-lg shadow-blue-500/20" : "hover:bg-blue-500/5 hover:border-blue-500/30 hover:text-blue-500")}
                       onClick={() => toggleTarget(config)}
                     >
@@ -306,9 +306,9 @@ const WebActivator: React.FC = () => {
               </div>
               <div className="relative mt-4">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4" />
-                <Input 
-                  placeholder="搜索窗口标题或进程名..." 
-                  value={searchTerm} 
+                <Input
+                  placeholder="搜索窗口标题或进程名..."
+                  value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   className="pl-10 rounded-2xl border-none bg-muted focus-visible:ring-blue-500"
                 />
@@ -319,7 +319,7 @@ const WebActivator: React.FC = () => {
                 <div className="py-20 text-center text-muted-foreground font-medium">未找到匹配项</div>
               ) : (
                 filteredWindows.map((win, idx) => (
-                  <div 
+                  <div
                     key={`${win.id}-${idx}`}
                     onClick={() => pickFromList(win)}
                     className="group flex items-center justify-between p-4 rounded-2xl hover:bg-blue-500/5 border-2 border-transparent hover:border-blue-500/20 cursor-pointer transition-all"
@@ -351,15 +351,15 @@ const WebActivator: React.FC = () => {
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">显示名称</label>
-                <Input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500" />
+                <Input value={editForm.name} onChange={e => setEditForm({ ...editForm, name: e.target.value })} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">匹配模式</label>
-                <Input value={editForm.pattern} onChange={e => setEditForm({...editForm, pattern: e.target.value})} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500 font-mono text-xs" />
+                <Input value={editForm.pattern} onChange={e => setEditForm({ ...editForm, pattern: e.target.value })} className="rounded-xl border-none bg-muted focus-visible:ring-blue-500 font-mono text-xs" />
               </div>
               <div className="space-y-1.5">
                 <label className="text-[10px] font-black text-muted-foreground uppercase ml-1">快捷键</label>
-                <div 
+                <div
                   onClick={() => setIsListeningShortcut('edit')}
                   className={cn(
                     "w-full h-10 rounded-xl flex items-center justify-center font-mono font-bold text-sm cursor-pointer border-2",

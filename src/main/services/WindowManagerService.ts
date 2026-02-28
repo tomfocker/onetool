@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme, Tray, Menu, nativeImage, NativeImage, app, shell } from 'electron'
+import { BrowserWindow, Tray, Menu, NativeImage, nativeImage, app } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import fs from 'fs'
@@ -10,7 +10,7 @@ export class WindowManagerService {
   private tray: Tray | null = null
   private isQuitting = false
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -92,17 +92,17 @@ export class WindowManagerService {
   }
 
   createTray(): void {
-    const iconPath = app.isPackaged 
+    const iconPath = app.isPackaged
       ? join(process.resourcesPath, 'icon.png')
       : join(__dirname, '../../../resources/icon.png')
-    
+
     let icon: NativeImage
     if (fs.existsSync(iconPath)) {
       icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
     } else {
       icon = nativeImage.createEmpty()
     }
-    
+
     this.tray = new Tray(icon)
     const contextMenu = Menu.buildFromTemplate([
       { label: '显示主窗口', click: () => this.mainWindow?.show() },
@@ -110,7 +110,7 @@ export class WindowManagerService {
       { type: 'separator' },
       { label: '退出程序', click: () => { this.isQuitting = true; app.quit() } }
     ])
-    
+
     this.tray.setToolTip('onetool')
     this.tray.setContextMenu(contextMenu)
     this.tray.on('double-click', () => {

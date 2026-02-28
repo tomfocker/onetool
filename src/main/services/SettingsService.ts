@@ -28,14 +28,22 @@ export class SettingsService extends EventEmitter {
     return path.join(userDataPath, 'settings.json')
   }
 
+  private saveTimer: NodeJS.Timeout | null = null
   saveSettings(): void {
-    try {
-      const settingsPath = this.getSettingsPath()
-      fs.writeFileSync(settingsPath, JSON.stringify(this.settings, null, 2))
-      this.emit('changed', this.settings)
-    } catch (error) {
-      console.error('SettingsService: Failed to save settings:', error)
+    this.emit('changed', this.settings)
+
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer)
     }
+
+    this.saveTimer = setTimeout(async () => {
+      try {
+        const settingsPath = this.getSettingsPath()
+        await fs.promises.writeFile(settingsPath, JSON.stringify(this.settings, null, 2))
+      } catch (error) {
+        console.error('SettingsService: Failed to save settings asynchronously:', error)
+      }
+    }, 1000)
   }
 
   loadSettings(): void {

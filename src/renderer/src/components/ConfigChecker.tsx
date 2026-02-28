@@ -1,21 +1,17 @@
 import React, { useState, useEffect } from 'react'
-import { 
-  Cpu, 
-  HardDrive, 
-  Monitor, 
-  Wifi, 
-  Volume2,
+import {
+  Cpu,
+  Monitor,
   CircuitBoard,
   MemoryStick,
-  Copy,
   Check,
   Loader2,
   RefreshCw,
   Fingerprint,
-  MonitorSmartphone
+  MonitorSmartphone,
+  Copy
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
 
 // 全球主流硬件品牌映射表 (具有普适性)
 const dictionary: Record<string, string> = {
@@ -46,7 +42,7 @@ const dictionary: Record<string, string> = {
   'Philips': '飞利浦 (Philips)',
   'ViewSonic': '优派 (ViewSonic)',
   'Microsoft': '微软',
-  
+
   // 硬件术语
   'SSD': '固态硬盘',
   'HDD': '机械硬盘',
@@ -58,7 +54,7 @@ const dictionary: Record<string, string> = {
 const t = (str: string): string => {
   if (!str || str === 'Unknown') return ''
   let res = str.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim()
-  
+
   // 尝试匹配并替换已知品牌
   Object.keys(dictionary).forEach(key => {
     const regex = new RegExp(`(^|\\s|\\()${key}`, 'gi')
@@ -92,7 +88,7 @@ const formatMonitor = (val: string) => {
     let brand = dictionary[id.toUpperCase()] || (id !== 'Unknown' ? id : '')
     let model = t(name) || name
     let resStr = resolution ? ` [${resolution} 物理像素]` : ''
-    
+
     // 品牌和型号去重显示
     if (brand && model.toLowerCase().includes(brand.toLowerCase().split(' ')[0].toLowerCase())) {
       return `${model}${resStr}`.trim()
@@ -133,7 +129,7 @@ export const ConfigChecker: React.FC = () => {
 
   const renderValue = (key: string, value: string | undefined) => {
     if (!value || loading) return <span className="opacity-20 blur-sm">审计进行中...</span>
-    
+
     const lines = value.split('\n').filter(l => l.trim() !== '')
     const formatLine = (line: string) => {
       if (key === 'memory') return formatRAM(line)
@@ -142,7 +138,7 @@ export const ConfigChecker: React.FC = () => {
     }
 
     if (lines.length <= 1) return <span className="block leading-relaxed">{formatLine(value)}</span>
-    
+
     return (
       <ul className="space-y-3 mt-1">
         {lines.map((line, i) => (
@@ -160,7 +156,6 @@ export const ConfigChecker: React.FC = () => {
     { id: 'motherboard', label: '主板芯片组', icon: CircuitBoard },
     { id: 'gpu', label: '图形适配器', icon: MonitorSmartphone },
     { id: 'memory', label: '运行内存堆栈', icon: MemoryStick },
-    { id: 'disk', label: '存储矩阵', icon: HardDrive },
     { id: 'monitor', label: '显示终端', icon: Monitor }
   ]
 
@@ -178,7 +173,7 @@ export const ConfigChecker: React.FC = () => {
             </p>
           </div>
         </div>
-        
+
         <div className="flex items-center gap-3">
           <Button onClick={fetchConfig} disabled={loading} variant="ghost" className="h-10 px-5 rounded-full text-xs font-bold text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 border border-transparent hover:border-zinc-200 dark:hover:border-zinc-700 transition-all">
             {loading ? <Loader2 size={14} className="animate-spin mr-2" /> : <RefreshCw size={14} className="mr-2" />}

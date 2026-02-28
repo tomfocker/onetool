@@ -1,14 +1,11 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  Package, Terminal, Mic, MousePointer, Sparkles, Clock,
-  Search, Filter, Download, Check, RefreshCw, Cloud, HardDrive,
+  Package, Terminal, Mic, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
-  Zap, ArrowRight, LayoutGrid, Star, History, Info, Languages, Camera, Inbox, Radar
+  Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera, Inbox, Radar
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useToolUsage, ToolUsage } from '@/lib/useToolUsage'
@@ -75,8 +72,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '
 
   const filteredTools = useMemo(() => {
     return tools.filter(tool => {
-      const matchesSearch = tool.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                           tool.description.toLowerCase().includes(searchTerm.toLowerCase())
+      const matchesSearch = tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        tool.description.toLowerCase().includes(searchTerm.toLowerCase())
       const matchesCategory = selectedCategory === '全部' || tool.category === selectedCategory
       return matchesSearch && matchesCategory
     })
@@ -127,8 +124,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '
                     onClick={() => setSelectedCategory(cat)}
                     className={cn(
                       "px-4 py-1.5 rounded-full text-xs font-black transition-all whitespace-nowrap border-2",
-                      selectedCategory === cat 
-                        ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/20" 
+                      selectedCategory === cat
+                        ? "bg-indigo-500 border-indigo-500 text-white shadow-lg shadow-indigo-500/20"
                         : "border-transparent bg-muted/50 text-muted-foreground hover:bg-muted"
                     )}
                   >
@@ -143,8 +140,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '
                 const Icon = iconMap[tool.icon] || Package
                 const gradient = toolGradientMap[tool.id] || 'from-zinc-500 to-zinc-600'
                 return (
-                  <Card 
-                    key={tool.id} 
+                  <Card
+                    key={tool.id}
                     onClick={() => handleToolClick(tool)}
                     className="glass-card group cursor-pointer border-none transition-all duration-500 hover:scale-[1.02] hover:shadow-indigo-500/10"
                   >

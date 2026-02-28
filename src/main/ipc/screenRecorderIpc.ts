@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { screenRecorderService } from '../services/ScreenRecorderService'
+import { ScreenRecorderConfigSchema } from '../../shared/ipc-schemas'
 
 export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | null) {
   ipcMain.handle('screen-recorder-select-output', async () => {
@@ -11,7 +12,12 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
   })
 
   ipcMain.handle('screen-recorder-start', async (_event, config) => {
-    return screenRecorderService.start(config)
+    try {
+      const validConfig = ScreenRecorderConfigSchema.parse(config)
+      return screenRecorderService.start(validConfig)
+    } catch (e: any) {
+      return { success: false, error: 'Invalid configuration for screen recorder: ' + e.message }
+    }
   })
 
   ipcMain.handle('screen-recorder-stop', async () => {

@@ -1,7 +1,7 @@
 import React from 'react'
 import { Search, Sun, Moon } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { useTheme } from '@/context/ThemeContext'
+import { useGlobalStore } from '@/store'
 import { cn } from '@/lib/utils'
 
 interface HeaderProps {
@@ -10,18 +10,19 @@ interface HeaderProps {
   onSearchChange?: (value: string) => void
 }
 
-export const Header: React.FC<HeaderProps> = ({ 
-  showSearch = true, 
-  searchQuery = '', 
-  onSearchChange 
+export const Header: React.FC<HeaderProps> = ({
+  showSearch = true,
+  searchQuery = '',
+  onSearchChange
 }) => {
-  const { theme, toggleTheme } = useTheme()
+  const theme = useGlobalStore(state => state.theme)
+  const toggleTheme = useGlobalStore(state => state.toggleTheme)
 
   return (
     <header className={cn(
       'h-12 fixed top-8 left-64 right-0 flex items-center px-6 z-20 transition-all duration-300',
-      showSearch 
-        ? 'bg-white/60 dark:bg-[#2a2d35]/80 backdrop-blur-xl border-b border-white/20 dark:border-white/10 shadow-soft-sm' 
+      showSearch
+        ? 'bg-white/60 dark:bg-[#2a2d35]/80 backdrop-blur-xl border-b border-white/20 dark:border-white/10 shadow-soft-sm'
         : 'bg-transparent border-none shadow-none pointer-events-none'
     )}>
       <div className={cn('flex-1 max-w-xl pointer-events-auto', !showSearch && 'invisible')}>

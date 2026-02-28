@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Rocket, Moon, Minimize2, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react'
+import { Rocket, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -58,7 +58,7 @@ export const SettingsPage: React.FC = () => {
       }
     }
     checkAutoStart()
-    
+
     const savedAutoRemove = localStorage.getItem('floatball-autoRemoveAfterDrag')
     if (savedAutoRemove !== null) setAutoRemoveAfterDrag(savedAutoRemove === 'true')
   }, [])
@@ -132,13 +132,13 @@ export const SettingsPage: React.FC = () => {
                 checked={settings.autoSaveScreenshot}
                 onCheckedChange={(val) => updateSettings({ autoSaveScreenshot: val })}
               />
-              
+
               <div className="space-y-2 pt-2">
                 <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">默认保存目录</label>
                 <div className="flex gap-2">
-                  <Input 
-                    value={settings.screenshotSavePath} 
-                    readOnly 
+                  <Input
+                    value={settings.screenshotSavePath}
+                    readOnly
                     placeholder="系统图片目录 (默认)"
                     className="rounded-xl border-none bg-muted/50 text-xs font-mono"
                   />

@@ -38,11 +38,34 @@ class Logger {
       console.log(logEntry)
     }
 
-    // Persist to file
+    // Persist to file asynchronously
+    this.queueLog(logEntry)
+  }
+
+  private isWriting = false;
+  private logQueue: string[] = [];
+
+  private async queueLog(logEntry: string) {
+    this.logQueue.push(logEntry);
+    this.processQueue();
+  }
+
+  private async processQueue() {
+    if (this.isWriting || this.logQueue.length === 0) return;
+    
+    this.isWriting = true;
+    const entriesToWrite = this.logQueue.splice(0, this.logQueue.length);
+    const contentToWrite = entriesToWrite.join('');
+
     try {
-      fs.appendFileSync(this.logPath, logEntry)
+      await fs.promises.appendFile(this.logPath, contentToWrite);
     } catch (e) {
-      console.error('Failed to write to log file:', e)
+      console.error('Failed to write to log file:', e);
+      // Optional: push back to queue on failure if strict logging is required
+      // this.logQueue.unshift(...entriesToWrite);
+    } finally {
+      this.isWriting = false;
+      this.processQueue();
     }
   }
 

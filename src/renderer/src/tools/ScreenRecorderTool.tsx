@@ -1,5 +1,4 @@
 import React, { useEffect, useCallback, useState } from 'react'
-import { useTheme } from '@/context/ThemeContext'
 import { useScreenRecorder } from '../hooks/useScreenRecorder'
 import { useRecorderSelection } from '../hooks/useRecorderSelection'
 
@@ -47,9 +46,8 @@ const styles = `
 `
 
 export const ScreenRecorderTool: React.FC = () => {
-  const { theme } = useTheme()
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
-  
+
   const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type })
     setTimeout(() => setToast(null), 3000)
@@ -185,11 +183,10 @@ export const ScreenRecorderTool: React.FC = () => {
                 <button
                   key={mode}
                   onClick={() => handleModeChange(mode)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${
-                    recordingMode === mode 
-                      ? 'border-red-500 bg-red-500/5 text-red-500 shadow-lg shadow-red-500/10' 
-                      : 'border-white/10 hover:border-white/30 bg-white/5'
-                  }`}
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${recordingMode === mode
+                    ? 'border-red-500 bg-red-500/5 text-red-500 shadow-lg shadow-red-500/10'
+                    : 'border-white/10 hover:border-white/30 bg-white/5'
+                    }`}
                 >
                   <span className="text-2xl">
                     {mode === 'full' ? '🖥️' : mode === 'area' ? '📐' : '🪟'}
@@ -211,14 +208,12 @@ export const ScreenRecorderTool: React.FC = () => {
                     <button
                       key={win.id}
                       onClick={() => setSelectedWindow(win)}
-                      className={`group relative rounded-lg overflow-hidden border-2 transition-all ${
-                        selectedWindow?.id === win.id ? 'border-red-500 shadow-md' : 'border-transparent hover:border-white/20'
-                      }`}
+                      className={`group relative rounded-lg overflow-hidden border-2 transition-all ${selectedWindow?.id === win.id ? 'border-red-500 shadow-md' : 'border-transparent hover:border-white/20'
+                        }`}
                     >
                       <img src={win.thumbnail} alt={win.name} className="w-full aspect-video object-cover" />
-                      <div className={`absolute inset-0 bg-black/60 flex items-end p-2 transition-opacity ${
-                        selectedWindow?.id === win.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                      }`}>
+                      <div className={`absolute inset-0 bg-black/60 flex items-end p-2 transition-opacity ${selectedWindow?.id === win.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                        }`}>
                         <p className="text-[10px] text-white truncate w-full">{win.name}</p>
                       </div>
                     </button>
@@ -278,9 +273,8 @@ export const ScreenRecorderTool: React.FC = () => {
                         <button
                           key={opt.value}
                           onClick={() => setFormat(opt.value as any)}
-                          className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${
-                            format === opt.value ? 'bg-red-500 text-white shadow-sm' : 'hover:bg-white/5'
-                          }`}
+                          className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${format === opt.value ? 'bg-red-500 text-white shadow-sm' : 'hover:bg-white/5'
+                            }`}
                         >
                           {opt.label}
                         </button>
@@ -308,9 +302,8 @@ export const ScreenRecorderTool: React.FC = () => {
                       <button
                         key={opt.value}
                         onClick={() => setQuality(opt.value as any)}
-                        className={`py-2 rounded-lg text-xs font-medium border-2 transition-all ${
-                          quality === opt.value ? 'border-red-500 bg-red-500/5 text-red-500' : 'border-white/5 bg-white/5 hover:border-white/20'
-                        }`}
+                        className={`py-2 rounded-lg text-xs font-medium border-2 transition-all ${quality === opt.value ? 'border-red-500 bg-red-500/5 text-red-500' : 'border-white/5 bg-white/5 hover:border-white/20'
+                          }`}
                       >
                         {opt.label}
                       </button>
@@ -330,7 +323,7 @@ export const ScreenRecorderTool: React.FC = () => {
                     <span className="text-sm font-medium">开始/停止录制</span>
                     <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">全局生效</span>
                   </div>
-                  
+
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <input
@@ -338,9 +331,8 @@ export const ScreenRecorderTool: React.FC = () => {
                         value={isRecordingHotkey ? '正在录入...' : recorderHotkey.replace('CommandOrControl+', 'Ctrl+')}
                         readOnly
                         onClick={() => setIsRecordingHotkey(true)}
-                        className={`w-full bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${
-                          isRecordingHotkey ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-500 scale-[1.02]' : 'border-white/10 hover:border-white/30'
-                        }`}
+                        className={`w-full bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-500 scale-[1.02]' : 'border-white/10 hover:border-white/30'
+                          }`}
                       />
                       {!isRecordingHotkey && (
                         <div className="absolute top-1/2 -translate-y-1/2 right-3 text-white/20">
@@ -356,7 +348,7 @@ export const ScreenRecorderTool: React.FC = () => {
                       {isSavingHotkey ? '...' : '保存'}
                     </button>
                   </div>
-                  
+
                   <p className="text-[10px] text-muted-foreground text-center italic">
                     {isRecordingHotkey ? '请在键盘上按下组合键' : '点击输入框可重新设置快捷键'}
                   </p>
@@ -380,11 +372,10 @@ export const ScreenRecorderTool: React.FC = () => {
           <div className="pt-4">
             <button
               onClick={handleToggleRecording}
-              className={`w-full py-6 rounded-2xl font-bold text-xl transition-all duration-500 flex items-center justify-center gap-4 group ${
-                isRecording 
-                  ? 'bg-red-500 text-white animate-pulse-glow shadow-2xl shadow-red-500/40' 
-                  : 'bg-white hover:bg-gray-100 text-black shadow-xl hover:shadow-2xl'
-              }`}
+              className={`w-full py-6 rounded-2xl font-bold text-xl transition-all duration-500 flex items-center justify-center gap-4 group ${isRecording
+                ? 'bg-red-500 text-white animate-pulse-glow shadow-2xl shadow-red-500/40'
+                : 'bg-white hover:bg-gray-100 text-black shadow-xl hover:shadow-2xl'
+                }`}
             >
               {isRecording ? (
                 <>
@@ -423,9 +414,8 @@ export const ScreenRecorderTool: React.FC = () => {
       </div>
 
       {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg animate-slide-in-right z-50 ${
-          toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
-        }`}>
+        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg animate-slide-in-right z-50 ${toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
+          }`}>
           <div className="flex items-center gap-2 text-white">
             {toast.type === 'success' ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -448,12 +438,12 @@ export const RecorderSelectionOverlay: React.FC = () => {
   const { rect, onStart, onMove, onEnd } = useRecorderSelection()
 
   return (
-    <div 
+    <div
       className="fixed inset-0 z-[9999] cursor-crosshair select-none overflow-hidden bg-transparent"
-      style={{ 
-        width: '100vw', 
+      style={{
+        width: '100vw',
         height: '100vh',
-        backgroundColor: rect ? 'transparent' : 'rgba(0,0,0,0.2)' 
+        backgroundColor: rect ? 'transparent' : 'rgba(0,0,0,0.2)'
       }}
       onMouseDown={onStart}
       onMouseMove={onMove}
@@ -465,7 +455,7 @@ export const RecorderSelectionOverlay: React.FC = () => {
       </div>
 
       {rect && (
-        <div 
+        <div
           className="absolute border-2 border-red-500 bg-transparent transition-none"
           style={{
             left: rect.x,

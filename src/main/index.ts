@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, nativeImage, globalShortcut, nativeTheme, NativeImage } from 'electron'
+import { app, shell, BrowserWindow, nativeImage, globalShortcut, NativeImage } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import fs from 'fs'
@@ -6,7 +6,6 @@ import path from 'path'
 
 // Import Services
 import { settingsService } from './services/SettingsService'
-import { storeService } from './services/StoreService'
 import { doctorService } from './services/DoctorService'
 import { autoClickerService } from './services/AutoClickerService'
 import { capsWriterService } from './services/CapsWriterService'
@@ -14,13 +13,9 @@ import { clipboardService } from './services/ClipboardService'
 import { hotkeyService } from './services/HotkeyService'
 import { colorPickerService } from './services/ColorPickerService'
 import { webActivatorService } from './services/WebActivatorService'
-import { networkService } from './services/NetworkService'
-import { renameService } from './services/RenameService'
 import { quickInstallerService } from './services/QuickInstallerService'
 import { screenOverlayService } from './services/ScreenOverlayService'
 import { screenRecorderService } from './services/ScreenRecorderService'
-import { screenSaverService } from './services/ScreenSaverService'
-import { systemService } from './services/SystemService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
 
@@ -45,10 +40,10 @@ import { registerWindowIpc } from './ipc/windowIpc'
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  const iconPath = app.isPackaged 
+  const iconPath = app.isPackaged
     ? path.join(process.resourcesPath, 'icon.png')
     : path.join(__dirname, '../../resources/icon.png')
-  
+
   let windowIcon: NativeImage | undefined
   if (fs.existsSync(iconPath)) {
     windowIcon = nativeImage.createFromPath(iconPath)
@@ -134,7 +129,7 @@ if (!gotTheLock) {
 
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.onetool')
-  
+
   settingsService.loadSettings()
   screenRecorderService.initFfmpeg()
 
@@ -180,7 +175,7 @@ app.whenReady().then(() => {
   createWindow()
   // windowManagerService.createTray() // Optional: enable if tray is needed
   windowManagerService.createFloatBallWindow()
-  
+
   autoClickerService.registerShortcuts()
   // clipboardService.startWatcher() // 移除此处的重复调用，改为在 ready-to-show 后启动
   hotkeyService.registerRecorderShortcut()

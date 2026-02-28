@@ -1,10 +1,16 @@
 import { ipcMain } from 'electron'
 import { screenshotService } from '../services/ScreenshotService'
 import { settingsService } from '../services/SettingsService'
+import { ScreenshotCaptureSchema, ScreenshotSettingsSchema } from '../../shared/ipc-schemas'
 
 export function registerScreenshotIpc() {
   ipcMain.handle('screenshot-capture', async (_event, bounds) => {
-    return screenshotService.capture(bounds)
+    try {
+      const validBounds = ScreenshotCaptureSchema.parse(bounds)
+      return screenshotService.capture(validBounds)
+    } catch (e: any) {
+      return { success: false, error: 'Invalid bounds for screenshot: ' + e.message }
+    }
   })
 
   ipcMain.handle('screenshot-settings-get', async () => {
@@ -18,9 +24,14 @@ export function registerScreenshotIpc() {
     }
   })
 
-  ipcMain.handle('screenshot-settings-set', async (_event, { savePath, autoSave }) => {
-    settingsService.updateSettings({ screenshotSavePath: savePath, autoSaveScreenshot: autoSave })
-    return { success: true }
+  ipcMain.handle('screenshot-settings-set', async (_event, params) => {
+    try {
+      const { savePath, autoSave } = ScreenshotSettingsSchema.parse(params)
+      settingsService.updateSettings({ screenshotSavePath: savePath, autoSaveScreenshot: autoSave })
+      return { success: true }
+    } catch (e: any) {
+      return { success: false, error: 'Invalid settings for screenshot: ' + e.message }
+    }
   })
 
   ipcMain.handle('save-image', async (_event, dataUrl, customPath) => {

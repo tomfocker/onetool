@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
 import { IpcResponse } from '../../shared/types'
 import { logger } from '../utils/logger'
@@ -8,7 +8,7 @@ export class QuickInstallerService {
   private mainWindow: BrowserWindow | null = null
   private isInstalling = false
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -25,7 +25,7 @@ export class QuickInstallerService {
     try {
       for (let i = 0; i < softwareList.length; i++) {
         const software = softwareList[i]
-        
+
         // Notify progress
         if (this.mainWindow) {
           this.mainWindow.webContents.send('quick-installer-progress', {
@@ -40,7 +40,7 @@ export class QuickInstallerService {
         }
 
         const success = await this.runWingetInstall(software)
-        
+
         if (this.mainWindow) {
           this.mainWindow.webContents.send('quick-installer-log', {
             type: success ? 'success' : 'error',
@@ -79,9 +79,9 @@ export class QuickInstallerService {
   private runWingetInstall(software: { id: string; name: string }): Promise<boolean> {
     return new Promise((resolve) => {
       const args = ['install', '--id', software.id, '--silent', '--accept-package-agreements', '--accept-source-agreements']
-      
+
       logger.info(`QuickInstaller: Executing winget ${args.join(' ')}`)
-      
+
       const winget = spawn('winget', args, { windowsHide: true })
       processRegistry.register(winget)
 

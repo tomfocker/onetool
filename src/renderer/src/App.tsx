@@ -1,6 +1,4 @@
 import React, { useState, useLayoutEffect, Suspense, useMemo, useCallback } from 'react'
-import { ThemeProvider } from '@/context/ThemeContext'
-import { NotificationProvider } from '@/context/NotificationContext'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
 import { TitleBar } from '@/components/TitleBar'
@@ -10,19 +8,12 @@ import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
+import { NotificationContainer } from '@/components/NotificationContainer'
 
-// 动态导入组件的辅助函数
-const loadToolComponent = (path: string) => {
-  if (path.startsWith('../components/')) {
-    const componentName = path.split('/').pop();
-    // 针对 components 目录的动态映射
-    if (componentName === 'ConfigChecker') return React.lazy(() => import('./components/ConfigChecker'));
-    if (componentName === 'WebActivator') return React.lazy(() => import('./components/WebActivator'));
-    if (componentName === 'SettingsPage') return React.lazy(() => import('./components/SettingsPage'));
-  }
-  // 针对 tools 目录的动态导入
-  return React.lazy(() => import(`./tools/${path}`));
-};
+// 自动收集 components 和 tools 目录下的所有常规页面和工具组件
+// 使用 eager: false 保持代码分割懒加载策略
+const componentModules = import.meta.glob('./components/*.tsx')
+const toolModules = import.meta.glob('./tools/*.tsx')
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
@@ -36,16 +27,35 @@ function AppContent(): React.JSX.Element {
     setRetryKey(prev => prev + 1)
   }, [])
 
-  // 预加载所有工具组件映射
+  // 通过 import.meta.glob 自动挂载工具路由，不再使用硬编码和危险的模板字符串导入
   const ToolComponentsMap = useMemo(() => {
-    const map: Record<string, React.LazyExoticComponent<any>> = {};
+    const map: Record<string, React.LazyExoticComponent<any>> = {}
+
     tools.forEach(tool => {
-      map[tool.id] = loadToolComponent(tool.componentPath);
-    });
-    // 补齐非工具类的标准页面
-    map['settings'] = React.lazy(() => import('./components/SettingsPage'));
-    return map;
-  }, []);
+      // 提取文件名，处理遗留的带有路径前缀的情况
+      const componentName = tool.componentPath.split('/').pop()
+      const isComponentDir = tool.componentPath.includes('../components/')
+
+      const modulePath = isComponentDir
+        ? `./components/${componentName}.tsx`
+        : `./tools/${componentName}.tsx`
+
+      const loader = isComponentDir ? componentModules[modulePath] : toolModules[modulePath]
+
+      if (loader) {
+        map[tool.id] = React.lazy(loader as any)
+      } else {
+        console.warn(`[Router] Could not find component file for tool: ${tool.id} at path ${modulePath}`)
+      }
+    })
+
+    // 单独注册不是工具卡片的特定页面
+    if (componentModules['./components/SettingsPage.tsx']) {
+      map['settings'] = React.lazy(componentModules['./components/SettingsPage.tsx'] as any)
+    }
+
+    return map
+  }, [])
 
   useLayoutEffect(() => {
     const handleHashChange = () => {
@@ -91,16 +101,11 @@ function AppContent(): React.JSX.Element {
           </div>
         </main>
       </div>
+      <NotificationContainer />
     </div>
   )
 }
 
 export default function App(): React.JSX.Element {
-  return (
-    <ThemeProvider>
-      <NotificationProvider>
-        <AppContent />
-      </NotificationProvider>
-    </ThemeProvider>
-  )
+  return <AppContent />
 }

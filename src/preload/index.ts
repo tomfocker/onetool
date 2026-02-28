@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import { z } from 'zod'
+import {
+  AutoClickerConfig,
+  ScreenRecorderConfig,
+  WebActivatorToggleSchema,
+  WebActivatorShortcutSchema
+} from '../shared/ipc-schemas'
 
 const renameAPI = {
   renameFiles: (files: string[], mode: string, options: any) => {
@@ -65,7 +72,7 @@ const quickInstallerAPI = {
 }
 
 const autoClickerAPI = {
-  start: (config: { interval: number; button: string }) => {
+  start: (config: AutoClickerConfig) => {
     return ipcRenderer.invoke('autoclicker-start', config)
   },
   stop: () => {
@@ -125,10 +132,10 @@ const webActivatorAPI = {
   getWindowList: () => {
     return ipcRenderer.invoke('web-activator-get-window-list')
   },
-  toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => {
+  toggleWindow: (config: z.infer<typeof WebActivatorToggleSchema>) => {
     return ipcRenderer.invoke('web-activator-toggle-window', config)
   },
-  registerShortcuts: (configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>) => {
+  registerShortcuts: (configs: Array<z.infer<typeof WebActivatorShortcutSchema>>) => {
     return ipcRenderer.invoke('web-activator-register-shortcuts', configs)
   },
   checkVisibility: (configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => {
@@ -188,7 +195,7 @@ const screenRecorderAPI = {
   selectOutput: () => {
     return ipcRenderer.invoke('screen-recorder-select-output')
   },
-  startRecording: (config: { outputPath: string; format: string; fps?: number; quality?: string }) => {
+  startRecording: (config: ScreenRecorderConfig) => {
     return ipcRenderer.invoke('screen-recorder-start', config)
   },
   stopRecording: () => {

@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Camera, Layers, Copy, Check, Info, RotateCcw, Save } from 'lucide-react'
 import { useSuperScreenshot } from '../hooks/useSuperScreenshot'
-import { useNotification } from '../context/NotificationContext'
+import { useGlobalStore } from '@/store'
 
 export const SuperScreenshotTool: React.FC = () => {
-  const { showNotification } = useNotification()
-  
+  const showNotification = useGlobalStore((state) => state.showNotification)
+
   const {
     enhancedMode, setEnhancedMode,
     step, setStep,
@@ -56,7 +56,7 @@ export const SuperScreenshotTool: React.FC = () => {
     let key = e.key.toUpperCase()
     if (key === ' ') key = 'Space'
     if (key === 'ESCAPE') key = 'Esc'
-    
+
     const hotkeyStr = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key
     setTempHotkey(hotkeyStr)
     setIsRecordingHotkey(false)
@@ -194,13 +194,11 @@ export const SuperScreenshotTool: React.FC = () => {
                   setEnhancedMode(!enhancedMode)
                   handleReset()
                 }}
-                className={`w-12 h-6 rounded-full transition-all duration-300 relative ${
-                  enhancedMode ? 'bg-blue-500' : 'bg-zinc-700'
-                }`}
+                className={`w-12 h-6 rounded-full transition-all duration-300 relative ${enhancedMode ? 'bg-blue-500' : 'bg-zinc-700'
+                  }`}
               >
-                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 ${
-                  enhancedMode ? 'left-7' : 'left-1'
-                }`} />
+                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 ${enhancedMode ? 'left-7' : 'left-1'
+                  }`} />
               </button>
             </div>
 
@@ -232,13 +230,11 @@ export const SuperScreenshotTool: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setAutoCopy(!autoCopy)}
-                  className={`w-10 h-5 rounded-full transition-all duration-300 relative ${
-                    autoCopy ? 'bg-cyan-500' : 'bg-zinc-700'
-                  }`}
+                  className={`w-10 h-5 rounded-full transition-all duration-300 relative ${autoCopy ? 'bg-cyan-500' : 'bg-zinc-700'
+                    }`}
                 >
-                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${
-                    autoCopy ? 'left-6' : 'left-1'
-                  }`} />
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${autoCopy ? 'left-6' : 'left-1'
+                    }`} />
                 </button>
               </div>
 
@@ -253,13 +249,11 @@ export const SuperScreenshotTool: React.FC = () => {
                     setLocalAutoSave(nextValue)
                     updateSettings(savePath, nextValue)
                   }}
-                  className={`w-10 h-5 rounded-full transition-all duration-300 relative ${
-                    localAutoSave ? 'bg-cyan-500' : 'bg-zinc-700'
-                  }`}
+                  className={`w-10 h-5 rounded-full transition-all duration-300 relative ${localAutoSave ? 'bg-cyan-500' : 'bg-zinc-700'
+                    }`}
                 >
-                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${
-                    localAutoSave ? 'left-6' : 'left-1'
-                  }`} />
+                  <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all duration-300 ${localAutoSave ? 'left-6' : 'left-1'
+                    }`} />
                 </button>
               </div>
 
@@ -287,9 +281,8 @@ export const SuperScreenshotTool: React.FC = () => {
                 value={isRecordingHotkey ? '等待按键...' : tempHotkey.replace('Control', 'Ctrl').replace('Command', 'Win')}
                 readOnly
                 onClick={() => setIsRecordingHotkey(true)}
-                className={`flex-1 bg-black/20 border-2 rounded-xl px-4 py-2 text-center font-mono font-bold transition-all cursor-pointer ${
-                  isRecordingHotkey ? 'border-blue-500 shadow-lg shadow-blue-500/20 text-blue-500 scale-[1.02]' : 'border-white/5 hover:border-white/10'
-                }`}
+                className={`flex-1 bg-black/20 border-2 rounded-xl px-4 py-2 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey ? 'border-blue-500 shadow-lg shadow-blue-500/20 text-blue-500 scale-[1.02]' : 'border-white/5 hover:border-white/10'
+                  }`}
               />
               <button
                 onClick={handleSaveHotkey}
@@ -325,9 +318,9 @@ export const SuperScreenshotTool: React.FC = () => {
                   <Camera size={32} className="text-zinc-500" />
                 </div>
                 <div className="text-sm text-zinc-500">
-                  {step === 'capturing-base' ? '正在选取底图...' : 
-                   step === 'capturing-overlay' ? '正在选取高亮区域...' : 
-                   '尚未截图'}
+                  {step === 'capturing-base' ? '正在选取底图...' :
+                    step === 'capturing-overlay' ? '正在选取高亮区域...' :
+                      '尚未截图'}
                 </div>
               </div>
             )}
@@ -336,11 +329,10 @@ export const SuperScreenshotTool: React.FC = () => {
           <button
             onClick={handleStartCapture}
             disabled={step !== 'idle'}
-            className={`w-full py-6 rounded-2xl font-bold text-xl transition-all duration-500 flex items-center justify-center gap-4 shadow-2xl ${
-              step !== 'idle' 
-                ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed' 
-                : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:scale-[1.02] active:scale-[0.98] shadow-blue-500/20'
-            }`}
+            className={`w-full py-6 rounded-2xl font-bold text-xl transition-all duration-500 flex items-center justify-center gap-4 shadow-2xl ${step !== 'idle'
+              ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed'
+              : 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white hover:scale-[1.02] active:scale-[0.98] shadow-blue-500/20'
+              }`}
           >
             <Camera size={24} />
             <span>{step === 'idle' ? '立即开始截图' : '截图中...'}</span>

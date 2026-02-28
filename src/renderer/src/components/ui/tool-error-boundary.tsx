@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react'
+import { Component, ErrorInfo, ReactNode } from 'react'
 import { AlertCircle, RefreshCcw, Home } from 'lucide-react'
 import { Button } from './button'
 import { Card, CardContent } from './card'
@@ -42,7 +42,7 @@ export class ToolErrorBoundary extends Component<Props, State> {
               <div className="w-20 h-20 bg-red-500/10 rounded-[2rem] flex items-center justify-center shadow-lg shadow-red-500/10">
                 <AlertCircle size={40} className="text-red-500" />
               </div>
-              
+
               <div className="space-y-2">
                 <h3 className="text-xl font-black tracking-tight">工具运行异常</h3>
                 <p className="text-sm text-muted-foreground font-medium px-4">
@@ -57,15 +57,15 @@ export class ToolErrorBoundary extends Component<Props, State> {
               )}
 
               <div className="flex gap-3 w-full px-4">
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="flex-1 rounded-xl font-bold"
                   onClick={() => window.location.reload()}
                 >
                   <Home className="mr-2 h-4 w-4" />
                   重启应用
                 </Button>
-                <Button 
+                <Button
                   className="flex-1 rounded-xl font-bold bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20"
                   onClick={this.handleRetry}
                 >

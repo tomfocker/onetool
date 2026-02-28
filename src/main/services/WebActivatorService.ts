@@ -2,15 +2,15 @@ import { app, BrowserWindow, globalShortcut } from 'electron'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { join } from 'path'
 import { execPowerShell } from '../utils/processUtils'
-import { IpcResponse, ActivatorConfig, WindowInfo } from '../../shared/types'
+import { IpcResponse } from '../../shared/types'
+import { processRegistry } from './ProcessRegistry'
 
 export class WebActivatorService {
   private mainWindow: BrowserWindow | null = null
   private shortcuts = new Set<string>()
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -25,7 +25,7 @@ export class WebActivatorService {
         const parsed = JSON.parse(winResult);
         allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
       }
-    } catch (e) {}
+    } catch (e) { }
 
     try {
       const tabScript = `
@@ -70,17 +70,18 @@ export class WebActivatorService {
       const scriptPath = path.join(tempDir, 'get_tabs.ps1')
       fs.writeFileSync(scriptPath, '\ufeff' + tabScript, 'utf8')
       const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { windowsHide: true })
+      processRegistry.register(ps)
       let tabResult = ''
       ps.stdout.on('data', (d) => tabResult += d.toString('utf8'))
       await new Promise(resolve => ps.on('close', resolve))
       const match = tabResult.match(/---TAB_JSON_START---\s*(.*?)\s*---TAB_JSON_END---/s);
       if (match && match[1]) {
-          try {
-              const parsed = JSON.parse(match[1].trim());
-              allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-          } catch (e) { console.error('WebActivatorService: Tab JSON Parse Error:', e); }
+        try {
+          const parsed = JSON.parse(match[1].trim());
+          allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
+        } catch (e) { console.error('WebActivatorService: Tab JSON Parse Error:', e); }
       }
-    } catch (e) {}
+    } catch (e) { }
 
     const unique = new Map();
     allResults.forEach(w => {
@@ -212,6 +213,7 @@ export class WebActivatorService {
       const scriptPath = path.join(tempDir, 'toggle_tab.ps1')
       fs.writeFileSync(scriptPath, '\ufeff' + script, 'utf8')
       const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { windowsHide: true })
+      processRegistry.register(ps)
       let result = ''
       ps.stdout.on('data', (d) => result += d.toString('utf8'))
       await new Promise(resolve => ps.on('close', resolve))

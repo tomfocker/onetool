@@ -50,8 +50,8 @@ const ClipboardManager: React.FC = () => {
 
   useEffect(() => {
     console.log('ClipboardManager: Component mounted, setting up listeners');
-    
-    const handleClipboardChange = (_event: unknown, newItem: ClipboardItem) => {
+
+    const handleClipboardChange = (newItem: ClipboardItem) => {
       console.log('ClipboardManager: Received new item', newItem.id);
       if (!isListening) return
       setItems(prev => {
@@ -61,7 +61,7 @@ const ClipboardManager: React.FC = () => {
       })
     }
 
-    const handleClipboardHistory = (_event: unknown, history: ClipboardItem[]) => {
+    const handleClipboardHistory = (history: ClipboardItem[]) => {
       console.log('ClipboardManager: Received history, count:', history?.length);
       setItems(history || [])
     }
@@ -140,7 +140,7 @@ const ClipboardManager: React.FC = () => {
     if (!timestamp) return '未知时间'
     const date = new Date(timestamp)
     if (isNaN(date.getTime())) return '无效时间'
-    
+
     const now = new Date()
     const diff = now.getTime() - date.getTime()
     const minutes = Math.floor(diff / 60000)

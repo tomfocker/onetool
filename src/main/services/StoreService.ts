@@ -53,14 +53,23 @@ export class StoreService extends EventEmitter {
     }
   }
 
+  private saveTimer: NodeJS.Timeout | null = null
   private save() {
-    try {
-      // 异步写入以提高性能，但在退出前必须同步保存一次
-      fs.writeFileSync(this.storePath, JSON.stringify(this.store, null, 2))
-      this.emit('changed', this.store)
-    } catch (e) {
-      logger.error('StoreService: Failed to save store:', e)
+    this.emit('changed', this.store)
+
+    // Debounce actual disk writes by 1000ms
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer)
     }
+
+    this.saveTimer = setTimeout(async () => {
+      try {
+        await fs.promises.writeFile(this.storePath, JSON.stringify(this.store, null, 2))
+        logger.debug('StoreService: Store saved asynchronously')
+      } catch (e) {
+        logger.error('StoreService: Failed to save store asynchronously:', e)
+      }
+    }, 1000)
   }
 
   get<K extends keyof GlobalStore>(key: K): GlobalStore[K] {

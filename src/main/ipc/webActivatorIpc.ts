@@ -1,5 +1,7 @@
 import { ipcMain } from 'electron'
 import { webActivatorService } from '../services/WebActivatorService'
+import { z } from 'zod'
+import { WebActivatorToggleSchema, WebActivatorShortcutSchema } from '../../shared/ipc-schemas'
 
 export function registerWebActivatorIpc() {
   ipcMain.handle('web-activator-get-window-list', async () => {
@@ -11,15 +13,25 @@ export function registerWebActivatorIpc() {
   })
 
   ipcMain.handle('web-activator-toggle-window', async (_event, config) => {
-    let result;
-    if (config.type === 'app') result = await webActivatorService.toggleApp(config.pattern, config.id)
-    else result = await webActivatorService.toggleTab(config.pattern)
-    
-    if (result.success) return { success: true, data: { action: result.action } }
-    else return { success: false, error: result.error }
+    try {
+      const validConfig = WebActivatorToggleSchema.parse(config)
+      let result;
+      if (validConfig.type === 'app') result = await webActivatorService.toggleApp(validConfig.pattern, validConfig.id)
+      else result = await webActivatorService.toggleTab(validConfig.pattern)
+
+      if (result.success) return { success: true, data: { action: result.action } }
+      else return { success: false, error: result.error }
+    } catch (e: any) {
+      return { success: false, error: 'Invalid configuration for web activator: ' + e.message }
+    }
   })
 
   ipcMain.handle('web-activator-register-shortcuts', async (_event, configs) => {
-    return webActivatorService.registerShortcuts(configs)
+    try {
+      const validConfigs = z.array(WebActivatorShortcutSchema).parse(configs)
+      return webActivatorService.registerShortcuts(validConfigs as any)
+    } catch (e: any) {
+      return { success: false, error: 'Invalid shortcuts for web activator: ' + e.message }
+    }
   })
 }
