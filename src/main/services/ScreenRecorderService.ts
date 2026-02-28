@@ -10,10 +10,11 @@ import { processRegistry } from './ProcessRegistry'
 export class ScreenRecorderService {
   private recorderProcess: ChildProcess | null = null
   private isRecording = false
+  private isStopping = false
   private ffmpegInitialized = false
   private mainWindow: BrowserWindow | null = null
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -22,7 +23,7 @@ export class ScreenRecorderService {
   getFfmpegPath(): string {
     const isDev = !app.isPackaged
     let selectedPath = ''
-    
+
     if (isDev) {
       selectedPath = ffmpegStatic as string
     } else {
@@ -33,7 +34,7 @@ export class ScreenRecorderService {
         path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
         ffmpegStatic as string
       ]
-      
+
       for (const testPath of possiblePaths) {
         if (testPath && fs.existsSync(testPath)) {
           selectedPath = testPath
@@ -49,13 +50,13 @@ export class ScreenRecorderService {
     } catch (e) {
       console.warn('ScreenRecorderService: FFmpeg path validation warning:', selectedPath)
     }
-    
+
     return selectedPath
   }
 
   initFfmpeg() {
     if (this.ffmpegInitialized) return
-    
+
     const ffmpegPath = this.getFfmpegPath()
     if (ffmpegPath && fs.existsSync(ffmpegPath)) {
       ffmpeg.setFfmpegPath(ffmpegPath)
@@ -99,10 +100,10 @@ export class ScreenRecorderService {
     }
   }
 
-  async start(config: { 
-    outputPath: string; 
-    format: string; 
-    fps?: number; 
+  async start(config: {
+    outputPath: string;
+    format: string;
+    fps?: number;
     quality?: string;
     bounds?: { x: number; y: number; width: number; height: number };
     windowTitle?: string;
@@ -116,7 +117,7 @@ export class ScreenRecorderService {
       if (!ffmpegPath || !fs.existsSync(ffmpegPath)) {
         return { success: false, error: 'FFmpeg 未正确安装或路径无效' }
       }
-      
+
       this.isRecording = true
       if (this.mainWindow) this.mainWindow.minimize()
 
@@ -134,10 +135,10 @@ export class ScreenRecorderService {
         let realY = Math.floor(config.bounds.y * scaleFactor)
         let realW = Math.floor(config.bounds.width * scaleFactor)
         let realH = Math.floor(config.bounds.height * scaleFactor)
-        
+
         realW = realW % 2 === 0 ? realW : realW - 1
         realH = realH % 2 === 0 ? realH : realH - 1
-        
+
         const screenWidth = Math.floor(primaryDisplay.size.width * scaleFactor)
         const screenHeight = Math.floor(primaryDisplay.size.height * scaleFactor)
 
@@ -156,7 +157,7 @@ export class ScreenRecorderService {
         let realH = Math.floor(height * scaleFactor)
         realW = (realW % 2 === 0 ? realW : realW - 1) - 2
         realH = (realH % 2 === 0 ? realH : realH - 1) - 2
-        
+
         args.push(
           '-offset_x', '0',
           '-offset_y', '0',
@@ -185,7 +186,15 @@ export class ScreenRecorderService {
           config.outputPath
         )
       } else {
-        args.push(config.outputPath)
+        // WebM 格式：使用 libvpx-vp9 编码器
+        const crf = config.quality === 'high' ? '33' : config.quality === 'medium' ? '40' : '50'
+        args.push(
+          '-c:v', 'libvpx-vp9',
+          '-crf', crf,
+          '-b:v', '0',
+          '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+          config.outputPath
+        )
       }
 
       this.recorderProcess = spawn(ffmpegPath, args, { stdio: ['pipe', 'pipe', 'pipe'] })
@@ -212,8 +221,9 @@ export class ScreenRecorderService {
       })
 
       this.recorderProcess.on('close', (code) => {
-        // Self-healing check: if we were supposed to be recording but process died
-        if (this.isRecording) {
+        const wasGracefulStop = this.isStopping
+        // 仅当不是主动停止时，才视为意外崩溃并发通知
+        if (this.isRecording && !wasGracefulStop) {
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.webContents.send('app-notification', {
               type: 'error',
@@ -225,12 +235,15 @@ export class ScreenRecorderService {
         }
 
         this.isRecording = false
+        this.isStopping = false
         this.recorderProcess = null
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.show()
-          this.mainWindow.webContents.send('screen-recorder-stopped', { 
-            success: code === 0 || code === null, 
-            outputPath: config.outputPath 
+          // ffmpeg 被 'q' 优雅停止时退出码可能是 0 或 1，都视为成功
+          const success = wasGracefulStop ? (code === 0 || code === 1 || code === null) : code === 0
+          this.mainWindow.webContents.send('screen-recorder-stopped', {
+            success,
+            outputPath: config.outputPath
           })
         }
       })
@@ -253,11 +266,15 @@ export class ScreenRecorderService {
         return { success: false, error: '没有正在进行的录制' }
       }
 
+      // 标记为主动停止，防止 close 事件误报「异常中断」
+      this.isStopping = true
+
       if (this.recorderProcess.stdin && this.recorderProcess.stdin.writable) {
         this.recorderProcess.stdin.write('q')
         const processToKill = this.recorderProcess
         setTimeout(() => {
           if (this.isRecording && this.recorderProcess === processToKill) {
+            this.isStopping = false
             processToKill.kill('SIGKILL')
           }
         }, 5000)

@@ -39,6 +39,7 @@ import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
+import { registerTranslateIpc } from './ipc/translateIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -144,6 +145,7 @@ app.whenReady().then(() => {
   registerColorPickerIpc()
   registerHotkeyIpc()
   registerNetworkIpc()
+  registerTranslateIpc()
   registerRenameIpc()
   registerQuickInstallerIpc()
   registerScreenOverlayIpc()

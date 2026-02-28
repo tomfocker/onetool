@@ -1,4 +1,3 @@
-import { exec } from 'child_process'
 import os from 'os'
 import { execCommand, execPowerShell } from '../utils/processUtils'
 import { IpcResponse } from '../../shared/types'
@@ -8,30 +7,77 @@ export class NetworkService {
   constructor() { }
 
   async ping(host: string): Promise<IpcResponse<{ alive: boolean, time: number | null }>> {
-    return new Promise((resolve) => {
-      const target = host.replace(/^https?:\/\//, '').split('/')[0]
-      // chcp 65001 ensures stdout is UTF-8 so JS regex can match "时间="
-      // /W 4000 limits the wait time, and exec timeout 6000 limits hanging.
-      const cmd = `chcp 65001 && ping -n 1 -w 4000 ${target}`
+    const target = host.replace(/^https?:\/\//, '').split('/')[0]
+    // 使用 PowerShell Test-Connection 直接获取 ResponseTime，
+    // 避免 cmd 编码问题和正则匹配不准確的问题。
+    const script = `
+      $ErrorActionPreference = 'SilentlyContinue'
+      $r = Test-Connection -ComputerName '${target}' -Count 1 -BufferSize 32 -ErrorAction SilentlyContinue
+      if ($r -and $r.StatusCode -eq 0) {
+        Write-Output "OK:$($r.ResponseTime)"
+      } else {
+        Write-Output "FAIL"
+      }
+    `
+    try {
+      const output = await execPowerShell(script, 6000)
+      const trimmed = output.trim()
+      if (trimmed.startsWith('OK:')) {
+        const time = parseInt(trimmed.slice(3), 10)
+        return { success: true, data: { alive: true, time: isNaN(time) ? null : time } }
+      } else {
+        return { success: true, data: { alive: false, time: null } }
+      }
+    } catch {
+      return { success: true, data: { alive: false, time: null } }
+    }
+  }
 
-      exec(cmd, { timeout: 6000 }, (error, stdout) => {
-        if (error) {
-          resolve({ success: true, data: { alive: false, time: null } })
-          return
-        }
-
-        // Match both English "time=..." / "time<..." and Chinese "时间=..." / "时间<..."
-        const match = stdout.match(/(?:time|时间)[=<]\s*(\d+)/i)
-
-        if (match && match[1]) {
-          const time = parseInt(match[1])
-          // time<1ms matched as 1, which works perfectly.
-          resolve({ success: true, data: { alive: true, time } })
-        } else {
-          resolve({ success: true, data: { alive: false, time: null } })
-        }
-      })
-    })
+  /**
+   * 批量 ping 多个 host，一次 PowerShell 进程并行完成，
+   * 结果以 JSON 返回 { host: string, alive: boolean, time: number | null }[]
+   */
+  async pingBatch(hosts: string[]): Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>> {
+    const targets = hosts.map(h => h.replace(/^https?:\/\//, '').split('/')[0])
+    const hostsJson = JSON.stringify(targets)
+    const script = `
+      $ErrorActionPreference = 'SilentlyContinue'
+      $hosts = '${hostsJson}' | ConvertFrom-Json
+      $jobs = @()
+      foreach ($h in $hosts) {
+        $jobs += Start-Job -ScriptBlock {
+          param($target)
+          $r = Test-Connection -ComputerName $target -Count 1 -BufferSize 32 -ErrorAction SilentlyContinue
+          if ($r -and $r.StatusCode -eq 0) {
+            @{ host = $target; alive = $true; time = [int]$r.ResponseTime }
+          } else {
+            @{ host = $target; alive = $false; time = $null }
+          }
+        } -ArgumentList $h
+      }
+      $results = $jobs | Wait-Job -Timeout 8 | Receive-Job
+      $jobs | Remove-Job -Force -ErrorAction SilentlyContinue
+      if ($results) { $results | ConvertTo-Json -Compress } else { "[]" }
+    `
+    try {
+      const output = await execPowerShell(script, 12000)
+      const trimmed = output.trim()
+      // 找到 JSON 起始位置（跳过可能的 BOM 或其他输出）
+      const startIdx = trimmed.indexOf('[')
+      if (startIdx === -1) return { success: true, data: [] }
+      const parsed = JSON.parse(trimmed.slice(startIdx))
+      const results = Array.isArray(parsed) ? parsed : [parsed]
+      return {
+        success: true,
+        data: results.map((r: any) => ({
+          host: r.host,
+          alive: !!r.alive,
+          time: r.time != null ? parseInt(r.time, 10) : null
+        }))
+      }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
   }
 
   async getInfo(): Promise<IpcResponse<{ interfaces: any[] }>> {

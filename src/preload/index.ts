@@ -292,6 +292,16 @@ const screenOverlayAPI = {
   },
   close: () => {
     return ipcRenderer.invoke('screen-overlay-close')
+  },
+  notifyReady: () => {
+    return ipcRenderer.send('screen-overlay:ready')
+  },
+  onScreenshot: (callback: (dataUrl: string) => void) => {
+    const handler = (_event: any, dataUrl: string) => callback(dataUrl)
+    ipcRenderer.on('screen-overlay:screenshot', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-overlay:screenshot', handler)
+    }
   }
 }
 
@@ -353,11 +363,20 @@ const networkAPI = {
   ping: (host: string) => {
     return ipcRenderer.invoke('network:ping', host)
   },
+  pingBatch: (hosts: string[]) => {
+    return ipcRenderer.invoke('network:ping-batch', hosts)
+  },
   getInfo: () => {
     return ipcRenderer.invoke('network:get-info')
   },
   scanLan: (subnet: string) => {
     return ipcRenderer.invoke('network:scan-lan', subnet)
+  }
+}
+
+const translateAPI = {
+  translateImage: (base64Image: string) => {
+    return ipcRenderer.invoke('translate:image', base64Image)
   }
 }
 
@@ -391,7 +410,8 @@ if (process.contextIsolated) {
       screenOverlay: screenOverlayAPI,
       screenshot: screenshotAPI,
       colorPicker: colorPickerAPI,
-      network: networkAPI
+      network: networkAPI,
+      translate: translateAPI
     })
   } catch (error) {
     console.error(error)
@@ -426,6 +446,7 @@ if (process.contextIsolated) {
     screenOverlay: screenOverlayAPI,
     screenshot: screenshotAPI,
     colorPicker: colorPickerAPI,
-    network: networkAPI
+    network: networkAPI,
+    translate: translateAPI
   }
 }

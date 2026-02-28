@@ -1,12 +1,12 @@
-import React, { useState } from 'react'
-import { 
-  FileText, 
-  Play, 
-  FolderOpen, 
-  File as FileIcon, 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
+import React, { useState, useCallback } from 'react'
+import {
+  FileText,
+  Play,
+  FolderOpen,
+  File as FileIcon,
+  AlertCircle,
+  CheckCircle,
+  Clock,
   Trash2,
   Save,
   Download,
@@ -46,6 +46,7 @@ export const RenameTool: React.FC = () => {
     sortOrder,
     handleSort,
     handleSelectFiles,
+    handleDropFiles,
     removeFile,
     clearFiles,
     addRule,
@@ -59,6 +60,21 @@ export const RenameTool: React.FC = () => {
 
   const [showPresetManager, setShowPresetManager] = useState(false)
   const [newPresetName, setNewPresetName] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      // 扩展标准 File 类型以支持 Electron 的 path 属性
+      const paths = Array.from(e.dataTransfer.files as Iterable<File & { path: string }>).map(f => f.path)
+      if (handleDropFiles) {
+        handleDropFiles(paths)
+      }
+    }
+  }, [handleDropFiles])
 
   const formatFileSize = (bytes: number): string => {
     if (bytes < 1024) return `${bytes} B`
@@ -106,11 +122,11 @@ export const RenameTool: React.FC = () => {
         <Alert className={cn(
           'border-none shadow-xl rounded-3xl backdrop-blur-md transition-all duration-500',
           messageType === 'success' ? 'bg-green-500/10 text-green-600 dark:text-green-400' :
-          messageType === 'error' ? 'bg-red-500/10 text-red-600 dark:text-red-400' :
-          'bg-blue-500/10 text-blue-600 dark:text-blue-400'
+            messageType === 'error' ? 'bg-red-500/10 text-red-600 dark:text-red-400' :
+              'bg-blue-500/10 text-blue-600 dark:text-blue-400'
         )}>
-          {messageType === 'success' ? <CheckCircle className='h-5 w-5' /> : 
-           messageType === 'error' ? <AlertCircle className='h-5 w-5' /> : <FileText className='h-5 w-5' />}
+          {messageType === 'success' ? <CheckCircle className='h-5 w-5' /> :
+            messageType === 'error' ? <AlertCircle className='h-5 w-5' /> : <FileText className='h-5 w-5' />}
           <AlertTitle className='font-bold ml-2'>{message}</AlertTitle>
         </Alert>
       )}
@@ -126,15 +142,31 @@ export const RenameTool: React.FC = () => {
               <CardDescription>支持拖入文件夹或手动选择</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={handleSelectFiles} className='w-full h-14 rounded-2xl font-bold text-base shadow-lg shadow-blue-500/20' size='lg'>
-                <FileIcon className='mr-2 h-5 w-5' />
-                选择文件或文件夹
-              </Button>
+              <div
+                className={cn(
+                  'w-full h-32 rounded-3xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all bg-muted/5',
+                  isDragging ? 'border-blue-500 bg-blue-500/10' : 'border-muted-foreground/20 hover:border-blue-500/50 hover:bg-blue-500/5'
+                )}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true) }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false) }}
+                onDrop={handleDrop}
+                onClick={handleSelectFiles}
+              >
+                <div className="flex flex-col items-center gap-2 pointer-events-none">
+                  <div className="p-3 bg-blue-500/10 rounded-2xl">
+                    <ArrowDown className="h-6 w-6 text-blue-500" />
+                  </div>
+                  <div className="flex flex-col items-center gap-1">
+                    <span className="font-bold text-sm">点击选择，或将文件 / 文件夹拖拽到此处</span>
+                    <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Drop files here</span>
+                  </div>
+                </div>
+              </div>
 
               {files.length > 0 && (
-                <div className='mt-6 flex items-center justify-between p-3 rounded-2xl bg-muted/30'>
-                  <p className='text-xs font-bold text-muted-foreground ml-2'>
-                    已加载 <span className='text-blue-500'>{files.length}</span> 个项目
+                <div className='mt-6 flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-white/5'>
+                  <p className='text-xs font-bold text-muted-foreground ml-2 flex items-center gap-2'>
+                    已加载 <Badge className='bg-blue-500 text-white font-mono hover:bg-blue-600'>{files.length}</Badge> 个项目
                   </p>
                   <Button variant='ghost' size='sm' onClick={clearFiles} className="hover:bg-red-500/10 hover:text-red-500 rounded-xl">
                     <Trash2 className='mr-2 h-4 w-4' />
@@ -228,9 +260,40 @@ export const RenameTool: React.FC = () => {
                 预览与执行
               </CardTitle>
               {files.length > 0 && (
-                <div className='flex gap-2'>
-                  <Button variant="outline" size="sm" onClick={() => handleSort('name')} className="rounded-xl text-[10px] font-bold">按名称排序</Button>
-                  <Button variant="outline" size="sm" onClick={() => handleSort('size')} className="rounded-xl text-[10px] font-bold">按大小排序</Button>
+                <div className='flex gap-2 bg-muted/20 p-1 rounded-xl items-center'>
+                  <span className='text-[10px] text-muted-foreground mr-1 uppercase font-bold tracking-widest'>排序:</span>
+                  <Button
+                    variant={sortField === 'name' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleSort('name')}
+                    className="rounded-lg text-xs h-7 px-2"
+                  >
+                    名称 {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                  <Button
+                    variant={sortField === 'size' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleSort('size')}
+                    className="rounded-lg text-xs h-7 px-2"
+                  >
+                    大小 {sortField === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                  <Button
+                    variant={sortField === 'mtime' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleSort('mtime')}
+                    className="rounded-lg text-xs h-7 px-2"
+                  >
+                    时间 {sortField === 'mtime' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
+                  <Button
+                    variant={sortField === 'extension' ? 'secondary' : 'ghost'}
+                    size="sm"
+                    onClick={() => handleSort('extension')}
+                    className="rounded-lg text-xs h-7 px-2"
+                  >
+                    类型 {sortField === 'extension' && (sortOrder === 'asc' ? '↑' : '↓')}
+                  </Button>
                 </div>
               )}
             </CardHeader>
@@ -251,8 +314,8 @@ export const RenameTool: React.FC = () => {
                         <TableCell className='py-4 font-black text-xs text-blue-500 truncate max-w-[200px]'>{file.newName}</TableCell>
                         <TableCell className="text-right">
                           {file.success === true ? <CheckCircle className='h-4 w-4 text-emerald-500 ml-auto' /> :
-                           file.success === false ? <AlertCircle className='h-4 w-4 text-red-500 ml-auto' /> :
-                           <Clock className='h-4 w-4 text-muted-foreground/30 ml-auto' />}
+                            file.success === false ? <AlertCircle className='h-4 w-4 text-red-500 ml-auto' /> :
+                              <Clock className='h-4 w-4 text-muted-foreground/30 ml-auto' />}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -261,8 +324,8 @@ export const RenameTool: React.FC = () => {
               </div>
             </CardContent>
             <div className="p-6 shrink-0 bg-gradient-to-t from-background via-background to-transparent pt-10">
-              <Button 
-                className='w-full h-16 text-xl font-black rounded-3xl shadow-2xl shadow-blue-500/30' 
+              <Button
+                className='w-full h-16 text-xl font-black rounded-3xl shadow-2xl shadow-blue-500/30'
                 onClick={handleRename}
                 disabled={isProcessing || rules.length === 0 || files.length === 0}
               >

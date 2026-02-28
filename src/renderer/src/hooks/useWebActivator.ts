@@ -9,7 +9,7 @@ export function useWebActivator() {
     if (saved) { try { return JSON.parse(saved) } catch { return [] } }
     return []
   })
-  
+
   const [windowList, setWindowList] = useState<WindowInfo[]>([])
   const [statusMessage, setStatusMessage] = useState<string>('')
 
@@ -46,8 +46,9 @@ export function useWebActivator() {
     if (!window.electron?.webActivator?.toggleWindow) return
     try {
       const result = await window.electron.webActivator.toggleWindow({
-        titlePattern: config.pattern,
-        shortcut: config.shortcut
+        type: config.type,
+        pattern: config.pattern,
+        id: config.hwnd
       })
       if (result.success && result.data) {
         setConfigs(prev => prev.map(c => c.id === config.id ? { ...c, isActive: result.data!.action === 'activated' } : c))

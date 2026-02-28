@@ -32,28 +32,28 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
+    --background: 220 5% 15%;
     --foreground: 0 0% 98%;
-    --card: 240 10% 3.9% / 0.5;
+    --card: 220 5% 15% / 0.5;
     --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9% / 0.8;
+    --popover: 220 5% 15% / 0.8;
     --popover-foreground: 0 0% 98%;
     --primary: 217.2 91.2% 59.8%;
     --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 240 3.7% 15.9% / 0.5;
+    --secondary: 220 5% 25% / 0.5;
     --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
+    --muted: 220 5% 25%;
     --muted-foreground: 240 5% 64.9%;
-    --accent: 240 3.7% 15.9% / 0.5;
+    --accent: 220 5% 25% / 0.5;
     --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9% / 0.3;
-    --input: 240 3.7% 15.9% / 0.5;
+    --border: 220 5% 25% / 0.3;
+    --input: 220 5% 25% / 0.5;
     --ring: 240 4.9% 83.9%;
     --radius: 1.5rem;
 
-    --glass-bg: 20 20 20 / 0.5;
+    --glass-bg: 40 40 40 / 0.5;
     --glass-border: 255 255 255 / 0.1;
     --glass-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
     --glass-inner-glow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.05);

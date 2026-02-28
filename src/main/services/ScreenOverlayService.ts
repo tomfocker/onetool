@@ -41,6 +41,9 @@ export class ScreenOverlayService {
         this.overlayWindow = null
       }
 
+      // 【1】提前截图，在此之前不应该有覆盖层的窗口影响当前画面
+      const screenDataUrl = await this.captureScreen()
+
       const cursorPoint = screen.getCursorScreenPoint()
       const displays = screen.getAllDisplays()
       const targetDisplay = displays.find(d =>
@@ -69,24 +72,34 @@ export class ScreenOverlayService {
       this.overlayWindow.setIgnoreMouseEvents(false)
       this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-      const screenDataUrl = await this.captureScreen()
+      // 监听覆盖层页面准备就绪的信号
+      const { ipcMain } = require('electron')
+      const onOverlayReady = (event: Electron.IpcMainEvent) => {
+        if (this.overlayWindow && event.sender.id === this.overlayWindow.webContents.id) {
+          if (screenDataUrl) {
+            this.overlayWindow.webContents.send('screen-overlay:screenshot', screenDataUrl)
+          }
+        }
+      }
+      ipcMain.on('screen-overlay:ready', onOverlayReady)
 
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+        // 【2】移除 URL 携带超大图片 base64 参数
         const url = new URL(`${process.env['ELECTRON_RENDERER_URL']}#/screen-overlay`)
-        if (screenDataUrl) url.searchParams.set('screen', encodeURIComponent(screenDataUrl))
         this.overlayWindow.loadURL(url.toString())
       } else {
         this.overlayWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
-          hash: '/screen-overlay',
-          search: screenDataUrl ? `?screen=${encodeURIComponent(screenDataUrl)}` : ''
+          hash: '/screen-overlay'
         })
       }
 
       this.overlayWindow.on('closed', () => {
         this.overlayWindow = null
+        ipcMain.removeListener('screen-overlay:ready', onOverlayReady)
       })
 
-      return { success: true, data: { screenDataUrl: screenDataUrl || undefined } }
+      // 不再把 Base64 数据返回给 IPC 的调用方（避免无意义的性能开销和序列化）
+      return { success: true, data: {} }
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }

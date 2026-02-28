@@ -224,55 +224,70 @@ export class WebActivatorService {
   }
 
   async checkVisibility(configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>): Promise<IpcResponse<{ results: boolean[] }>> {
-    const results = await Promise.all(configs.map(async (config) => {
-      const escapedPattern = config.pattern.replace(/"/g, '`"')
-      const script = `
-        Add-Type @"
-          using System;
-          using System.Text;
-          using System.Runtime.InteropServices;
-          public class Win32 {
-            [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
-            [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
-            [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
-            [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
-            public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
-            [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-            [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
-          }
-"@
-        $targetHwnd = [IntPtr]::Zero
-        if ("${config.type}" -eq "app") {
-            if ("${config.hwnd || 0}" -ne "0") {
-                $h = [IntPtr]${config.hwnd || 0}
-                if ([Win32]::IsWindow($h)) { $targetHwnd = $h }
-            }
-            if ($targetHwnd -eq [IntPtr]::Zero) {
-                $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-                if ($proc) { $targetHwnd = $proc.MainWindowHandle }
-            }
-        } else {
-            [Win32]::EnumWindows({
-                param($h, $l)
-                if ([Win32]::IsWindowVisible($h)) {
-                    $sb = New-Object System.Text.StringBuilder 256
-                    [Win32]::GetWindowText($h, $sb, $sb.Capacity) | Out-Null
-                    if ($sb.ToString() -match "${escapedPattern}") { $targetHwnd = $h; return $false }
-                }
-                return $true
-            }, [IntPtr]::Zero) | Out-Null
+    // 将所有配置序列化给 PowerShell，一次调用查询全部，减少进程开销
+    const appConfigs = configs.map((c, i) => ({ index: i, type: c.type, pattern: c.pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"'), hwnd: c.hwnd || 0 }))
+    const configJson = JSON.stringify(appConfigs)
+    const script = `
+      Add-Type @"
+        using System;
+        using System.Text;
+        using System.Runtime.InteropServices;
+        public class Win32V {
+          [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+          [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+          [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
+          [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
         }
-        if ($targetHwnd -ne [IntPtr]::Zero) {
-            $fgHwnd = [Win32]::GetForegroundWindow(); $fgRoot = [Win32]::GetAncestor($fgHwnd, 2); $targetRoot = [Win32]::GetAncestor($targetHwnd, 2)
-            $isActive = ($fgHwnd -eq $targetHwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $targetHwnd) -and -not [Win32]::IsIconic($targetHwnd)
-            if ($isActive) { "active" } else { "inactive" }
-        } else { "not_found" }
-      `
-      const result = await execPowerShell(script)
-      return result.trim() === 'active'
-    }))
-    return { success: true, data: { results } }
+"@
+      $cfgs = '${configJson}' | ConvertFrom-Json
+      $results = @()
+      $fgHwnd = [Win32V]::GetForegroundWindow()
+      $fgRoot = [Win32V]::GetAncestor($fgHwnd, 2)
+      $sb = New-Object System.Text.StringBuilder 512
+      [Win32V]::GetWindowText($fgHwnd, $sb, $sb.Capacity) | Out-Null
+      $fgTitle = $sb.ToString()
+
+      foreach ($cfg in $cfgs) {
+          $isActive = $false
+          if ($cfg.type -eq "app") {
+              $targetHwnd = [IntPtr]::Zero
+              if ($cfg.hwnd -ne 0) {
+                  $h = [IntPtr]$cfg.hwnd
+                  if ([Win32V]::IsWindow($h)) { $targetHwnd = $h }
+              }
+              if ($targetHwnd -eq [IntPtr]::Zero) {
+                  $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match $cfg.pattern -or $_.ProcessName -match $cfg.pattern) -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+                  if ($proc) { $targetHwnd = $proc.MainWindowHandle }
+              }
+              if ($targetHwnd -ne [IntPtr]::Zero) {
+                  $targetRoot = [Win32V]::GetAncestor($targetHwnd, 2)
+                  $isActive = ($fgHwnd -eq $targetHwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $targetHwnd) -and -not [Win32V]::IsIconic($targetHwnd)
+              }
+          } else {
+              # tab 类型: 浏览器当前激活标签的 title 就是浏览器进程的 MainWindowTitle
+              # 同时检查浏览器进程前台窗口 title 是否匹配 pattern
+              $browserProc = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Where-Object {
+                  ($_.MainWindowTitle -match $cfg.pattern)
+              } | Select-Object -First 1
+              if ($browserProc) {
+                  $bHwnd = $browserProc.MainWindowHandle
+                  $bRoot = [Win32V]::GetAncestor($bHwnd, 2)
+                  $isActive = ($fgHwnd -eq $bHwnd -or $fgRoot -eq $bRoot) -and -not [Win32V]::IsIconic($bHwnd)
+              }
+          }
+          $results += if ($isActive) { "true" } else { "false" }
+      }
+      $results -join ","
+    `
+    try {
+      const output = await execPowerShell(script, 8000)
+      const parts = output.trim().split(',')
+      const results = configs.map((_, i) => parts[i]?.trim() === 'true')
+      return { success: true, data: { results } }
+    } catch (e) {
+      return { success: true, data: { results: configs.map(() => false) } }
+    }
   }
 
   async registerShortcuts(configs: Array<{ id: string; type: 'app' | 'tab'; pattern: string; shortcut: string; hwnd?: number }>): Promise<IpcResponse<{ registeredCount: number }>> {

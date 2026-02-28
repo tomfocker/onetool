@@ -12,6 +12,15 @@ export function registerNetworkIpc() {
     }
   })
 
+  ipcMain.handle('network:ping-batch', async (_event, hosts: string[]) => {
+    try {
+      const validHosts = hosts.map(h => NetPingSchema.parse(h))
+      return networkService.pingBatch(validHosts)
+    } catch (e: any) {
+      return { success: false, error: 'Invalid hosts for ping-batch: ' + e.message }
+    }
+  })
+
   ipcMain.handle('network:get-info', async () => {
     return networkService.getInfo()
   })

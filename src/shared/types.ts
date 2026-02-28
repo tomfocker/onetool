@@ -7,6 +7,11 @@ export interface AppSettings {
   floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
+
+  // 截图翻译大模型 API 配置
+  translateApiUrl: string
+  translateApiKey: string
+  translateModel: string
 }
 
 /**

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Rocket, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2 } from 'lucide-react'
+import { Rocket, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2, Languages } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -183,6 +183,48 @@ export const SettingsPage: React.FC = () => {
           ) : (
             <div className="text-center py-4 text-xs text-muted-foreground italic">点击“立即诊断”检查系统环境稳定性</div>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
+            <Languages className="w-5 h-5 text-blue-500" />
+            沉浸式翻译 API (大模型)
+          </CardTitle>
+          <CardDescription>配置用于截图翻译的视觉大模型接口 (推荐使用 gpt-4o 或其他兼容 OpenAI 标准的视觉模型)</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">API URL (Base URL)</label>
+              <Input
+                value={settings.translateApiUrl}
+                onChange={(e) => updateSettings({ translateApiUrl: e.target.value })}
+                placeholder="https://api.openai.com/v1"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">模型名称</label>
+              <Input
+                value={settings.translateModel}
+                onChange={(e) => updateSettings({ translateModel: e.target.value })}
+                placeholder="gpt-4o"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-bold text-muted-foreground tracking-wider ml-1">API Key</label>
+              <Input
+                type="password"
+                value={settings.translateApiKey}
+                onChange={(e) => updateSettings({ translateApiKey: e.target.value })}
+                placeholder="sk-..."
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-sm"
+              />
+            </div>
+          </div>
         </CardContent>
       </Card>
 

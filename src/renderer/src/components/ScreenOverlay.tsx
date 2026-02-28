@@ -15,16 +15,7 @@ interface TranslationResult {
   position: { x: number; y: number; width: number; height: number }
 }
 
-async function mockOCRAndTranslate(imageData: ImageData): Promise<{ originalText: string; translatedText: string }> {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      resolve({
-        originalText: 'This is a sample text for testing',
-        translatedText: '这是测试翻译结果'
-      })
-    }, 1500)
-  })
-}
+// 不再使用 mockOCRAndTranslate，将直接在事件处理函数中调用真实 API
 
 export const ScreenOverlay: React.FC = () => {
   const [screenImage, setScreenImage] = useState<string | null>(null)
@@ -41,11 +32,16 @@ export const ScreenOverlay: React.FC = () => {
   const imageRef = useRef<HTMLImageElement>(null)
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search)
-    const screenData = urlParams.get('screen')
-    if (screenData) {
-      setScreenImage(decodeURIComponent(screenData))
-    }
+    // 【修改点】：不再从 URL 中读取 base64 数据，避免超长 URL 导致渲染进程卡死
+    if (!window.electron?.screenOverlay) return
+
+    // 1. 监听主进程发来的截图数据
+    const unsubscribe = window.electron.screenOverlay.onScreenshot((dataUrl) => {
+      setScreenImage(dataUrl)
+    })
+
+    // 2. 监听器就绪后，通知主进程可以发送截图了
+    window.electron.screenOverlay.notifyReady()
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -53,7 +49,10 @@ export const ScreenOverlay: React.FC = () => {
       }
     }
     window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
+    return () => {
+      unsubscribe()
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   const getSelectionRect = () => {
@@ -121,14 +120,18 @@ export const ScreenOverlay: React.FC = () => {
         height
       )
 
-      const imageData = ctx.getImageData(0, 0, width, height)
-      const { originalText, translatedText } = await mockOCRAndTranslate(imageData)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.8)
+      const res = await window.electron.translate.translateImage(dataUrl)
 
-      setTranslationResult({
-        originalText,
-        translatedText,
-        position: { x, y, width, height }
-      })
+      if (res && res.success && res.data) {
+        setTranslationResult({
+          originalText: res.data.originalText,
+          translatedText: res.data.translatedText,
+          position: { x, y, width, height }
+        })
+      } else {
+        console.error('OCR/Translation failed:', res?.error)
+      }
     } catch (error) {
       console.error('OCR/Translation error:', error)
     } finally {
@@ -242,50 +245,34 @@ export const ScreenOverlay: React.FC = () => {
 
       {translationResult && (
         <div
-          className='fixed z-50'
+          className='fixed z-50 pointer-events-auto'
           style={{
             left: translationResult.position.x,
             top: translationResult.position.y,
-            minWidth: Math.max(translationResult.position.width, 280)
+            width: translationResult.position.width,
+            height: translationResult.position.height
           }}
         >
-          <div className='bg-white/70 dark:bg-black/60 backdrop-blur-2xl rounded-2xl shadow-xl border border-white/30 dark:border-white/10 overflow-hidden transition-all duration-300 hover:shadow-2xl'>
-            <div className='flex items-center justify-between p-4 border-b border-white/20 dark:border-white/10'>
-              <h3 className='font-semibold text-gray-800 dark:text-white'>翻译结果</h3>
-              <div className='flex gap-2'>
-                <button
-                  onClick={handleReset}
-                  className='p-2 rounded-xl hover:bg-white/40 dark:hover:bg-white/10 transition-all duration-200 text-gray-600 dark:text-gray-300'
-                  title='重新选择'
-                >
-                  <svg className='w-4 h-4' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                    <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15' />
-                  </svg>
-                </button>
-                <button
-                  onClick={handleClose}
-                  className='p-2 rounded-xl hover:bg-red-100/50 dark:hover:bg-red-900/20 transition-all duration-200 text-gray-600 dark:text-gray-300 hover:text-red-500'
-                  title='关闭'
-                >
-                  <X className='w-4 h-4' />
-                </button>
-              </div>
+          {/* 这里是沉浸式卡片的 UI */}
+          <div className='absolute inset-0 bg-white/80 dark:bg-[#1e1e1e]/90 backdrop-blur-3xl shadow-xl overflow-hidden transition-all duration-300 rounded overflow-y-auto hidden-scrollbar flex flex-col justify-center items-center border border-black/5 dark:border-white/10 group'>
+            {/* 关闭按钮（默认隐藏，鼠标移入卡片时显示在右上角） */}
+            <div className='absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity z-10'>
+              <button
+                onClick={(e) => { e.stopPropagation(); handleReset() }}
+                className='p-1.5 rounded-full bg-black/10 dark:bg-white/10 hover:bg-black/20 dark:hover:bg-white/20 text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors'
+                title='重新框选'
+              >
+                <X className='w-3 h-3' />
+              </button>
             </div>
-
-            <div className='p-4 space-y-4'>
-              <div>
-                <p className='text-xs text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wider'>原文</p>
-                <p className='text-gray-800 dark:text-white text-sm leading-relaxed'>
+            {/* 翻译文字展示（尽量铺满原本区域） */}
+            <div className='p-2 w-full text-center'>
+              <p className='text-gray-900 dark:text-white font-medium text-[15px] leading-relaxed select-text cursor-text'>
+                {translationResult.translatedText}
+              </p>
+              <div className='mt-1 opacity-0 group-hover:opacity-100 transition-opacity'>
+                <p className='text-[10px] text-gray-500 dark:text-gray-400 select-text'>
                   {translationResult.originalText}
-                </p>
-              </div>
-
-              <div className='h-px bg-white/20 dark:bg-white/10' />
-
-              <div>
-                <p className='text-xs text-blue-600 dark:text-blue-400 mb-1 uppercase tracking-wider'>译文</p>
-                <p className='text-gray-900 dark:text-white font-medium text-base leading-relaxed'>
-                  {translationResult.translatedText}
                 </p>
               </div>
             </div>

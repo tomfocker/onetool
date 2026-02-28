@@ -37,40 +37,29 @@ export function useNetworkRadar() {
     const signal = abortControllerRef.current.signal
 
     setIsPinging(true)
-
-    // Set all to pending upfront.
     setPingResults(
       DEFAULT_HOSTS.map(h => ({ ...h, latency: null, status: 'pending' }))
     )
 
-    const pingOne = async (target: { host: string; name: string }, index: number) => {
-      let latency: number | null = null
-      let success = false
-      try {
-        const res = await Promise.race([
-          window.electron.network.ping(target.host),
-          new Promise<any>(resolve => setTimeout(() => resolve({ success: true, data: { alive: false, time: null } }), 10000))
-        ])
-        if (signal.aborted) return
-        latency = res.data?.time ?? null
-        success = res.data?.alive || false
-      } catch {
-        success = false
-      }
+    try {
+      const res = await window.electron.network.pingBatch(DEFAULT_HOSTS.map(h => h.host))
       if (signal.aborted) return
-      setPingResults(prev => {
-        const next = [...prev]
-        if (next[index]) next[index] = { ...next[index], latency, status: success ? 'success' : 'error' }
-        return next
-      })
-    }
-
-    // 减少并发数，避免同时过多 ping 进程抢占系统资源
-    const CONCURRENCY = 2
-    for (let i = 0; i < DEFAULT_HOSTS.length; i += CONCURRENCY) {
-      if (signal.aborted) break
-      const batch = DEFAULT_HOSTS.slice(i, i + CONCURRENCY).map((t, j) => pingOne(t, i + j))
-      await Promise.all(batch)
+      if (res.success && Array.isArray(res.data)) {
+        // 根据 host 顺序映射结果
+        const resultMap = new Map<string, { alive: boolean; time: number | null }>()
+        for (const r of res.data) {
+          resultMap.set(r.host, { alive: r.alive, time: r.time })
+        }
+        setPingResults(
+          DEFAULT_HOSTS.map(h => {
+            const r = resultMap.get(h.host)
+            if (!r) return { ...h, latency: null, status: 'error' as const }
+            return { ...h, latency: r.time, status: r.alive ? 'success' as const : 'error' as const }
+          })
+        )
+      }
+    } catch {
+      // 静默失败，保持 pending 状态
     }
 
     if (!signal.aborted) {

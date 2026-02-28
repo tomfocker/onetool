@@ -47,7 +47,7 @@ export function useRename() {
               result = result.toLowerCase()
               break
             case 'title':
-              result = result.replace(/\w\S*/g, txt => 
+              result = result.replace(/\w\S*/g, txt =>
                 txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
               )
               break
@@ -110,6 +110,44 @@ export function useRename() {
     }
   }
 
+  const addFilesByPaths = async (paths: string[]) => {
+    if (!paths || paths.length === 0) return
+    try {
+      const fileResult = await window.electron.rename.getFileInfo(paths)
+      if (fileResult.success && fileResult.data?.fileInfo) {
+        setFiles(prev => {
+          // 去重合并
+          const newUniqueInfos = fileResult.data!.fileInfo.filter(
+            nFile => !prev.some(pFile => pFile.path === nFile.path)
+          )
+          const merged = [...prev, ...newUniqueInfos]
+
+          if (newUniqueInfos.length > 0) {
+            setMessage(`成功添加 ${newUniqueInfos.length} 个文件`)
+            setMessageType('success')
+
+            // 返回需要被重新计算的新状态
+            const sorted = sortFiles(merged, sortField, sortOrder)
+            return sorted.map((file, index) => ({
+              ...file,
+              newName: applyRules(file.name, index)
+            }))
+          } else {
+            setMessage('所选文件已存在于列表中')
+            setMessageType('info')
+            return prev
+          }
+        })
+      } else {
+        setMessage(`读取文件信息失败: ${fileResult.error}`)
+        setMessageType('error')
+      }
+    } catch (error) {
+      setMessage(`添加文件出错: ${error}`)
+      setMessageType('error')
+    }
+  }
+
   const handleSelectFiles = async () => {
     try {
       const selectResult = await window.electron.rename.selectFilesAndFolders()
@@ -118,25 +156,17 @@ export function useRename() {
         setMessageType('error')
         return
       }
-      if (selectResult.data.canceled || selectResult.data.filePaths.length === 0) return
+      if (selectResult.data.canceled) return
 
-      const fileResult = await window.electron.rename.getFileInfo(selectResult.data.filePaths)
-      if (fileResult.success && fileResult.data?.fileInfo) {
-        const newFiles = fileResult.data.fileInfo.map((file, index) => ({
-          ...file,
-          newName: applyRules(file.name, index)
-        }))
-        setFiles(newFiles)
-        setMessage(`成功添加 ${newFiles.length} 个文件`)
-        setMessageType('success')
-      } else {
-        setMessage(`添加文件失败: ${fileResult.error}`)
-        setMessageType('error')
-      }
+      await addFilesByPaths(selectResult.data.filePaths)
     } catch (error) {
       setMessage(`添加文件失败: ${error}`)
       setMessageType('error')
     }
+  }
+
+  const handleDropFiles = async (filePaths: string[]) => {
+    await addFilesByPaths(filePaths)
   }
 
   const removeFile = (path: string) => {
@@ -152,17 +182,17 @@ export function useRename() {
   const addRule = (type: RenameRule['type']) => {
     const newRule: RenameRule = {
       type,
-      params: type === 'sequence' 
+      params: type === 'sequence'
         ? { baseName: 'file_', startNum: 1, digits: 3 }
         : type === 'case'
-        ? { caseType: 'lower' }
-        : {}
+          ? { caseType: 'lower' }
+          : {}
     }
     setRules(prev => [...prev, newRule])
   }
 
   const updateRule = (index: number, params: Partial<RenameRule['params']>) => {
-    setRules(prev => prev.map((rule, i) => 
+    setRules(prev => prev.map((rule, i) =>
       i === index ? { ...rule, params: { ...rule.params, ...params } } : rule
     ))
   }
@@ -241,6 +271,7 @@ export function useRename() {
     sortOrder,
     handleSort,
     handleSelectFiles,
+    handleDropFiles,
     removeFile,
     clearFiles,
     addRule,

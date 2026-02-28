@@ -5,7 +5,14 @@ export const ScreenRecorderConfigSchema = z.object({
     outputPath: z.string().min(1),
     format: z.string().min(1),
     fps: z.number().int().positive().optional(),
-    quality: z.string().optional()
+    quality: z.string().optional(),
+    bounds: z.object({
+        x: z.number(),
+        y: z.number(),
+        width: z.number(),
+        height: z.number()
+    }).optional(),
+    windowTitle: z.string().optional()
 });
 
 export type ScreenRecorderConfig = z.infer<typeof ScreenRecorderConfigSchema>;

@@ -79,6 +79,7 @@ declare global {
         scanLan: (subnet: string) => Promise<IpcResponse<{ devices: LanDevice[] }>>
         getInfo: () => Promise<IpcResponse<{ interfaces: NetworkInterfaceInfo[] }>>
         ping: (host: string) => Promise<IpcResponse<{ time: number | null; alive: boolean }>>
+        pingBatch: (hosts: string[]) => Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>>
       }
       rename: {
         renameFiles: (files: string[], mode: string, options: any) => Promise<IpcResponse<{ results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }> }>>
@@ -88,6 +89,8 @@ declare global {
       screenOverlay: {
         start: () => Promise<IpcResponse<{ screenDataUrl?: string }>>
         close: () => Promise<IpcResponse>
+        notifyReady: () => void
+        onScreenshot: (callback: (dataUrl: string) => void) => () => void
       }
       screenshot: {
         getSettings: () => Promise<IpcResponse<{ savePath: string; autoSave: boolean }>>
@@ -133,7 +136,7 @@ declare global {
       webActivator: {
         checkVisibility: (configs: ActivatorConfig[]) => Promise<IpcResponse<{ results: boolean[] }>>
         getWindowList: () => Promise<IpcResponse<{ windows: WindowInfo[] }>>
-        toggleWindow: (config: { titlePattern: string; browserType?: string; shortcut?: string }) => Promise<IpcResponse<{ action?: 'activated' | 'minimized' }>>
+        toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => Promise<IpcResponse<{ action?: 'activated' | 'minimized' }>>
         registerShortcuts: (configs: ActivatorConfig[]) => Promise<IpcResponse<{ registeredCount: number }>>
         onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => () => void
       }
@@ -147,6 +150,9 @@ declare global {
         move: (x: number, y: number) => void
         resize: (width: number, height: number) => void
         startDrag: (filePath: string) => void
+      }
+      translate: {
+        translateImage: (base64Image: string) => Promise<IpcResponse<{ originalText: string; translatedText: string }>>
       }
     }
   }

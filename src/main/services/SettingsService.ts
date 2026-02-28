@@ -9,6 +9,9 @@ export interface AppSettings {
   floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
+  translateApiUrl: string
+  translateApiKey: string
+  translateModel: string
 }
 
 export class SettingsService extends EventEmitter {
@@ -17,7 +20,10 @@ export class SettingsService extends EventEmitter {
     screenshotHotkey: 'Alt+Shift+S',
     floatBallHotkey: 'Alt+Shift+F',
     screenshotSavePath: '',
-    autoSaveScreenshot: false
+    autoSaveScreenshot: false,
+    translateApiUrl: 'https://api.openai.com/v1',
+    translateApiKey: '',
+    translateModel: 'gpt-4o'
   }
 
   constructor() {
