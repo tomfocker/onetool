@@ -22,7 +22,10 @@ import {
   ArrowDown,
   Calendar,
   HardDrive,
-  RefreshCw
+  RefreshCw,
+  Shuffle,
+  ListTree,
+  HelpCircle
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -68,9 +71,21 @@ export const RenameTool: React.FC = () => {
     setIsDragging(false)
 
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      // 扩展标准 File 类型以支持 Electron 的 path 属性
-      const paths = Array.from(e.dataTransfer.files as Iterable<File & { path: string }>).map(f => f.path)
-      if (handleDropFiles) {
+      // 此时无论主进程是否重载，@electron-toolkit 的基础 api 都已存在
+      const paths = Array.from(e.dataTransfer.files)
+        .map(f => {
+          try {
+            if (window.electron?.webUtils?.getPathForFile) {
+              return window.electron.webUtils.getPathForFile(f as File)
+            }
+            return (f as any).path
+          } catch (err) {
+            return (f as any).path
+          }
+        })
+        .filter(Boolean)
+
+      if (paths.length > 0 && handleDropFiles) {
         handleDropFiles(paths)
       }
     }
@@ -164,7 +179,7 @@ export const RenameTool: React.FC = () => {
               </div>
 
               {files.length > 0 && (
-                <div className='mt-6 flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-white/5'>
+                <div className='mt-6 flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-border/50 shadow-sm'>
                   <p className='text-xs font-bold text-muted-foreground ml-2 flex items-center gap-2'>
                     已加载 <Badge className='bg-blue-500 text-white font-mono hover:bg-blue-600'>{files.length}</Badge> 个项目
                   </p>
@@ -204,7 +219,7 @@ export const RenameTool: React.FC = () => {
                   </div>
                 ) : (
                   rules.map((rule, index) => (
-                    <div key={index} className='p-5 rounded-3xl bg-white/5 border border-white/10 space-y-4 relative group'>
+                    <div key={index} className='p-5 rounded-3xl bg-card border border-border/50 shadow-sm space-y-4 relative group'>
                       <div className='flex items-center justify-between'>
                         <Badge variant="outline" className="rounded-lg uppercase tracking-widest text-[10px] font-black border-blue-500/30 text-blue-500">
                           {rule.type === 'prefix' ? '前缀' : rule.type === 'suffix' ? '后缀' : rule.type === 'replace' ? '替换' : rule.type === 'sequence' ? '序号' : '大小写'}
@@ -254,57 +269,75 @@ export const RenameTool: React.FC = () => {
 
         <div className="lg:col-span-7 space-y-6">
           <Card className='glass-card border-none overflow-hidden flex flex-col h-full min-h-[600px]'>
-            <CardHeader className="flex flex-row items-center justify-between shrink-0">
-              <CardTitle className='text-lg font-bold flex items-center gap-2'>
+            <CardHeader className="flex flex-col xl:flex-row items-start xl:items-center justify-between shrink-0 gap-4 pb-4 relative z-20">
+              <CardTitle className='text-lg font-black flex items-center gap-2'>
                 <Play className="w-5 h-5 text-emerald-500" />
                 预览与执行
               </CardTitle>
               {files.length > 0 && (
-                <div className='flex gap-2 bg-muted/20 p-1 rounded-xl items-center'>
-                  <span className='text-[10px] text-muted-foreground mr-1 uppercase font-bold tracking-widest'>排序:</span>
-                  <Button
-                    variant={sortField === 'name' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSort('name')}
-                    className="rounded-lg text-xs h-7 px-2"
-                  >
-                    名称 {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
-                  <Button
-                    variant={sortField === 'size' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSort('size')}
-                    className="rounded-lg text-xs h-7 px-2"
-                  >
-                    大小 {sortField === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
-                  <Button
-                    variant={sortField === 'mtime' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSort('mtime')}
-                    className="rounded-lg text-xs h-7 px-2"
-                  >
-                    时间 {sortField === 'mtime' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
-                  <Button
-                    variant={sortField === 'extension' ? 'secondary' : 'ghost'}
-                    size="sm"
-                    onClick={() => handleSort('extension')}
-                    className="rounded-lg text-xs h-7 px-2"
-                  >
-                    类型 {sortField === 'extension' && (sortOrder === 'asc' ? '↑' : '↓')}
-                  </Button>
+                <div className='flex flex-wrap gap-1.5 bg-muted/30 p-1.5 rounded-2xl items-center border border-border/50 shadow-inner'>
+                  <div className='flex items-center group relative px-2 border-r border-border/50 mr-1'>
+                    <span className='text-[10px] text-muted-foreground uppercase font-black tracking-widest flex items-center gap-1 cursor-help hover:text-foreground transition-colors'>
+                      对齐排序 <HelpCircle className="w-3 h-3" />
+                    </span>
+                    <div className="absolute top-full mt-3 left-0 w-64 p-3 bg-popover/95 backdrop-blur-xl border border-border/50 text-popover-foreground text-xs rounded-xl shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 pointer-events-none">
+                      此处排序仅会调整左侧的<strong className="text-blue-500">原文件名</strong>列表顺序，而右侧生成的<strong className="text-emerald-500">新文件名</strong>不受影响。这允许您通过排序或打乱来进行高级的错位分配重命名。
+                    </div>
+                  </div>
+
+                  {/* 分段控制器风格的排序按钮 */}
+                  <div className="flex bg-muted/40 rounded-xl p-0.5">
+                    <Button
+                      variant="ghost" size="sm" onClick={() => handleSort('name')}
+                      className={cn("rounded-lg text-[11px] h-7 px-2.5 font-bold transition-all", sortField === 'name' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      名称 {sortField === 'name' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" onClick={() => handleSort('size')}
+                      className={cn("rounded-lg text-[11px] h-7 px-2.5 font-bold transition-all", sortField === 'size' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      大小 {sortField === 'size' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" onClick={() => handleSort('mtime')}
+                      className={cn("rounded-lg text-[11px] h-7 px-2.5 font-bold transition-all", sortField === 'mtime' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      时间 {sortField === 'mtime' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                    <Button
+                      variant="ghost" size="sm" onClick={() => handleSort('extension')}
+                      className={cn("rounded-lg text-[11px] h-7 px-2.5 font-bold transition-all", sortField === 'extension' ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground")}
+                    >
+                      类型 {sortField === 'extension' && (sortOrder === 'asc' ? '↑' : '↓')}
+                    </Button>
+                  </div>
+
+                  <div className="flex gap-1.5 ml-1">
+                    <Button
+                      variant="outline" size="sm" onClick={() => handleSort('reverse')}
+                      className="rounded-xl text-[11px] h-8 px-3 font-bold bg-background/50 border-border/50 hover:bg-muted"
+                    >
+                      <ListTree className="w-3.5 h-3.5 mr-1.5 text-blue-500" />反转
+                    </Button>
+                    <Button
+                      variant="outline" size="sm" onClick={() => handleSort('random')}
+                      className="rounded-xl text-[11px] h-8 px-3 font-bold bg-background/50 border-border/50 hover:bg-muted"
+                    >
+                      <Shuffle className="w-3.5 h-3.5 mr-1.5 text-indigo-500" />打乱
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardHeader>
             <CardContent className='flex-1 overflow-hidden p-0 px-6'>
               <div className='h-[500px] overflow-y-auto pr-2 scrollbar-thin'>
                 <Table>
-                  <TableHeader className="sticky top-0 bg-background/80 backdrop-blur-md z-10">
-                    <TableRow className="border-none hover:bg-transparent">
-                      <TableHead className='w-[45%] text-[10px] font-black uppercase opacity-50'>原文件名</TableHead>
-                      <TableHead className='w-[45%] text-[10px] font-black uppercase opacity-50'>新文件名</TableHead>
-                      <TableHead className='w-[10%] text-right text-[10px] font-black uppercase opacity-50'>状态</TableHead>
+                  <TableHeader className="sticky top-0 bg-background/95 backdrop-blur-xl z-10 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border/50">
+                    <TableRow className="border-none hover:bg-transparent text-muted-foreground shadow-sm">
+                      <TableHead className='w-[45%] text-[11px] font-black uppercase tracking-widest'>原文件名</TableHead>
+                      <TableHead className='w-[45%] text-[11px] font-black uppercase tracking-widest'>新文件名</TableHead>
+                      <TableHead className='w-[10%] text-right text-[11px] font-black uppercase tracking-widest'>状态</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

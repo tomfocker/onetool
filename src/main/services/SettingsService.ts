@@ -7,6 +7,7 @@ export interface AppSettings {
   recorderHotkey: string
   screenshotHotkey: string
   floatBallHotkey: string
+  clipboardHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
   translateApiUrl: string
@@ -19,6 +20,7 @@ export class SettingsService extends EventEmitter {
     recorderHotkey: 'Alt+Shift+R',
     screenshotHotkey: 'Alt+Shift+S',
     floatBallHotkey: 'Alt+Shift+F',
+    clipboardHotkey: 'Alt+Shift+C',
     screenshotSavePath: '',
     autoSaveScreenshot: false,
     translateApiUrl: 'https://api.openai.com/v1',

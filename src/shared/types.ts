@@ -7,6 +7,7 @@ export interface AppSettings {
   floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
+  clipboardHotkey: string
 
   // 截图翻译大模型 API 配置
   translateApiUrl: string
@@ -64,7 +65,7 @@ export interface RenameRule {
   }
 }
 
-export type SortField = 'name' | 'size' | 'mtime' | 'ctime' | 'extension'
+export type SortField = 'name' | 'size' | 'mtime' | 'ctime' | 'extension' | 'random' | 'reverse'
 export type SortOrder = 'asc' | 'desc'
 
 export interface RenamePreset {

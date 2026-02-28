@@ -60,11 +60,17 @@ export function useRename() {
   }, [rules])
 
   const sortFiles = useCallback((filesToSort: FileItem[], field: SortField, order: SortOrder): FileItem[] => {
+    if (field === 'random') {
+      return [...filesToSort].sort(() => Math.random() - 0.5)
+    }
+    if (field === 'reverse') {
+      return [...filesToSort].reverse()
+    }
     return [...filesToSort].sort((a, b) => {
       let comparison = 0
       switch (field) {
         case 'name':
-          comparison = a.name.localeCompare(b.name, 'zh-CN')
+          comparison = a.name.localeCompare(b.name, 'zh-CN', { numeric: true })
           break
         case 'size':
           comparison = a.size - b.size
@@ -78,73 +84,111 @@ export function useRename() {
         case 'extension':
           const extA = a.name.split('.').pop() || ''
           const extB = b.name.split('.').pop() || ''
-          comparison = extA.localeCompare(extB)
+          comparison = extA.localeCompare(extB, 'zh-CN', { numeric: true })
           break
       }
       return order === 'asc' ? comparison : -comparison
     })
   }, [])
 
-  const updateNewNames = useCallback(() => {
-    if (files.length === 0) return
-    const sortedFiles = sortFiles(files, sortField, sortOrder)
-    const updatedFiles = sortedFiles.map((file, index) => ({
+  const applyRulesToFiles = useCallback((currentFiles: FileItem[]) => {
+    if (currentFiles.length === 0) return currentFiles
+    return currentFiles.map((file, index) => ({
       ...file,
       newName: applyRules(file.name, index),
       success: undefined,
       error: undefined
     }))
-    setFiles(updatedFiles)
-  }, [files, applyRules, sortFiles, sortField, sortOrder])
+  }, [applyRules])
 
   useEffect(() => {
-    updateNewNames()
-  }, [rules, sortField, sortOrder])
+    setFiles(prev => applyRulesToFiles(prev))
+  }, [rules, applyRulesToFiles])
+
+  const sortLeftColumnOnly = (prevFiles: FileItem[], field: SortField, order: SortOrder) => {
+    // 冻结右侧列的 newName 和 success/error 状态
+    const rightColumn = prevFiles.map(f => ({ newName: f.newName, success: f.success, error: f.error }))
+    const sortedFiles = sortFiles(prevFiles, field, order)
+    return sortedFiles.map((f, i) => ({
+      ...f,
+      newName: rightColumn[i].newName,
+      success: rightColumn[i].success,
+      error: rightColumn[i].error
+    }))
+  }
 
   const handleSort = (field: SortField) => {
+    if (field === 'random' || field === 'reverse') {
+      setFiles(prev => sortLeftColumnOnly(prev, field, 'asc'))
+      return
+    }
+
+    let nextOrder: SortOrder = 'asc'
     if (sortField === field) {
-      setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')
+      nextOrder = sortOrder === 'asc' ? 'desc' : 'asc'
+      setSortOrder(nextOrder)
     } else {
       setSortField(field)
       setSortOrder('asc')
     }
+
+    setFiles(prev => sortLeftColumnOnly(prev, field, nextOrder))
   }
+
+  const [pendingMessage, setPendingMessage] = useState<{ text: string, type: 'success' | 'error' | 'info', id: number } | null>(null)
+
+  useEffect(() => {
+    if (pendingMessage) {
+      setMessage(pendingMessage.text)
+      setMessageType(pendingMessage.type)
+    }
+  }, [pendingMessage])
 
   const addFilesByPaths = async (paths: string[]) => {
     if (!paths || paths.length === 0) return
     try {
       const fileResult = await window.electron.rename.getFileInfo(paths)
       if (fileResult.success && fileResult.data?.fileInfo) {
+        const incomingInfos = fileResult.data.fileInfo
+
         setFiles(prev => {
-          // 去重合并
-          const newUniqueInfos = fileResult.data!.fileInfo.filter(
+          if (incomingInfos.length === 0) {
+            // 异步抛出未能读取到有效文件的提示
+            setTimeout(() => {
+              setPendingMessage({ text: '未能读取到选中路径的有效文件', type: 'error', id: Date.now() })
+            }, 0)
+            return prev
+          }
+
+          const newUniqueInfos = incomingInfos.filter(
             nFile => !prev.some(pFile => pFile.path === nFile.path)
           )
-          const merged = [...prev, ...newUniqueInfos]
 
           if (newUniqueInfos.length > 0) {
-            setMessage(`成功添加 ${newUniqueInfos.length} 个文件`)
-            setMessageType('success')
+            // 异步抛出消息更新，安全跳出 setState 纯函数要求
+            setTimeout(() => {
+              setPendingMessage({ text: `成功添加 ${newUniqueInfos.length} 个文件`, type: 'success', id: Date.now() })
+            }, 0)
 
-            // 返回需要被重新计算的新状态
+            const merged = [...prev, ...newUniqueInfos]
             const sorted = sortFiles(merged, sortField, sortOrder)
             return sorted.map((file, index) => ({
               ...file,
               newName: applyRules(file.name, index)
             }))
           } else {
-            setMessage('所选文件已存在于列表中')
-            setMessageType('info')
+            // 异步抛出重复消息
+            setTimeout(() => {
+              setPendingMessage({ text: '所选文件已存在于列表中', type: 'info', id: Date.now() })
+            }, 0)
             return prev
           }
         })
       } else {
-        setMessage(`读取文件信息失败: ${fileResult.error}`)
-        setMessageType('error')
+        setPendingMessage({ text: `读取文件信息失败: ${fileResult.error}`, type: 'error', id: Date.now() })
       }
     } catch (error) {
-      setMessage(`添加文件出错: ${error}`)
-      setMessageType('error')
+      setPendingMessage({ text: `添加文件出错: ${error}`, type: 'error', id: Date.now() })
     }
   }
 

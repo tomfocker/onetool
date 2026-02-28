@@ -190,6 +190,7 @@ app.whenReady().then(() => {
   hotkeyService.registerScreenshotShortcut()
   hotkeyService.registerTranslatorShortcut()
   hotkeyService.registerFloatBallShortcut()
+  hotkeyService.registerClipboardShortcut()
 
   // Retry shortcut registration after 1s to avoid conflicts
   setTimeout(() => {

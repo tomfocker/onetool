@@ -12,8 +12,13 @@ import {
   PinOff,
   ChevronDown,
   Check,
-  AlertCircle
+  AlertCircle,
+  Settings as SettingsIcon,
+  Keyboard
 } from 'lucide-react'
+import { useSettings } from '../hooks/useSettings'
+import { Input } from '../components/ui/input'
+import { Button } from '../components/ui/button'
 
 interface ClipboardItem {
   id: string
@@ -37,6 +42,39 @@ const ClipboardManager: React.FC = () => {
   const [showSortMenu, setShowSortMenu] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const sortMenuRef = useRef<HTMLDivElement>(null)
+  const { settings, updateSettings } = useSettings()
+
+  const [isEditingHotkey, setIsEditingHotkey] = useState(false)
+  const [tempHotkey, setTempHotkey] = useState('')
+  const [columns, setColumns] = useState(1)
+
+  useEffect(() => {
+    const updateColumns = () => {
+      if (window.innerWidth >= 1400) setColumns(3)
+      else if (window.innerWidth >= 860) setColumns(2)
+      else setColumns(1)
+    }
+    updateColumns()
+    window.addEventListener('resize', updateColumns)
+    return () => window.removeEventListener('resize', updateColumns)
+  }, [])
+
+  const handleSaveHotkey = async () => {
+    if (!tempHotkey.trim()) {
+      setIsEditingHotkey(false)
+      return
+    }
+    const res = await window.electron.ipcRenderer.invoke('clipboard-hotkey-set', tempHotkey)
+    if (res.success) {
+      updateSettings({ clipboardHotkey: tempHotkey })
+      setIsEditingHotkey(false)
+    } else {
+      window.electron.ipcRenderer.send('app-notification', {
+        type: 'error',
+        message: res.error || '快捷键设置失败'
+      })
+    }
+  }
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -135,6 +173,15 @@ const ClipboardManager: React.FC = () => {
       }
       return bTime - aTime
     })
+
+  // 计算 Masonry 列数据 (按从左到右，然后从上到下的顺序)
+  const masonryColumns = React.useMemo(() => {
+    const cols: ClipboardItem[][] = Array.from({ length: columns }, () => [])
+    filteredItems.forEach((item, idx) => {
+      cols[idx % columns].push(item)
+    })
+    return cols
+  }, [filteredItems, columns])
 
   const formatTime = (timestamp: number) => {
     if (!timestamp) return '未知时间'
@@ -561,11 +608,20 @@ const ClipboardManager: React.FC = () => {
 
         .cm-list {
           display: flex;
+          gap: 16px;
+          align-items: flex-start;
+        }
+
+        .cm-col {
+          flex: 1;
+          display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 16px;
+          min-width: 0;
         }
 
         .cm-item {
+          width: 100%;
           background: rgba(255,255,255,0.6);
           border-radius: 12px;
           border: 1px solid rgba(255,255,255,0.3);
@@ -750,6 +806,42 @@ const ClipboardManager: React.FC = () => {
               <Clipboard size={20} />
             </div>
             <span>剪贴板管理</span>
+
+            <div className="ml-4 flex items-center gap-2">
+              {isEditingHotkey ? (
+                <div className="flex items-center gap-1 bg-white/50 dark:bg-black/20 p-1 rounded-xl backdrop-blur-md border border-white/20">
+                  <Input
+                    autoFocus
+                    className="h-7 w-32 text-xs bg-transparent border-none shadow-none focus-visible:ring-0 px-2"
+                    placeholder="如 Alt+Shift+C"
+                    value={tempHotkey}
+                    onChange={(e) => setTempHotkey(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSaveHotkey()
+                      if (e.key === 'Escape') setIsEditingHotkey(false)
+                    }}
+                  />
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-lg hover:bg-green-500/10 text-green-600" onClick={handleSaveHotkey}>
+                    <Check size={14} />
+                  </Button>
+                  <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-lg hover:bg-red-500/10 text-red-600" onClick={() => setIsEditingHotkey(false)}>
+                    <X size={14} />
+                  </Button>
+                </div>
+              ) : (
+                <button
+                  className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition-colors cursor-pointer group"
+                  onClick={() => {
+                    setTempHotkey(settings?.clipboardHotkey || '')
+                    setIsEditingHotkey(true)
+                  }}
+                  title="点击修改快捷键"
+                >
+                  <Keyboard size={12} className="opacity-70 group-hover:opacity-100" />
+                  <span className="text-[11px] font-black uppercase tracking-widest">{settings?.clipboardHotkey || '未设置'}</span>
+                </button>
+              )}
+            </div>
           </div>
           <div className="cm-header-actions">
             <div className={`cm-listening-badge ${isListening ? 'active' : 'inactive'}`}>
@@ -863,51 +955,57 @@ const ClipboardManager: React.FC = () => {
           </div>
         ) : (
           <div className="cm-list">
-            {filteredItems.map(item => (
-              <div key={item.id} className={`cm-item ${item.pinned ? 'pinned' : ''}`}>
-                <div className="cm-item-header">
-                  <div className="cm-item-meta">
-                    <div className={`cm-item-type ${item.type}`}>
-                      {item.type === 'text' ? <FileText size={14} /> : <Image size={14} />}
+            {masonryColumns.map((col, colIdx) => (
+              <div key={colIdx} className="cm-col">
+                {col.map(item => (
+                  <div key={item.id} className={`cm-item ${item.pinned ? 'pinned' : ''}`}>
+                    <div className="cm-item-header">
+                      <div className="cm-item-meta">
+                        <div className={`cm-item-type ${item.type}`}>
+                          {item.type === 'text' ? <FileText size={14} /> : <Image size={14} />}
+                        </div>
+                        <div className="cm-item-time">
+                          <Clock size={12} />
+                          {formatTime(item.timestamp)}
+                        </div>
+                      </div>
+                      <div className="cm-item-actions">
+                        <button
+                          className="cm-item-btn pin"
+                          onClick={() => togglePin(item.id)}
+                          title={item.pinned ? '取消置顶' : '置顶'}
+                        >
+                          {item.pinned ? <Pin size={14} /> : <PinOff size={14} />}
+                        </button>
+                        <button
+                          className={`cm-item-btn copy ${copiedId === item.id ? 'copied' : ''}`}
+                          onClick={() => copyToClipboard(item)}
+                          title="复制"
+                        >
+                          {copiedId === item.id ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                        <button
+                          className="cm-item-btn delete"
+                          onClick={() => deleteItem(item.id)}
+                          title="删除"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="cm-item-time">
-                      <Clock size={12} />
-                      {formatTime(item.timestamp)}
+                    <div className="cm-item-content">
+                      {item.type === 'text' ? (
+                        <div className="cm-item-text">
+                          {truncateText(item.content, 500)}
+                        </div>
+                      ) : (
+                        <div className="cm-item-image-wrapper">
+                          <img src={item.preview || item.content} alt="Clipboard Image" className="cm-item-image" />
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="cm-item-actions">
-                    <button
-                      className={`cm-item-btn ${copiedId === item.id ? 'copied' : ''}`}
-                      onClick={() => copyToClipboard(item)}
-                      title="复制"
-                    >
-                      {copiedId === item.id ? <Check size={16} /> : <Copy size={16} />}
-                    </button>
-                    <button
-                      className={`cm-item-btn pin ${item.pinned ? 'active' : ''}`}
-                      onClick={() => togglePin(item.id)}
-                      title={item.pinned ? '取消置顶' : '置顶'}
-                    >
-                      {item.pinned ? <PinOff size={16} /> : <Pin size={16} />}
-                    </button>
-                    <button
-                      className="cm-item-btn delete"
-                      onClick={() => deleteItem(item.id)}
-                      title="删除"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-                <div className="cm-item-content">
-                  {item.type === 'text' ? (
-                    <div className="cm-item-text">{truncateText(item.content)}</div>
-                  ) : (
-                    <div className="cm-item-image-wrapper">
-                      <img className="cm-item-image" src={item.content} alt="剪贴板图片" />
-                    </div>
-                  )}
-                </div>
+                ))}
               </div>
             ))}
           </div>

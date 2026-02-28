@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import { z } from 'zod'
 import {
@@ -17,6 +17,9 @@ const renameAPI = {
   },
   selectFilesAndFolders: () => {
     return ipcRenderer.invoke('select-files-folders')
+  },
+  getPathForFile: (file: File): string => {
+    return webUtils.getPathForFile(file)
   }
 }
 
@@ -188,6 +191,12 @@ const clipboardAPI = {
     return () => {
       ipcRenderer.removeListener('clipboard-history', handler)
     }
+  },
+  getHotkey: () => {
+    return ipcRenderer.invoke('clipboard-hotkey-get')
+  },
+  setHotkey: (hotkey: string) => {
+    return ipcRenderer.invoke('clipboard-hotkey-set', hotkey)
   }
 }
 

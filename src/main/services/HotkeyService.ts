@@ -68,6 +68,23 @@ export class HotkeyService {
     }
   }
 
+  registerClipboardShortcut() {
+    try {
+      const settings = settingsService.getSettings()
+      globalShortcut.unregister(settings.clipboardHotkey)
+      globalShortcut.register(settings.clipboardHotkey, () => {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          if (this.mainWindow.isMinimized()) this.mainWindow.restore()
+          if (!this.mainWindow.isVisible()) this.mainWindow.show()
+          this.mainWindow.focus()
+          this.mainWindow.webContents.send('open-tool', 'clipboard')
+        }
+      })
+    } catch (e) {
+      console.error('HotkeyService: Error registering clipboard shortcut:', e)
+    }
+  }
+
   getRecorderHotkey(): IpcResponse<string> {
     return { success: true, data: settingsService.getSettings().recorderHotkey }
   }
@@ -141,6 +158,35 @@ export class HotkeyService {
         return { success: true }
       } else {
         this.registerFloatBallShortcut()
+        return { success: false, error: '快捷键已被占用或无效' }
+      }
+    } catch (e) {
+      return { success: false, error: (e as Error).message }
+    }
+  }
+
+  getClipboardHotkey(): IpcResponse<string> {
+    return { success: true, data: settingsService.getSettings().clipboardHotkey }
+  }
+
+  setClipboardHotkey(hotkey: string): IpcResponse {
+    try {
+      const settings = settingsService.getSettings()
+      globalShortcut.unregister(settings.clipboardHotkey)
+      const success = globalShortcut.register(hotkey, () => {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+          if (this.mainWindow.isMinimized()) this.mainWindow.restore()
+          if (!this.mainWindow.isVisible()) this.mainWindow.show()
+          this.mainWindow.focus()
+          this.mainWindow.webContents.send('open-tool', 'clipboard')
+        }
+      })
+
+      if (success) {
+        settingsService.updateSettings({ clipboardHotkey: hotkey })
+        return { success: true }
+      } else {
+        this.registerClipboardShortcut()
         return { success: false, error: '快捷键已被占用或无效' }
       }
     } catch (e) {

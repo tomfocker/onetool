@@ -69,7 +69,18 @@ function AppContent(): React.JSX.Element {
     }
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
-    return () => window.removeEventListener('hashchange', handleHashChange)
+
+    // 注册全局系统进程唤出特定工具界面的 IPC 监听
+    const unsubOpenTool = window.electron.ipcRenderer.on('open-tool', (toolId: string) => {
+      setCurrentPage(toolId)
+      setRetryKey(0)
+      setSearchQuery('')
+    })
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+      unsubOpenTool()
+    }
   }, [])
 
   if (isScreenOverlay) return <ScreenOverlay />

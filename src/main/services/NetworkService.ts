@@ -8,73 +8,41 @@ export class NetworkService {
 
   async ping(host: string): Promise<IpcResponse<{ alive: boolean, time: number | null }>> {
     const target = host.replace(/^https?:\/\//, '').split('/')[0]
-    // 使用 PowerShell Test-Connection 直接获取 ResponseTime，
-    // 避免 cmd 编码问题和正则匹配不准確的问题。
-    const script = `
-      $ErrorActionPreference = 'SilentlyContinue'
-      $r = Test-Connection -ComputerName '${target}' -Count 1 -BufferSize 32 -ErrorAction SilentlyContinue
-      if ($r -and $r.StatusCode -eq 0) {
-        Write-Output "OK:$($r.ResponseTime)"
-      } else {
-        Write-Output "FAIL"
-      }
-    `
     try {
-      const output = await execPowerShell(script, 6000)
-      const trimmed = output.trim()
-      if (trimmed.startsWith('OK:')) {
-        const time = parseInt(trimmed.slice(3), 10)
+      // 使用原生的 ping.exe ，仅发送 1 个包，超时时间 1000ms
+      const output = await execCommand(`ping -n 1 -w 1000 ${target}`, 3000)
+
+      // 正则匹配返回的延迟，例如 "时间=12ms"、"time=12ms" 或 "<1ms"
+      const timeMatch = output.match(/(?:时间|time)[=<](\d+)(?:ms)?/i)
+
+      // 如果匹配到了时间，且没有 100% 丢包，即认为存活
+      if (timeMatch && !output.includes('100% 丢失') && !output.includes('100% loss')) {
+        const time = parseInt(timeMatch[1], 10)
         return { success: true, data: { alive: true, time: isNaN(time) ? null : time } }
-      } else {
-        return { success: true, data: { alive: false, time: null } }
       }
+      return { success: true, data: { alive: false, time: null } }
     } catch {
       return { success: true, data: { alive: false, time: null } }
     }
   }
 
   /**
-   * 批量 ping 多个 host，一次 PowerShell 进程并行完成，
-   * 结果以 JSON 返回 { host: string, alive: boolean, time: number | null }[]
+   * 批量 ping 多个 host
+   * 放弃笨重、极慢的 PowerShell Start-Job，改由 Node.js Node 执行 Promise.all 批量调用极其轻便的 ping.exe
    */
   async pingBatch(hosts: string[]): Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>> {
-    const targets = hosts.map(h => h.replace(/^https?:\/\//, '').split('/')[0])
-    const hostsJson = JSON.stringify(targets)
-    const script = `
-      $ErrorActionPreference = 'SilentlyContinue'
-      $hosts = '${hostsJson}' | ConvertFrom-Json
-      $jobs = @()
-      foreach ($h in $hosts) {
-        $jobs += Start-Job -ScriptBlock {
-          param($target)
-          $r = Test-Connection -ComputerName $target -Count 1 -BufferSize 32 -ErrorAction SilentlyContinue
-          if ($r -and $r.StatusCode -eq 0) {
-            @{ host = $target; alive = $true; time = [int]$r.ResponseTime }
-          } else {
-            @{ host = $target; alive = $false; time = $null }
-          }
-        } -ArgumentList $h
-      }
-      $results = $jobs | Wait-Job -Timeout 8 | Receive-Job
-      $jobs | Remove-Job -Force -ErrorAction SilentlyContinue
-      if ($results) { $results | ConvertTo-Json -Compress } else { "[]" }
-    `
     try {
-      const output = await execPowerShell(script, 12000)
-      const trimmed = output.trim()
-      // 找到 JSON 起始位置（跳过可能的 BOM 或其他输出）
-      const startIdx = trimmed.indexOf('[')
-      if (startIdx === -1) return { success: true, data: [] }
-      const parsed = JSON.parse(trimmed.slice(startIdx))
-      const results = Array.isArray(parsed) ? parsed : [parsed]
-      return {
-        success: true,
-        data: results.map((r: any) => ({
-          host: r.host,
-          alive: !!r.alive,
-          time: r.time != null ? parseInt(r.time, 10) : null
-        }))
-      }
+      const results = await Promise.all(
+        hosts.map(async (host) => {
+          const res = await this.ping(host)
+          return {
+            host, // 保持传入时的原样 (比如带 http://)，方便前端匹配
+            alive: res.data?.alive ?? false,
+            time: res.data?.time ?? null
+          }
+        })
+      )
+      return { success: true, data: results }
     } catch (e) {
       return { success: false, error: (e as Error).message }
     }

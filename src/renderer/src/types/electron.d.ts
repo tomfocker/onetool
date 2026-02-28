@@ -19,6 +19,9 @@ declare global {
         send: (channel: string, ...args: any[]) => void
         invoke: (channel: string, ...args: any[]) => Promise<any>
       }
+      webUtils: {
+        getPathForFile: (file: File) => string
+      }
       autoClicker: {
         start: (config: { interval: number; button: string }) => Promise<IpcResponse>
         stop: () => Promise<IpcResponse>
@@ -85,6 +88,7 @@ declare global {
         renameFiles: (files: string[], mode: string, options: any) => Promise<IpcResponse<{ results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }> }>>
         getFileInfo: (filePaths: string[]) => Promise<IpcResponse<{ fileInfo: RenameFileItem[] }>>
         selectFilesAndFolders: () => Promise<IpcResponse<{ canceled: boolean; filePaths: string[] }>>
+        getPathForFile: (file: File) => string
       }
       screenOverlay: {
         start: () => Promise<IpcResponse<{ screenDataUrl?: string }>>

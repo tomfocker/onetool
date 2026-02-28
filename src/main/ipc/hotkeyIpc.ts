@@ -17,4 +17,12 @@ export function registerHotkeyIpc() {
   ipcMain.handle('screenshot-hotkey-set', async (_event, hotkey: string) => {
     return hotkeyService.setScreenshotHotkey(hotkey)
   })
+
+  ipcMain.handle('clipboard-hotkey-get', async () => {
+    return hotkeyService.getClipboardHotkey()
+  })
+
+  ipcMain.handle('clipboard-hotkey-set', async (_event, hotkey: string) => {
+    return hotkeyService.setClipboardHotkey(hotkey)
+  })
 }
