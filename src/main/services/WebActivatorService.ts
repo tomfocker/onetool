@@ -2,7 +2,7 @@ import { app, BrowserWindow, globalShortcut } from 'electron'
 import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
-import { execPowerShell } from '../utils/processUtils'
+import { execPowerShell, execPowerShellEncoded } from '../utils/processUtils'
 import { IpcResponse } from '../../shared/types'
 import { processRegistry } from './ProcessRegistry'
 
@@ -33,7 +33,7 @@ export class WebActivatorService {
         Add-Type -AssemblyName UIAutomationClient
         Add-Type -AssemblyName UIAutomationTypes
         $res = New-Object System.Collections.ArrayList
-        $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne 0 }
+        $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox|thor)$" -and $_.MainWindowHandle -ne 0 }
         $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
         foreach ($p in $browserProcs) {
             try {
@@ -42,7 +42,7 @@ export class WebActivatorService {
                     $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
                     foreach ($t in $tabs) {
                         $name = $t.Current.Name
-                        if ($name -and $name -notmatch "^\d+ 个标签页$|^关闭$|^新标签页$") {
+                        if ($name -and $name -notmatch "^\\d+ 个标签页$|^关闭$|^新标签页$") {
                             $null = $res.Add(@{ id = $p.Id; title = $name; processName = $p.ProcessName; hwnd = $p.MainWindowHandle.ToInt64(); type = "tab" })
                         }
                     }
@@ -50,30 +50,25 @@ export class WebActivatorService {
             } catch {}
         }
         Write-Output "---TAB_JSON_START---"
-        if ($res.Count -eq 0) { Write-Output "[]" } else {
-            $outputList = @()
+        if ($res.Count -eq 0) {
+            Write-Output "[]"
+        } else {
+            $outputList = New-Object System.Collections.ArrayList
             foreach ($item in $res) {
-                $obj = New-Object PSObject
-                $obj | Add-Member -MemberType NoteProperty -Name "id" -Value $item.id
-                $obj | Add-Member -MemberType NoteProperty -Name "title" -Value $item.title
-                $obj | Add-Member -MemberType NoteProperty -Name "processName" -Value $item.processName
-                $obj | Add-Member -MemberType NoteProperty -Name "hwnd" -Value $item.hwnd
-                $obj | Add-Member -MemberType NoteProperty -Name "type" -Value $item.type
-                $outputList += $obj
+                $obj = New-Object PSObject -Property @{
+                    id = $item.id
+                    title = $item.title
+                    processName = $item.processName
+                    hwnd = $item.hwnd
+                    type = $item.type
+                }
+                $null = $outputList.Add($obj)
             }
-            Write-Output ($outputList | ConvertTo-Json -Depth 5)
+            Write-Output ($outputList | ConvertTo-Json -Depth 5 -Compress)
         }
         Write-Output "---TAB_JSON_END---"
       `;
-      const tempDir = path.join(app.getPath('temp'), 'onetool_activator')
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
-      const scriptPath = path.join(tempDir, 'get_tabs.ps1')
-      fs.writeFileSync(scriptPath, '\ufeff' + tabScript, 'utf8')
-      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { windowsHide: true })
-      processRegistry.register(ps)
-      let tabResult = ''
-      ps.stdout.on('data', (d) => tabResult += d.toString('utf8'))
-      await new Promise(resolve => ps.on('close', resolve))
+      const tabResult = await execPowerShellEncoded(tabScript, 10000);
       const match = tabResult.match(/---TAB_JSON_START---\s*(.*?)\s*---TAB_JSON_END---/s);
       if (match && match[1]) {
         try {
@@ -122,7 +117,7 @@ export class WebActivatorService {
             }
         }
         if (!$proc -or $targetHwnd -eq [IntPtr]::Zero) {
-            $procs = Get-Process | Where-Object { ($_.MainWindowTitle -match "${escapedPattern}" -or $_.ProcessName -match "${escapedPattern}") -and $_.MainWindowHandle -ne [IntPtr]::Zero }
+            $procs = Get-Process | Where-Object { ($_.MainWindowTitle -match [regex]::Escape("${escapedPattern}") -or $_.ProcessName -match [regex]::Escape("${escapedPattern}")) -and $_.MainWindowHandle -ne [IntPtr]::Zero }
             $proc = $procs | Select-Object -First 1
             if ($proc) { $targetHwnd = $proc.MainWindowHandle }
         }
@@ -134,8 +129,8 @@ export class WebActivatorService {
                 [Win32]::ShowWindow($targetHwnd, 6) | Out-Null
                 "minimized"
             } else {
-                [Win32]::ShowWindow($targetHwnd, 9) | Out-Null
-                [Win32]::ShowWindow($targetHwnd, 5) | Out-Null
+                if ([Win32]::IsIconic($targetHwnd)) { [Win32]::ShowWindow($targetHwnd, 9) | Out-Null }
+                else { [Win32]::ShowWindow($targetHwnd, 5) | Out-Null }
                 [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
                 "activated"
             }
@@ -151,8 +146,8 @@ export class WebActivatorService {
   }
 
   async toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
+    const configBase64 = Buffer.from(JSON.stringify({ pattern })).toString('base64');
     try {
-      const escapedPattern = pattern.replace(/"/g, '`"')
       const script = `
         Add-Type -AssemblyName UIAutomationClient
         Add-Type -AssemblyName UIAutomationTypes
@@ -167,66 +162,85 @@ export class WebActivatorService {
           }
 "@
         function Select-Tab($tab) {
-            $pattern = [System.Windows.Automation.SelectionItemPattern]::SelectionItemPattern
-            $p = $tab.GetCurrentPattern($pattern)
-            $p.Select()
-        }
-        $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
-        $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne 0 }
-        $targetTab = $null; $targetHwnd = [IntPtr]::Zero; $currentTab = $null; $returnTab = $null
-        foreach ($p in $browserProcs) {
             try {
-                $root = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-                if ($root) {
-                    $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
-                    foreach ($t in $tabs) {
-                        if ($t.Current.Name -match "${escapedPattern}") { $targetTab = $t; $targetHwnd = $p.MainWindowHandle }
-                        try {
-                            $selPattern = [System.Windows.Automation.SelectionItemPattern]::SelectionItemPattern
-                            if ($t.GetCurrentPattern($selPattern).Current.IsSelected) { $currentTab = $t }
-                            else { $returnTab = $t }
-                        } catch {}
-                    }
-                }
+                $pattern = [System.Windows.Automation.SelectionItemPattern]::SelectionItemPattern
+                $p = $tab.GetCurrentPattern($pattern)
+                if ($p) { $p.Select() }
             } catch {}
-            if ($targetTab) { break }
         }
-        if ($targetTab) {
+
+        $jsonRaw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${configBase64}"))
+        $cfgData = $jsonRaw | ConvertFrom-Json
+        $escapedPattern = $cfgData.pattern
+
+        $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
+        $browserNameRegex = "^(msedge|chrome|brave|firefox|360chrome|sogouexplorer|vivaldi|opera|yandex|thor)$"
+
+        function Get-TargetTab {
+            $procs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
+            $hnds = @()
+            foreach ($p in $procs) {
+                if ($p.MainWindowHandle -ne 0) { $hnds += $p.MainWindowHandle }
+                try {
+                    $pWindows = Get-Process -Id $p.Id | Select-Object -ExpandProperty MainWindowHandle -ErrorAction SilentlyContinue
+                    if ($pWindows) { $hnds += $pWindows }
+                } catch {}
+            }
+            $hnds = $hnds | Where-Object { $_ -ne 0 } | Select-Object -Unique
+            foreach ($hwnd in $hnds) {
+                try {
+                    $root = [System.Windows.Automation.AutomationElement]::FromHandle($hwnd)
+                    if ($root) {
+                        $tabs = $root.FindAll([System.Windows.Automation.TreeScope]::Descendants, $itemCond)
+                        foreach ($t in $tabs) {
+                            if ($t.Current.Name -match [regex]::Escape($escapedPattern)) { 
+                                return @{ tab = $t; hwnd = $hwnd }
+                            }
+                        }
+                    }
+                } catch {}
+            }
+            return $null
+        }
+
+        $found = Get-TargetTab
+        if (!$found) {
+            $browserProcs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
+            foreach ($p in $browserProcs) {
+                if ($p.MainWindowHandle -ne 0) {
+                    [Win32]::ShowWindow($p.MainWindowHandle, 9) | Out-Null # SW_RESTORE
+                    [Win32]::SetForegroundWindow($p.MainWindowHandle) | Out-Null
+                }
+            }
+            Start-Sleep -Milliseconds 800
+            $found = Get-TargetTab
+        }
+
+        if ($found) {
+            $targetTab = $found.tab
+            $targetHwnd = $found.hwnd
             $fgHwnd = [Win32]::GetForegroundWindow()
             if ($fgHwnd -eq $targetHwnd) {
-                if ($currentTab -and $currentTab.Current.Name -match "${escapedPattern}") {
-                    if ($returnTab) { Select-Tab($returnTab) | Out-Null; "ACTION:RETURN|NAME:" + $returnTab.Current.Name }
-                    else { "ACTION:ALREADY_HERE" }
-                } else {
-                    $oldName = if ($currentTab) { $currentTab.Current.Name } else { "" }
-                    Select-Tab($targetTab) | Out-Null; "ACTION:SWITCH|NAME:" + $oldName
-                }
+                Select-Tab($targetTab) | Out-Null
+                "ACTION:ACTIVATED"
             } else {
                 if ([Win32]::IsIconic($targetHwnd)) { [Win32]::ShowWindow($targetHwnd, 9) | Out-Null }
-                [Win32]::ShowWindow($targetHwnd, 5) | Out-Null; [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
-                Start-Sleep -Milliseconds 80; Select-Tab($targetTab) | Out-Null; "ACTION:ACTIVATE|NAME:" + (if ($currentTab) { $currentTab.Current.Name } else { "" })
+                else { [Win32]::ShowWindow($targetHwnd, 5) | Out-Null }
+                [Win32]::SetForegroundWindow($targetHwnd) | Out-Null
+                Start-Sleep -Milliseconds 450
+                Select-Tab($targetTab) | Out-Null
+                "ACTION:ACTIVATE"
             }
         } else { "NOT_FOUND" }
       `;
-      const tempDir = path.join(app.getPath('temp'), 'onetool_activator')
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
-      const scriptPath = path.join(tempDir, 'toggle_tab.ps1')
-      fs.writeFileSync(scriptPath, '\ufeff' + script, 'utf8')
-      const ps = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath], { windowsHide: true })
-      processRegistry.register(ps)
-      let result = ''
-      ps.stdout.on('data', (d) => result += d.toString('utf8'))
-      await new Promise(resolve => ps.on('close', resolve))
-      if (result.includes('ACTION:SWITCH') || result.includes('ACTION:ACTIVATE')) return { success: true, action: 'activated' }
-      if (result.includes('ACTION:RETURN')) return { success: true, action: 'minimized' }
+      const result = await execPowerShellEncoded(script, 15000);
+      if (result.includes('ACTION:ACTIVATE') || result.includes('ACTION:ACTIVATED')) return { success: true, action: 'activated' }
       return { success: false, error: 'Tab not found' }
     } catch (e) { return { success: false, error: (e as Error).message } }
   }
 
   async checkVisibility(configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>): Promise<IpcResponse<{ results: boolean[] }>> {
-    // 将所有配置序列化给 PowerShell，一次调用查询全部，减少进程开销
-    const appConfigs = configs.map((c, i) => ({ index: i, type: c.type, pattern: c.pattern.replace(/\\/g, '\\\\').replace(/"/g, '\\"'), hwnd: c.hwnd || 0 }))
-    const configJson = JSON.stringify(appConfigs)
+    const configBase64 = Buffer.from(JSON.stringify(configs)).toString('base64');
     const script = `
       Add-Type @"
         using System;
@@ -240,7 +254,8 @@ export class WebActivatorService {
           [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
         }
 "@
-      $cfgs = '${configJson}' | ConvertFrom-Json
+      $configJson = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${configBase64}"))
+      $cfgs = $configJson | ConvertFrom-Json
       $results = @()
       $fgHwnd = [Win32V]::GetForegroundWindow()
       $fgRoot = [Win32V]::GetAncestor($fgHwnd, 2)
@@ -257,7 +272,8 @@ export class WebActivatorService {
                   if ([Win32V]::IsWindow($h)) { $targetHwnd = $h }
               }
               if ($targetHwnd -eq [IntPtr]::Zero) {
-                  $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match $cfg.pattern -or $_.ProcessName -match $cfg.pattern) -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+                  $pattern = $cfg.pattern -replace "'", "''"
+                  $proc = Get-Process | Where-Object { ($_.MainWindowTitle -match [regex]::Escape($pattern) -or $_.ProcessName -match [regex]::Escape($pattern)) -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
                   if ($proc) { $targetHwnd = $proc.MainWindowHandle }
               }
               if ($targetHwnd -ne [IntPtr]::Zero) {
@@ -265,10 +281,9 @@ export class WebActivatorService {
                   $isActive = ($fgHwnd -eq $targetHwnd -or $fgRoot -eq $targetRoot -or $fgRoot -eq $targetHwnd) -and -not [Win32V]::IsIconic($targetHwnd)
               }
           } else {
-              # tab 类型: 浏览器当前激活标签的 title 就是浏览器进程的 MainWindowTitle
-              # 同时检查浏览器进程前台窗口 title 是否匹配 pattern
-              $browserProc = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox)$" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Where-Object {
-                  ($_.MainWindowTitle -match $cfg.pattern)
+              $pattern = $cfg.pattern -replace "'", "''"
+              $browserProc = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox|360chrome|sogouexplorer|vivaldi|opera|yandex)$" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Where-Object {
+                  ($_.MainWindowTitle -match [regex]::Escape($pattern))
               } | Select-Object -First 1
               if ($browserProc) {
                   $bHwnd = $browserProc.MainWindowHandle
@@ -279,9 +294,9 @@ export class WebActivatorService {
           $results += if ($isActive) { "true" } else { "false" }
       }
       $results -join ","
-    `
+    `;
     try {
-      const output = await execPowerShell(script, 8000)
+      const output = await execPowerShellEncoded(script, 8000)
       const parts = output.trim().split(',')
       const results = configs.map((_, i) => parts[i]?.trim() === 'true')
       return { success: true, data: { results } }

@@ -12,7 +12,8 @@ export const ScreenRecorderConfigSchema = z.object({
         width: z.number(),
         height: z.number()
     }).optional(),
-    windowTitle: z.string().optional()
+    windowTitle: z.string().optional(),
+    displayId: z.string().optional()
 });
 
 export type ScreenRecorderConfig = z.infer<typeof ScreenRecorderConfigSchema>;

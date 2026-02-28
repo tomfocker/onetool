@@ -3,10 +3,20 @@ import { ActivatorConfig, WindowInfo, ActivatorTargetType as TargetType } from '
 
 export { type ActivatorConfig, type WindowInfo, type TargetType }
 
+let hasRegisteredInitialShortcuts = false
+
 export function useWebActivator() {
   const [configs, setConfigs] = useState<ActivatorConfig[]>(() => {
     const saved = localStorage.getItem('web-activator-v4')
-    if (saved) { try { return JSON.parse(saved) } catch { return [] } }
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved)
+        return Array.isArray(parsed) ? parsed.map((c: any, idx: number) => ({
+          ...c,
+          id: c.id || `v4-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 11)}`
+        })) : []
+      } catch { return [] }
+    }
     return []
   })
 
@@ -18,10 +28,10 @@ export function useWebActivator() {
     setTimeout(() => setStatusMessage(''), 3000)
   }, [])
 
-  const registerShortcuts = useCallback(async (currentConfigs: ActivatorConfig[]) => {
+  const registerShortcuts = useCallback(async (currentConfigs: ActivatorConfig[], showTip: boolean = true) => {
     if (!window.electron?.webActivator?.registerShortcuts) return
     const result = await window.electron.webActivator.registerShortcuts(currentConfigs)
-    if (result.success) showStatus('快捷键配置已更新')
+    if (result.success && showTip) showStatus('快捷键配置已更新')
   }, [showStatus])
 
   const syncVisibility = useCallback(async () => {
@@ -61,13 +71,15 @@ export function useWebActivator() {
   }, [configs])
 
   useEffect(() => {
-    if (configs.length > 0) {
-      registerShortcuts(configs)
-      syncVisibility()
+    // 初次挂载或完全重置时才自动注册一次
+    if (configs.length > 0 && !hasRegisteredInitialShortcuts) {
+      hasRegisteredInitialShortcuts = true
+      registerShortcuts(configs, false)
     }
+    syncVisibility()
     const timer = setInterval(syncVisibility, 3000)
     return () => clearInterval(timer)
-  }, [registerShortcuts, syncVisibility])
+  }, [registerShortcuts, syncVisibility, configs.length])
 
   useEffect(() => {
     if (!window.electron?.webActivator?.onShortcutTriggered) return

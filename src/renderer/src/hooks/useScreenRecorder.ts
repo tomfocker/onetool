@@ -5,16 +5,16 @@ export function useScreenRecorder() {
   const [format, setFormat] = useState<'mp4' | 'gif' | 'webm'>('mp4')
   const [fps, setFps] = useState(30)
   const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium')
-  const [recordingMode, setRecordingMode] = useState<'full' | 'area' | 'window'>('full')
-  const [selectedWindow, setSelectedWindow] = useState<{ id: string; name: string } | null>(null)
-  const [windowList, setWindowList] = useState<Array<{ id: string; name: string; thumbnail: string }>>([])
+  const [recordingMode, setRecordingMode] = useState<'full' | 'area'>('full')
+  const [selectedScreen, setSelectedScreen] = useState<{ id: string; name: string; display_id: string } | null>(null)
+  const [screenList, setScreenList] = useState<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>([])
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState('00:00:00')
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [recorderHotkey, setRecorderHotkey] = useState('Alt+Shift+R')
   const [isSavingHotkey, setIsSavingHotkey] = useState(false)
   const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
-  
+
   const recordingStartTime = useRef<number | null>(null)
   const recordingInterval = useRef<NodeJS.Timeout | null>(null)
 
@@ -39,30 +39,44 @@ export function useScreenRecorder() {
     recordingStartTime.current = null
   }, [])
 
-  const handleModeChange = async (mode: 'full' | 'area' | 'window') => {
+  const handleModeChange = useCallback(async (mode: 'full' | 'area') => {
     setRecordingMode(mode)
-    if (mode === 'window' && window.electron?.screenRecorder?.getWindows) {
-      const res = await window.electron.screenRecorder.getWindows()
-      if (res.success && res.data) setWindowList(res.data)
+
+    if (mode === 'full' && window.electron?.screenRecorder?.getScreens) {
+      const res = await window.electron.screenRecorder.getScreens()
+      if (res.success && res.data) {
+        setScreenList(res.data)
+        if (res.data.length > 0 && !selectedScreen) {
+          setSelectedScreen(res.data[0])
+        }
+      }
     } else {
-      setSelectedWindow(null)
+      setSelectedScreen(null)
     }
-  }
+  }, [selectedScreen])
 
   const startRecording = useCallback(async () => {
     if (!outputPath) return { success: false, error: '请先选择保存位置' }
-    
-    const config: any = { outputPath, format, fps, quality }
+
+    let finalOutputPath = outputPath;
+    const ext = format === 'gif' ? '.gif' : '.mp4';
+    if (!finalOutputPath.toLowerCase().endsWith(ext)) {
+      finalOutputPath = finalOutputPath.replace(/\.[^/.]+$/, "") + ext;
+      setOutputPath(finalOutputPath);
+    }
+
+    const config: any = { outputPath: finalOutputPath, format, fps, quality }
     if (recordingMode === 'area') {
       if (!selectionRect) return { success: false, error: '请先选择录制区域' }
       config.bounds = selectionRect
-    } else if (recordingMode === 'window') {
-      if (!selectedWindow) return { success: false, error: '请选择录制窗口' }
-      config.windowTitle = selectedWindow.name
+    } else if (recordingMode === 'full') {
+      if (selectedScreen) {
+        config.displayId = selectedScreen.display_id
+      }
     }
 
     return await window.electron.screenRecorder.startRecording(config)
-  }, [outputPath, format, fps, quality, recordingMode, selectionRect, selectedWindow])
+  }, [outputPath, format, fps, quality, recordingMode, selectionRect, selectedScreen])
 
   const stopRecording = useCallback(async () => {
     return await window.electron.screenRecorder.stopRecording()
@@ -80,6 +94,7 @@ export function useScreenRecorder() {
       }
     }
     init()
+    handleModeChange('full')
 
     if (!window.electron?.screenRecorder) return
 
@@ -112,8 +127,8 @@ export function useScreenRecorder() {
     fps, setFps,
     quality, setQuality,
     recordingMode, handleModeChange,
-    selectedWindow, setSelectedWindow,
-    windowList,
+    selectedScreen, setSelectedScreen,
+    screenList,
     isRecording,
     recordingTime,
     selectionRect, setSelectionRect,

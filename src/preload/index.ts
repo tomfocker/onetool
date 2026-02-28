@@ -225,6 +225,9 @@ const screenRecorderAPI = {
   getWindows: () => {
     return ipcRenderer.invoke('screen-recorder-get-windows')
   },
+  getScreens: () => {
+    return ipcRenderer.invoke('screen-recorder-get-screens')
+  },
   onStarted: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('screen-recorder-started', handler)

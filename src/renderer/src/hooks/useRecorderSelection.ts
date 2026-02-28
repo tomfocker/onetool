@@ -8,7 +8,7 @@ export function useRecorderSelection() {
   useEffect(() => {
     const originalBg = document.body.style.backgroundColor
     document.body.style.backgroundColor = 'transparent'
-    
+
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         (window.electron as any).ipcRenderer.invoke('recorder-selection-close', null)
@@ -37,7 +37,7 @@ export function useRecorderSelection() {
     const currentY = e.clientY
     const startX = startPos.current.x
     const startY = startPos.current.y
-    
+
     setRect({
       x: Math.min(startX, currentX),
       y: Math.min(startY, currentY),
@@ -53,9 +53,13 @@ export function useRecorderSelection() {
     }
     setIsDragging(false)
     if (rect.width > 10 && rect.height > 10) {
+      // 传递坐标回主进程。由于主进程 closeSelectionWindow 逻辑会加上 senderWindow.x/y，
+      // 我们直接传当前相对坐标 rect 过去即可获得绝对屏幕坐标。
       (window.electron as any).ipcRenderer.invoke('recorder-selection-close', rect)
     } else {
-      setRect(null)
+      setRect(null);
+      // 如果太小也关闭窗口，但不回传数据
+      (window.electron as any).ipcRenderer.invoke('recorder-selection-close', null)
     }
   }
 

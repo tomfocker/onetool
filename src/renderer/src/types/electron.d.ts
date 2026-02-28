@@ -110,6 +110,7 @@ declare global {
         setHotkey: (hotkey: string) => Promise<IpcResponse>
         getHotkey: () => Promise<IpcResponse<string>>
         getWindows: () => Promise<IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>>
+        getScreens: () => Promise<IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>>
         getDefaultPath: () => Promise<IpcResponse<string>>
         onToggleHotkey: (callback: () => void) => () => void
         selectOutput: () => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
@@ -120,6 +121,7 @@ declare global {
           quality?: string
           bounds?: { x: number; y: number; width: number; height: number }
           windowTitle?: string
+          displayId?: string
         }) => Promise<IpcResponse>
         stopRecording: () => Promise<IpcResponse>
         getStatus: () => Promise<IpcResponse<{ recording: boolean }>>

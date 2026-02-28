@@ -59,11 +59,11 @@ export const ScreenRecorderTool: React.FC = () => {
     fps, setFps,
     quality, setQuality,
     recordingMode, handleModeChange,
-    selectedWindow, setSelectedWindow,
-    windowList,
+    selectedScreen, setSelectedScreen,
+    screenList,
     isRecording,
     recordingTime,
-    setSelectionRect,
+    selectionRect, setSelectionRect,
     recorderHotkey, setRecorderHotkey,
     isSavingHotkey, setIsSavingHotkey,
     isRecordingHotkey, setIsRecordingHotkey,
@@ -83,9 +83,11 @@ export const ScreenRecorderTool: React.FC = () => {
   useEffect(() => {
     if (!window.electron?.screenRecorder) return
 
-    const unsubscribeSelection = (window.electron as any).ipcRenderer?.on('recorder-selection-result', (_event, bounds) => {
-      setSelectionRect(bounds)
-      showToast('录制区域已设定', 'success')
+    const unsubscribeSelection = (window.electron as any).ipcRenderer?.on('recorder-selection-result', (bounds: any) => {
+      if (bounds && typeof bounds.width === 'number') {
+        setSelectionRect(bounds)
+        showToast('录制区域已设定', 'success')
+      }
     })
 
     const unsubscribeStopped = window.electron.screenRecorder.onStopped((data) => {
@@ -150,8 +152,7 @@ export const ScreenRecorderTool: React.FC = () => {
 
   const formatOptions = [
     { value: 'mp4', label: 'MP4', desc: '高质量视频' },
-    { value: 'gif', label: 'GIF', desc: '动画格式' },
-    { value: 'webm', label: 'WebM', desc: '开源视频格式' }
+    { value: 'gif', label: 'GIF', desc: '动画格式' }
   ]
 
   const qualityOptions = [
@@ -178,8 +179,8 @@ export const ScreenRecorderTool: React.FC = () => {
             <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <span>🎯</span> 录制模式
             </h2>
-            <div className="grid grid-cols-3 gap-3 mb-6">
-              {(['full', 'area', 'window'] as const).map((mode) => (
+            <div className="grid grid-cols-2 gap-3 mb-6">
+              {(['full', 'area'] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => handleModeChange(mode)}
@@ -189,32 +190,32 @@ export const ScreenRecorderTool: React.FC = () => {
                     }`}
                 >
                   <span className="text-2xl">
-                    {mode === 'full' ? '🖥️' : mode === 'area' ? '📐' : '🪟'}
+                    {mode === 'full' ? '🖥️' : '📐'}
                   </span>
                   <span className="font-medium">
-                    {mode === 'full' ? '全屏录制' : mode === 'area' ? '区域录制' : '窗口录制'}
+                    {mode === 'full' ? '全屏录制' : '区域录制'}
                   </span>
                 </button>
               ))}
             </div>
 
-            {recordingMode === 'window' && (
-              <div className="space-y-3 animate-fade-in">
+            {recordingMode === 'full' && screenList.length > 0 && (
+              <div className="space-y-3 animate-fade-in mb-6">
                 <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span>✨</span> 请选择要录制的窗口
+                  <span>🖥️</span> 请选择要录制的屏幕
                 </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-h-60 overflow-y-auto p-1 scrollbar-thin">
-                  {windowList.map((win) => (
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {screenList.map((screen) => (
                     <button
-                      key={win.id}
-                      onClick={() => setSelectedWindow(win)}
-                      className={`group relative rounded-lg overflow-hidden border-2 transition-all ${selectedWindow?.id === win.id ? 'border-red-500 shadow-md' : 'border-transparent hover:border-white/20'
+                      key={screen.id}
+                      onClick={() => setSelectedScreen(screen)}
+                      className={`group relative rounded-lg overflow-hidden border-2 transition-all ${selectedScreen?.id === screen.id ? 'border-red-500 shadow-md' : 'border-transparent hover:border-white/20'
                         }`}
                     >
-                      <img src={win.thumbnail} alt={win.name} className="w-full aspect-video object-cover" />
-                      <div className={`absolute inset-0 bg-black/60 flex items-end p-2 transition-opacity ${selectedWindow?.id === win.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                      <img src={screen.thumbnail} alt={screen.name} className="w-full aspect-video object-cover" />
+                      <div className={`absolute inset-0 bg-black/60 flex items-end p-2 transition-opacity ${selectedScreen?.id === screen.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
                         }`}>
-                        <p className="text-[10px] text-white truncate w-full">{win.name}</p>
+                        <p className="text-[10px] text-white truncate w-full">{screen.name}</p>
                       </div>
                     </button>
                   ))}
@@ -222,19 +223,21 @@ export const ScreenRecorderTool: React.FC = () => {
               </div>
             )}
 
+
+
             {recordingMode === 'area' && (
               <div className="animate-fade-in flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
                 <div className="space-y-1">
                   <p className="text-sm font-medium">区域录制</p>
                   <p className="text-xs text-muted-foreground italic">
-                    点击按钮后在屏幕上拖拽选择一个矩形区域
+                    {selectionRect ? `已选区域: ${selectionRect.width}x${selectionRect.height}` : '点击按钮后在屏幕上拖拽选择一个矩形区域'}
                   </p>
                 </div>
                 <button
                   onClick={() => (window.electron as any).ipcRenderer.invoke('recorder-selection-open')}
                   className="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-all text-sm font-medium"
                 >
-                  重新选择区域
+                  {selectionRect ? '重新选择区域' : '选择区域'}
                 </button>
               </div>
             )}

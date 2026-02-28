@@ -13,6 +13,8 @@ export class ScreenRecorderService {
   private isStopping = false
   private ffmpegInitialized = false
   private mainWindow: BrowserWindow | null = null
+  private indicatorWindow: BrowserWindow | null = null
+  private borderWindow: BrowserWindow | null = null
 
   constructor() { }
 
@@ -66,6 +68,140 @@ export class ScreenRecorderService {
     }
   }
 
+  private createIndicatorWindow(bounds: { x: number, y: number, width: number, height: number }) {
+    if (this.indicatorWindow) return
+
+    const { x, y, width } = bounds
+
+    this.indicatorWindow = new BrowserWindow({
+      width: 200,
+      height: 40,
+      x: x + width / 2 - 100,
+      y: y + 10,
+      type: 'toolbar',
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      alwaysOnTop: true,
+      resizable: false,
+      skipTaskbar: true,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    })
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { margin: 0; overflow: hidden; background: transparent; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+          .container { display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.7); border-radius: 20px; padding: 8px 16px; color: white; border: 1px solid rgba(255,255,255,0.1); width: fit-content; margin: 0 auto; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+          .dot { width: 10px; height: 10px; background-color: #ef4444; border-radius: 50%; margin-right: 8px; animation: pulse 1s infinite alternate; }
+          .text { font-size: 12px; font-weight: 600; }
+          .time { margin-left: 8px; font-family: monospace; font-size: 12px; opacity: 0.9; }
+          @keyframes pulse { 0% { opacity: 0.4; } 100% { opacity: 1; box-shadow: 0 0 8px rgba(239, 68, 68, 0.6); } }
+        </style>
+      </head>
+      <body>
+        <div class="container" style="-webkit-app-region: drag;">
+          <div class="dot"></div>
+          <div class="text">正在录制</div>
+          <div class="time" id="time">00:00:00</div>
+        </div>
+        <script>
+          const { ipcRenderer } = require('electron');
+          ipcRenderer.on('update-time', (event, time) => {
+            document.getElementById('time').innerText = time;
+          });
+        </script>
+      </body>
+      </html>
+    `
+    this.indicatorWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`)
+
+    // Allow the window to stay on top across all desktops
+    this.indicatorWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    this.indicatorWindow.setIgnoreMouseEvents(false)
+  }
+
+  private createBorderWindow(bounds: { x: number, y: number, width: number, height: number }) {
+    if (this.borderWindow) return
+
+    const padding = 4;
+
+    this.borderWindow = new BrowserWindow({
+      x: bounds.x - padding,
+      y: bounds.y - padding,
+      width: bounds.width + padding * 2,
+      height: bounds.height + padding * 2,
+      type: 'toolbar',
+      frame: false,
+      transparent: true,
+      hasShadow: false,
+      alwaysOnTop: true,
+      resizable: false,
+      skipTaskbar: true,
+      webPreferences: {
+        nodeIntegration: true,
+        contextIsolation: false
+      }
+    })
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: transparent; 
+            width: 100vw; 
+            height: 100vh;
+            pointer-events: none;
+          }
+          .border-box {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            border: 4px dashed #ef4444;
+            box-sizing: border-box;
+            background: transparent;
+            pointer-events: none;
+            animation: border-flash 1s infinite alternate;
+          }
+          @keyframes border-flash { 0% { border-color: rgba(239, 68, 68, 0.4); } 100% { border-color: rgba(239, 68, 68, 1); } }
+        </style>
+      </head>
+      <body>
+        <div class="border-box"></div>
+      </body>
+      </html>
+    `
+    this.borderWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(htmlContent)}`)
+    this.borderWindow.setIgnoreMouseEvents(true, { forward: true })
+    this.borderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+  }
+
+  private destroyIndicatorWindow() {
+    if (this.indicatorWindow) {
+      if (!this.indicatorWindow.isDestroyed()) {
+        this.indicatorWindow.close()
+      }
+      this.indicatorWindow = null
+    }
+    if (this.borderWindow) {
+      if (!this.borderWindow.isDestroyed()) {
+        this.borderWindow.close()
+      }
+      this.borderWindow = null
+    }
+  }
+
   async selectOutput(window: BrowserWindow | null): Promise<IpcResponse<{ canceled: boolean, filePath: string | null }>> {
     try {
       if (!window) return { success: false, error: '窗口不存在' }
@@ -73,8 +209,7 @@ export class ScreenRecorderService {
         title: '选择保存位置',
         filters: [
           { name: 'MP4 视频', extensions: ['mp4'] },
-          { name: 'GIF 动画', extensions: ['gif'] },
-          { name: 'WebM 视频', extensions: ['webm'] }
+          { name: 'GIF 动画', extensions: ['gif'] }
         ],
         defaultPath: path.join(app.getPath('desktop'), `recording-${Date.now()}.mp4`)
       })
@@ -84,14 +219,16 @@ export class ScreenRecorderService {
     }
   }
 
-  async getWindows(): Promise<IpcResponse<any[]>> {
+
+  async getScreens(): Promise<IpcResponse<any[]>> {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['window'], thumbnailSize: { width: 150, height: 150 } })
+      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 150, height: 150 } })
       return {
         success: true,
         data: sources.map(s => ({
           id: s.id,
           name: s.name,
+          display_id: s.display_id,
           thumbnail: s.thumbnail.toDataURL()
         }))
       }
@@ -106,7 +243,7 @@ export class ScreenRecorderService {
     fps?: number;
     quality?: string;
     bounds?: { x: number; y: number; width: number; height: number };
-    windowTitle?: string;
+    displayId?: string;
   }): Promise<IpcResponse> {
     try {
       if (this.isRecording || this.recorderProcess) {
@@ -128,9 +265,9 @@ export class ScreenRecorderService {
 
       const args = ['-y', '-f', 'gdigrab', '-framerate', fps.toString()]
 
-      if (config.windowTitle) {
-        args.push('-i', `title=${config.windowTitle}`)
-      } else if (config.bounds) {
+      let indicatorBounds = primaryDisplay.bounds
+
+      if (config.bounds) {
         let realX = Math.floor(config.bounds.x * scaleFactor)
         let realY = Math.floor(config.bounds.y * scaleFactor)
         let realW = Math.floor(config.bounds.width * scaleFactor)
@@ -139,18 +276,32 @@ export class ScreenRecorderService {
         realW = realW % 2 === 0 ? realW : realW - 1
         realH = realH % 2 === 0 ? realH : realH - 1
 
-        const screenWidth = Math.floor(primaryDisplay.size.width * scaleFactor)
-        const screenHeight = Math.floor(primaryDisplay.size.height * scaleFactor)
-
-        if (realX + realW > screenWidth) realW = screenWidth - realX
-        if (realY + realH > screenHeight) realH = screenHeight - realY
-
         args.push(
           '-offset_x', realX.toString(),
           '-offset_y', realY.toString(),
           '-video_size', `${realW}x${realH}`,
           '-i', 'desktop'
         )
+        // Indicator should appear attached to the captured area bounds, but restricted to screen max.
+        // Screen absolute bounds are roughly config.bounds
+        indicatorBounds = { x: config.bounds.x, y: config.bounds.y, width: config.bounds.width, height: config.bounds.height }
+        this.createBorderWindow(config.bounds)
+      } else if (config.displayId) {
+        const display = screen.getAllDisplays().find(d => d.id.toString() === config.displayId) || primaryDisplay
+        const dScaleFactor = display.scaleFactor
+        let realX = Math.floor(display.bounds.x * dScaleFactor)
+        let realY = Math.floor(display.bounds.y * dScaleFactor)
+        let realW = Math.floor(display.bounds.width * dScaleFactor)
+        let realH = Math.floor(display.bounds.height * dScaleFactor)
+        realW = (realW % 2 === 0 ? realW : realW - 1) - 2
+        realH = (realH % 2 === 0 ? realH : realH - 1) - 2
+        args.push(
+          '-offset_x', realX.toString(),
+          '-offset_y', realY.toString(),
+          '-video_size', `${realW}x${realH}`,
+          '-i', 'desktop'
+        )
+        indicatorBounds = display.bounds
       } else {
         const { width, height } = primaryDisplay.size
         let realW = Math.floor(width * scaleFactor)
@@ -182,17 +333,8 @@ export class ScreenRecorderService {
         )
       } else if (config.format === 'gif') {
         args.push(
-          '-vf', 'fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse',
-          config.outputPath
-        )
-      } else {
-        // WebM 格式：使用 libvpx-vp9 编码器
-        const crf = config.quality === 'high' ? '33' : config.quality === 'medium' ? '40' : '50'
-        args.push(
-          '-c:v', 'libvpx-vp9',
-          '-crf', crf,
-          '-b:v', '0',
-          '-vf', 'scale=trunc(iw/2)*2:trunc(ih/2)*2',
+          '-f', 'gif',
+          '-vf', 'fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2',
           config.outputPath
         )
       }
@@ -209,14 +351,20 @@ export class ScreenRecorderService {
       this.recorderProcess.stderr.on('data', (data) => {
         const msg = data.toString()
         const timeMatch = msg.match(/time=(\d{2}:\d{2}:\d{2})/);
-        if (timeMatch && this.mainWindow) {
-          this.mainWindow.webContents.send('screen-recorder-progress', { timemark: timeMatch[1] })
+        if (timeMatch) {
+          if (this.mainWindow) {
+            this.mainWindow.webContents.send('screen-recorder-progress', { timemark: timeMatch[1] })
+          }
+          if (this.indicatorWindow && !this.indicatorWindow.isDestroyed()) {
+            this.indicatorWindow.webContents.send('update-time', timeMatch[1])
+          }
         }
       })
 
       this.recorderProcess.on('error', (err) => {
         this.isRecording = false
         this.recorderProcess = null
+        this.destroyIndicatorWindow()
         if (this.mainWindow) this.mainWindow.webContents.send('screen-recorder-stopped', { success: false, error: err.message })
       })
 
@@ -237,6 +385,7 @@ export class ScreenRecorderService {
         this.isRecording = false
         this.isStopping = false
         this.recorderProcess = null
+        this.destroyIndicatorWindow()
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.show()
           // ffmpeg 被 'q' 优雅停止时退出码可能是 0 或 1，都视为成功
@@ -251,11 +400,13 @@ export class ScreenRecorderService {
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.webContents.send('screen-recorder-started')
       }
+      this.createIndicatorWindow(indicatorBounds)
 
       return { success: true }
     } catch (error) {
       this.isRecording = false
       this.recorderProcess = null
+      this.destroyIndicatorWindow()
       return { success: false, error: (error as Error).message }
     }
   }

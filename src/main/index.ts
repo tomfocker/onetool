@@ -40,6 +40,7 @@ import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
+import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -157,6 +158,7 @@ app.whenReady().then(() => {
   registerSystemIpc(() => mainWindow)
   registerScreenshotIpc()
   registerFloatBallIpc()
+  registerWebActivatorIpc()
 
   // Silent system health check
   setTimeout(async () => {

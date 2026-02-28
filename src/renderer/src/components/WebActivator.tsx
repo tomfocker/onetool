@@ -91,8 +91,9 @@ const WebActivator: React.FC = () => {
   }
 
   const handleDelete = async (id: string) => {
-    const newConfigs = configs.filter(c => c.id !== id)
+    const newConfigs = configs.filter(c => String(c.id) !== String(id))
     setConfigs(newConfigs)
+    localStorage.setItem('web-activator-v4', JSON.stringify(newConfigs))
     await registerShortcuts(newConfigs)
   }
 
@@ -112,26 +113,32 @@ const WebActivator: React.FC = () => {
   const pickFromList = (win: WindowInfo) => {
     let cleanTitle = win.title.trim()
     let pattern = cleanTitle
+    let targetType: TargetType = 'app'
     if (win.type === 'tab') {
       cleanTitle = cleanTitle.replace(/ - (Microsoft Edge|Google Chrome|Firefox|Brave)$/, '')
       const parts = cleanTitle.split(' - ')
       pattern = parts[0].trim()
       cleanTitle = pattern
+      targetType = 'tab'
+      setActiveTab('tab')
     } else {
       pattern = win.processName
+      targetType = 'app'
+      setActiveTab('app')
     }
 
     if (editingId) {
-      setEditForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
+      setEditForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd, type: targetType }))
     } else {
-      setNewForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd }))
+      setNewForm(prev => ({ ...prev, name: cleanTitle, pattern: pattern, hwnd: win.hwnd, type: targetType }))
     }
     setShowPicker(false)
   }
 
   const filteredWindows = windowList.filter(w =>
-    w.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    w.processName.toLowerCase().includes(searchTerm.toLowerCase())
+    (w.type === activeTab || (activeTab === 'app' && w.type === 'window')) &&
+    (w.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      w.processName.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   return (
@@ -143,33 +150,35 @@ const WebActivator: React.FC = () => {
         <p className="text-muted-foreground text-sm font-medium">为任何网页标签或本地应用绑定全局快捷键，一键切换</p>
       </div>
 
+      <div className="flex justify-center mb-6">
+        <div className="flex bg-muted/50 p-1.5 rounded-2xl w-full max-w-sm shadow-inner">
+          <button
+            onClick={() => setActiveTab('app')}
+            className={cn("flex-1 py-2.5 rounded-xl text-sm font-black transition-all", activeTab === 'app' ? "bg-white dark:bg-zinc-800 shadow-md text-blue-500" : "text-muted-foreground hover:bg-muted/50")}
+          >
+            <AppWindow className="w-4 h-4 inline mr-1.5" /> 本地应用
+          </button>
+          <button
+            onClick={() => setActiveTab('tab')}
+            className={cn("flex-1 py-2.5 rounded-xl text-sm font-black transition-all", activeTab === 'tab' ? "bg-white dark:bg-zinc-800 shadow-md text-blue-500" : "text-muted-foreground hover:bg-muted/50")}
+          >
+            <Globe className="w-4 h-4 inline mr-1.5" /> 浏览器标签
+          </button>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1 space-y-6">
           <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md overflow-hidden rounded-3xl">
             <CardHeader className="pb-4">
               <CardTitle className="text-lg font-bold flex items-center gap-2">
                 <Plus className="w-5 h-5 text-blue-500" />
-                添加新项
+                添加新{activeTab === 'app' ? '应用' : '标签页'}
               </CardTitle>
               <CardDescription>配置一个新的唤醒目标</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex bg-muted/50 p-1 rounded-xl">
-                <button
-                  onClick={() => setActiveTab('app')}
-                  className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'app' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
-                >
-                  <AppWindow className="w-3.5 h-3.5 inline mr-1.5" /> 本地应用
-                </button>
-                <button
-                  onClick={() => setActiveTab('tab')}
-                  className={cn("flex-1 py-2 rounded-lg text-xs font-bold transition-all", activeTab === 'tab' ? "bg-white dark:bg-zinc-800 shadow-sm text-blue-500" : "text-muted-foreground")}
-                >
-                  <Globe className="w-3.5 h-3.5 inline mr-1.5" /> 浏览器标签
-                </button>
-              </div>
-
-              <div className="space-y-3 pt-2">
+              <div className="space-y-3">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-muted-foreground uppercase tracking-wider ml-1">显示名称</label>
                   <Input
@@ -226,27 +235,45 @@ const WebActivator: React.FC = () => {
         </div>
 
         <div className="lg:col-span-2 space-y-4">
-          {configs.length === 0 ? (
+          {configs.filter(c => c.type === activeTab).length === 0 ? (
             <div className="h-64 flex flex-col items-center justify-center bg-muted/20 border-2 border-dashed border-muted-foreground/10 rounded-[2rem]">
               <Box className="w-12 h-12 text-muted-foreground/20 mb-4" />
-              <p className="text-muted-foreground text-sm font-medium">暂无配置项，请在左侧添加</p>
+              <p className="text-muted-foreground text-sm font-medium">暂无{activeTab === 'app' ? '本地应用' : '标签页'}配置项，请在左侧添加</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {configs.map(config => (
-                <Card key={config.id} className={cn(
+              {configs.filter(c => c.type === activeTab).map(config => (
+                <Card key={config.id + "-" + configs.length} className={cn(
                   "group border-none shadow-sm transition-all duration-300 rounded-3xl overflow-hidden hover:shadow-xl",
                   config.isActive ? "bg-blue-500/5 ring-2 ring-blue-500/20" : "bg-white dark:bg-zinc-900"
                 )}>
-                  <div className="p-5 flex flex-col h-full">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={cn("p-2.5 rounded-2xl", config.type === 'app' ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500")}>
+                  <div className="p-5 flex flex-col h-full relative group/card overflow-hidden">
+                    {/* 按钮组 - 绝对定位并置顶 */}
+                    <div className="absolute top-4 right-4 flex items-center gap-1.5 z-40">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); startEdit(config) }}
+                        className="w-8 h-8 flex items-center justify-center hover:bg-muted rounded-xl text-muted-foreground bg-white dark:bg-zinc-800 shadow-md border border-border transition-all hover:scale-110 active:scale-95"
+                        title="编辑"
+                      >
+                        <Edit2 size={15} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDelete(config.id) }}
+                        className="w-8 h-8 flex items-center justify-center hover:bg-red-500/10 hover:text-red-500 rounded-xl text-red-500 bg-white dark:bg-zinc-800 shadow-md border border-red-500/20 transition-all hover:scale-110 active:scale-95"
+                        title="删除"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-start mb-4">
+                      <div className="flex items-center gap-3 min-w-0 w-full pr-20">
+                        <div className={cn("p-2.5 rounded-2xl shrink-0 shadow-sm", config.type === 'app' ? "bg-amber-500/10 text-amber-500" : "bg-blue-500/10 text-blue-500")}>
                           {config.type === 'app' ? <AppWindow size={20} /> : <Globe size={20} />}
                         </div>
-                        <div>
-                          <h3 className="font-black text-sm">{config.name}</h3>
-                          <div className="flex items-center gap-1.5 mt-0.5">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-black text-sm truncate leading-tight mb-1" title={config.name}>{config.name}</h3>
+                          <div className="flex items-center gap-1.5">
                             {config.isActive ? (
                               <span className="flex items-center gap-1 text-[9px] font-black text-emerald-500 uppercase">
                                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> 活跃
@@ -256,10 +283,6 @@ const WebActivator: React.FC = () => {
                             )}
                           </div>
                         </div>
-                      </div>
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => startEdit(config)} className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground"><Edit2 size={14} /></button>
-                        <button onClick={() => handleDelete(config.id)} className="p-1.5 hover:bg-red-500/10 hover:text-red-500 rounded-lg text-muted-foreground"><Trash2 size={14} /></button>
                       </div>
                     </div>
 
@@ -300,7 +323,7 @@ const WebActivator: React.FC = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-xl font-black">选取目标</CardTitle>
-                  <CardDescription>从当前打开的窗口或浏览器标签中快速选择</CardDescription>
+                  <CardDescription>从当前打开的{activeTab === 'app' ? '系统窗口' : '浏览器标签'}中快速选择</CardDescription>
                 </div>
                 <button onClick={() => setShowPicker(false)} className="p-2 hover:bg-muted rounded-full transition-colors"><X size={20} /></button>
               </div>

@@ -23,7 +23,12 @@ export class StoreService extends EventEmitter {
         recorderHotkey: 'Alt+Shift+R',
         screenshotHotkey: 'Alt+Shift+S',
         screenshotSavePath: '',
-        autoSaveScreenshot: false
+        autoSaveScreenshot: false,
+        floatBallHotkey: 'Alt+Shift+F',
+        clipboardHotkey: 'Alt+Shift+V',
+        translateApiUrl: '',
+        translateApiKey: '',
+        translateModel: ''
       },
       renamePresets: [],
       webActivatorConfigs: [],

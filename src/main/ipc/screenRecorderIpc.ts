@@ -1,3 +1,4 @@
+
 import { ipcMain, BrowserWindow } from 'electron'
 import { screenRecorderService } from '../services/ScreenRecorderService'
 import { screenshotService } from '../services/ScreenshotService'
@@ -8,8 +9,8 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
     return screenRecorderService.selectOutput(getMainWindow())
   })
 
-  ipcMain.handle('screen-recorder-get-windows', async () => {
-    return screenRecorderService.getWindows()
+  ipcMain.handle('screen-recorder-get-screens', async () => {
+    return screenRecorderService.getScreens()
   })
 
   ipcMain.handle('screen-recorder-start', async (_event, config) => {
