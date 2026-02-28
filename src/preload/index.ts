@@ -98,6 +98,17 @@ const settingsAPI = {
   }
 }
 
+const storeAPI = {
+  getAll: () => ipcRenderer.invoke('store-get-all'),
+  get: (key: string) => ipcRenderer.invoke('store-get', key),
+  set: (key: string, value: any) => ipcRenderer.invoke('store-set', { key, value }),
+  onChanged: (callback: (newStore: any) => void) => {
+    const subscription = (_event: any, data: any) => callback(data)
+    ipcRenderer.on('store-changed', subscription)
+    return () => ipcRenderer.removeListener('store-changed', subscription)
+  }
+}
+
 const systemConfigAPI = {
   getSystemConfig: () => {
     return ipcRenderer.invoke('get-system-config')
@@ -352,6 +363,7 @@ if (process.contextIsolated) {
       autoClicker: autoClickerAPI,
       autoStart: autoStartAPI,
       settings: settingsAPI,
+      store: storeAPI,
       systemConfig: systemConfigAPI,
       screenSaver: screenSaverAPI,
       webActivator: webActivatorAPI,

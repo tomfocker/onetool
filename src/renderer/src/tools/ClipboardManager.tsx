@@ -49,7 +49,10 @@ const ClipboardManager: React.FC = () => {
   }, [])
 
   useEffect(() => {
+    console.log('ClipboardManager: Component mounted, setting up listeners');
+    
     const handleClipboardChange = (_event: unknown, newItem: ClipboardItem) => {
+      console.log('ClipboardManager: Received new item', newItem.id);
       if (!isListening) return
       setItems(prev => {
         const exists = prev.some(item => item.content === newItem.content)
@@ -59,17 +62,24 @@ const ClipboardManager: React.FC = () => {
     }
 
     const handleClipboardHistory = (_event: unknown, history: ClipboardItem[]) => {
-      setItems(history)
+      console.log('ClipboardManager: Received history, count:', history?.length);
+      setItems(history || [])
     }
 
-    const unsubChange = window.electron.ipcRenderer.on('clipboard-change', handleClipboardChange)
-    const unsubHistory = window.electron.ipcRenderer.on('clipboard-history', handleClipboardHistory)
+    const unsubChange = window.electron.clipboard.onChange(handleClipboardChange)
+    const unsubHistory = window.electron.clipboard.onHistory(handleClipboardHistory)
 
-    window.electron.ipcRenderer.send('get-clipboard-history')
+    // 延迟请求历史记录，确保监听器已在 IPC 通道上就绪
+    const timer = setTimeout(() => {
+      console.log('ClipboardManager: Requesting history...');
+      window.electron.clipboard.getHistory()
+    }, 100)
 
     return () => {
+      console.log('ClipboardManager: Cleaning up listeners');
       unsubChange()
       unsubHistory()
+      clearTimeout(timer)
     }
   }, [isListening])
 
@@ -77,7 +87,7 @@ const ClipboardManager: React.FC = () => {
     if (item.type === 'text') {
       navigator.clipboard.writeText(item.content)
     } else {
-      window.electron.ipcRenderer.send('copy-image-to-clipboard', item.content)
+      window.electron.clipboard.copyImage(item.content)
     }
     setCopiedId(item.id)
     setTimeout(() => setCopiedId(null), 1500)
@@ -85,44 +95,52 @@ const ClipboardManager: React.FC = () => {
 
   const deleteItem = useCallback((id: string) => {
     setItems(prev => prev.filter(item => item.id !== id))
-    window.electron.ipcRenderer.send('delete-clipboard-item', id)
+    window.electron.clipboard.deleteItem(id)
   }, [])
 
   const togglePin = useCallback((id: string) => {
     setItems(prev =>
       prev.map(item => (item.id === id ? { ...item, pinned: !item.pinned } : item))
     )
-    window.electron.ipcRenderer.send('toggle-clipboard-pin', id)
+    window.electron.clipboard.togglePin(id)
   }, [])
 
   const clearAll = useCallback(() => {
     const pinnedItems = items.filter(item => item.pinned)
     setItems(pinnedItems)
-    window.electron.ipcRenderer.send('clear-clipboard-history')
+    window.electron.clipboard.clearHistory()
   }, [items])
 
-  const filteredItems = items
+  const filteredItems = (items || [])
     .filter(item => {
+      if (!item || !item.content) return false
       if (filter === 'text' && item.type !== 'text') return false
       if (filter === 'image' && item.type !== 'image') return false
       if (searchQuery && item.type === 'text') {
-        return item.content.toLowerCase().includes(searchQuery.toLowerCase())
+        return (item.content || '').toLowerCase().includes(searchQuery.toLowerCase())
       }
       return true
     })
     .sort((a, b) => {
+      const aPinned = !!a.pinned
+      const bPinned = !!b.pinned
       if (sortBy === 'pinned') {
-        if (a.pinned && !b.pinned) return -1
-        if (!a.pinned && b.pinned) return 1
+        if (aPinned && !bPinned) return -1
+        if (!aPinned && bPinned) return 1
       }
+      const aTime = a.timestamp || 0
+      const bTime = b.timestamp || 0
       if (sortBy === 'oldest') {
-        return a.timestamp - b.timestamp
+        return aTime - bTime
       }
-      return b.timestamp - a.timestamp
+      return bTime - aTime
     })
 
   const formatTime = (timestamp: number) => {
+    if (!timestamp) return '未知时间'
     const date = new Date(timestamp)
+    if (isNaN(date.getTime())) return '无效时间'
+    
     const now = new Date()
     const diff = now.getTime() - date.getTime()
     const minutes = Math.floor(diff / 60000)
@@ -137,8 +155,10 @@ const ClipboardManager: React.FC = () => {
   }
 
   const truncateText = (text: string, maxLength: number = 150) => {
-    if (text.length <= maxLength) return text
-    return text.slice(0, maxLength) + '...'
+    if (!text) return ''
+    const str = String(text)
+    if (str.length <= maxLength) return str
+    return str.slice(0, maxLength) + '...'
   }
 
   return (

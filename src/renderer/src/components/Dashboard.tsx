@@ -3,7 +3,7 @@ import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock,
   Search, Filter, Download, Check, RefreshCw, Cloud, HardDrive,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
-  Zap, ArrowRight, LayoutGrid, Star, History, Info, Languages, Camera, Inbox
+  Zap, ArrowRight, LayoutGrid, Star, History, Info, Languages, Camera, Inbox, Radar
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -17,10 +17,11 @@ import { ToolDefinition } from '../../../shared/types'
 
 interface DashboardProps {
   onNavigate?: (page: string) => void
+  searchTerm?: string
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox
+  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar
 }
 
 const toolGradientMap: Record<string, string> = {
@@ -38,13 +39,13 @@ const toolGradientMap: Record<string, string> = {
   'qr-generator': 'from-green-500 to-emerald-600',
   'screenshot-tool': 'from-blue-400 to-cyan-500',
   'file-dropover': 'from-indigo-400 to-purple-500',
-  'translator': 'from-purple-500 to-pink-500'
+  'translator': 'from-purple-500 to-pink-500',
+  'network-radar': 'from-blue-600 to-cyan-600'
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '' }) => {
   const { getRecentTools, recordUsage } = useToolUsage()
   const recentTools = getRecentTools(6)
-  const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState<string>('全部')
   const [systemInfo, setSystemInfo] = useState<any>(null)
 
@@ -113,16 +114,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate }) => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-8">
-          <div className="relative group">
-            <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-muted-foreground w-5 h-5 transition-colors group-focus-within:text-primary" />
-            <Input 
-              placeholder="搜索工具、功能或关键字..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="h-16 pl-14 pr-6 rounded-[2rem] border-none bg-white dark:bg-zinc-900 shadow-2xl shadow-black/5 text-lg font-medium focus-visible:ring-2 focus-visible:ring-primary/20 transition-all"
-            />
-          </div>
-
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-black flex items-center gap-2">

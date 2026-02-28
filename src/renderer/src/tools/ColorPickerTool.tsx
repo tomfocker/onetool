@@ -397,3 +397,5 @@ export const ColorPickerTool: React.FC = () => {
     </div>
   )
 }
+
+export default ColorPickerTool

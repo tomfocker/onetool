@@ -76,3 +76,5 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
     </div>
   )
 }
+
+export default ScreenOverlayTranslatorTool

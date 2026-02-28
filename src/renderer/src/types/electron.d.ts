@@ -7,7 +7,8 @@ import {
   ClipboardItem, 
   NetworkInterfaceInfo, 
   LanDevice,
-  AppSettings
+  AppSettings,
+  GlobalStore
 } from '../../../shared/types'
 
 declare global {
@@ -32,6 +33,12 @@ declare global {
         getAll: () => Promise<IpcResponse<AppSettings>>
         update: (updates: Partial<AppSettings>) => Promise<IpcResponse>
         onChanged: (callback: (newSettings: AppSettings) => void) => () => void
+      }
+      store: {
+        getAll: () => Promise<IpcResponse<GlobalStore>>
+        get: (key: keyof GlobalStore) => Promise<IpcResponse<any>>
+        set: <K extends keyof GlobalStore>(key: K, value: GlobalStore[K]) => Promise<IpcResponse>
+        onChanged: (callback: (newStore: GlobalStore) => void) => () => void
       }
       capswriter: {
         startServer: () => Promise<IpcResponse>

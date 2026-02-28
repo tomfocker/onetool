@@ -346,6 +346,8 @@ export const QuickInstaller: React.FC = () => {
   )
 }
 
+export default QuickInstaller
+
 // 软件卡片组件
 interface SoftwareCardProps {
   software: Software

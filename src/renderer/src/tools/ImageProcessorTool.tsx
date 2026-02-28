@@ -782,3 +782,5 @@ export const ImageProcessorTool: React.FC = () => {
     </div>
   )
 }
+
+export default ImageProcessorTool

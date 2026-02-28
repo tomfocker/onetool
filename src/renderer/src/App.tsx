@@ -26,6 +26,7 @@ const loadToolComponent = (path: string) => {
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
+  const [searchQuery, setSearchQuery] = useState('')
   const [retryKey, setRetryKey] = useState(0)
   const [isScreenOverlay, setIsScreenOverlay] = useState(false)
   const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
@@ -66,11 +67,11 @@ function AppContent(): React.JSX.Element {
 
   return (
     <div className='flex h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-primary/10'>
-      <Sidebar currentPage={currentPage} onNavigate={(page) => { setCurrentPage(page); setRetryKey(0); }} />
+      <Sidebar currentPage={currentPage} onNavigate={(page) => { setCurrentPage(page); setRetryKey(0); setSearchQuery(''); }} />
       <div className='flex-1 flex flex-col min-w-0 relative'>
         <TitleBar />
-        <Header />
-        <main className='flex-1 overflow-y-auto overflow-x-hidden p-6 scrollbar-thin'>
+        <Header showSearch={currentPage === 'dashboard'} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+        <main className='flex-1 overflow-y-auto overflow-x-hidden p-6 pt-20 scrollbar-thin'>
           <div className='max-w-[1600px] mx-auto'>
             <Suspense fallback={
               <div className="flex items-center justify-center h-full py-20">
@@ -79,7 +80,7 @@ function AppContent(): React.JSX.Element {
             }>
               <ToolErrorBoundary key={`${currentPage}-${retryKey}`} toolId={currentPage} onReset={handleToolReset}>
                 {currentPage === 'dashboard' ? (
-                  <Dashboard onNavigate={setCurrentPage} />
+                  <Dashboard onNavigate={setCurrentPage} searchTerm={searchQuery} />
                 ) : ActiveComponent ? (
                   <ActiveComponent />
                 ) : (

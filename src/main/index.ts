@@ -6,6 +6,8 @@ import path from 'path'
 
 // Import Services
 import { settingsService } from './services/SettingsService'
+import { storeService } from './services/StoreService'
+import { doctorService } from './services/DoctorService'
 import { autoClickerService } from './services/AutoClickerService'
 import { capsWriterService } from './services/CapsWriterService'
 import { clipboardService } from './services/ClipboardService'
@@ -35,6 +37,8 @@ import { registerScreenOverlayIpc } from './ipc/screenOverlayIpc'
 import { registerScreenRecorderIpc } from './ipc/screenRecorderIpc'
 import { registerScreenSaverIpc } from './ipc/screenSaverIpc'
 import { registerSettingsIpc } from './ipc/settingsIpc'
+import { registerStoreIpc } from './ipc/storeIpc'
+import { registerDoctorIpc } from './ipc/doctorIpc'
 import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
 
@@ -78,6 +82,10 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
+    // 窗口显示后延迟初始化剪贴板监听，确保 UI 已准备好接收初始历史数据
+    setTimeout(() => {
+      clipboardService.startWatcher()
+    }, 1000)
   })
 
   mainWindow.on('close', (event) => {
@@ -143,7 +151,25 @@ app.whenReady().then(() => {
   registerScreenRecorderIpc(() => mainWindow)
   registerScreenSaverIpc()
   registerSettingsIpc(() => mainWindow)
+  registerStoreIpc(() => mainWindow)
+  registerDoctorIpc()
   registerSystemIpc(() => mainWindow)
+
+  // Silent system health check
+  setTimeout(async () => {
+    const res = await doctorService.runFullAudit()
+    if (res.success && res.data) {
+      const issues = Object.entries(res.data).filter(([_, v]: [string, any]) => !v.ok)
+      if (issues.length > 0 && mainWindow) {
+        mainWindow.webContents.send('app-notification', {
+          type: 'warning',
+          title: '系统环境自检提醒',
+          message: `发现 ${issues.length} 项环境依赖异常，部分工具可能无法正常工作。请前往设置页查看详情。`,
+          duration: 10000
+        })
+      }
+    }
+  }, 3000)
   registerWindowIpc()
 
   app.on('browser-window-created', (_, window) => {
@@ -156,7 +182,7 @@ app.whenReady().then(() => {
   windowManagerService.createFloatBallWindow()
   
   autoClickerService.registerShortcuts()
-  clipboardService.startWatcher()
+  // clipboardService.startWatcher() // 移除此处的重复调用，改为在 ready-to-show 后启动
   hotkeyService.registerRecorderShortcut()
   hotkeyService.registerScreenshotShortcut()
   hotkeyService.registerTranslatorShortcut()

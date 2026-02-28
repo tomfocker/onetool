@@ -371,3 +371,5 @@ export const SuperScreenshotTool: React.FC = () => {
     </div>
   )
 }
+
+export default SuperScreenshotTool

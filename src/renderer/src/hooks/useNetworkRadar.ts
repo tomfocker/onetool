@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { NetworkInterfaceInfo as NetworkInfo, LanDevice } from '../../../shared/types'
 
 export interface PingResult {
@@ -21,11 +21,16 @@ export function useNetworkRadar() {
   const [lanDevices, setLanDevices] = useState<LanDevice[]>([])
   const [isScanningLan, setIsScanningLan] = useState(false)
   const [isPinging, setIsPinging] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
-  const webPing = async (url: string): Promise<number | null> => {
+  const webPing = async (url: string, signal: AbortSignal): Promise<number | null> => {
     const startTime = performance.now()
     const controller = new AbortController()
+    
+    // 级联信号
+    signal.addEventListener('abort', () => controller.abort())
     const timeoutId = setTimeout(() => controller.abort(), 3000)
+    
     try {
       await fetch(`https://${url}/favicon.ico`, {
         method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: controller.signal
@@ -39,35 +44,50 @@ export function useNetworkRadar() {
   }
 
   const runPingTest = useCallback(async () => {
-    setIsPinging(true)
-    const newResults: PingResult[] = [...pingResults].map(r => ({ ...r, status: 'pending', latency: null }))
-    setPingResults(newResults)
+    if (abortControllerRef.current) abortControllerRef.current.abort()
+    abortControllerRef.current = new AbortController()
+    const signal = abortControllerRef.current.signal
 
-    for (let i = 0; i < newResults.length; i++) {
-      const target = newResults[i]
+    setIsPinging(true)
+    
+    // 初始化结果状态，设为 pending
+    setPingResults(prev => prev.map(r => ({ ...r, status: 'pending', latency: null })))
+
+    // 预获取当前待测列表
+    let currentTargets: PingResult[] = []
+    setPingResults(prev => {
+      currentTargets = [...prev]
+      return prev
+    })
+
+    for (let i = 0; i < currentTargets.length; i++) {
+      if (signal.aborted) break
+      const target = currentTargets[i]
       let latency: number | null = null
       let success = false
 
       try {
         if (target.isGlobal) {
-          latency = await webPing(target.host)
+          latency = await webPing(target.host, signal)
           success = latency !== null
         } else {
           const res = await window.electron.network.ping(target.host)
+          if (signal.aborted) break
           latency = res.data?.time || null
           success = res.data?.alive || false
         }
       } catch (e) { success = false }
 
-      newResults[i] = {
-        ...target,
-        latency,
-        status: success ? 'success' : 'error'
-      }
-      setPingResults([...newResults])
+      setPingResults(prev => {
+        const next = [...prev]
+        if (next[i]) {
+          next[i] = { ...next[i], latency, status: success ? 'success' : 'error' }
+        }
+        return next
+      })
     }
-    setIsPinging(false)
-  }, [pingResults])
+    if (!signal.aborted) setIsPinging(false)
+  }, []) // 移除 pingResults 依赖项
 
   const fetchNetworkInfo = useCallback(async () => {
     try {
@@ -97,7 +117,10 @@ export function useNetworkRadar() {
     fetchNetworkInfo()
     runPingTest()
     const timer = setInterval(fetchNetworkInfo, 10000)
-    return () => clearInterval(timer)
+    return () => {
+      clearInterval(timer)
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+    }
   }, [fetchNetworkInfo, runPingTest])
 
   return {

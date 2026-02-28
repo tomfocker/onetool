@@ -133,6 +133,29 @@ export interface LanDevice {
 }
 
 /**
+ * 工具使用统计
+ */
+export interface ToolUsageRecord {
+  id: string
+  name: string
+  icon: string
+  lastUsed: number
+  useCount: number
+}
+
+/**
+ * 全局存储 Schema
+ */
+export interface GlobalStore {
+  settings: AppSettings
+  renamePresets: RenamePreset[]
+  webActivatorConfigs: ActivatorConfig[]
+  toolUsages: ToolUsageRecord[]
+  clipboardHistory: ClipboardItem[]
+  version: string
+}
+
+/**
  * 全局通知类型
  */
 export type NotificationType = 'success' | 'error' | 'info' | 'warning'

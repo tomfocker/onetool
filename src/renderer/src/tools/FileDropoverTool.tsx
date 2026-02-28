@@ -144,3 +144,5 @@ export const FileDropoverTool: React.FC = () => {
     </div>
   )
 }
+
+export default FileDropoverTool

@@ -276,3 +276,5 @@ export const RenameTool: React.FC = () => {
     </div>
   )
 }
+
+export default RenameTool

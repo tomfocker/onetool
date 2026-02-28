@@ -1,42 +1,20 @@
 import { useState, useCallback, useEffect } from 'react'
 import { RenameFileItem as FileItem, RenameRule, RenamePreset, SortField, SortOrder } from '../../../shared/types'
+import { useStore } from './useStore'
 
 export { type FileItem, type RenameRule, type RenamePreset, type SortField, type SortOrder }
 
-const defaultPresets: RenamePreset[] = [
-  {
-    id: '1',
-    name: '图片序号',
-    rules: [{ type: 'sequence', params: { baseName: 'IMG_', startNum: 1, digits: 4 } }]
-  },
-  {
-    id: '2',
-    name: '日期前缀',
-    rules: [{ type: 'prefix', params: { prefix: `${new Date().toISOString().slice(0, 10)}_` } }]
-  },
-  {
-    id: '3',
-    name: '小写转换',
-    rules: [{ type: 'case', params: { caseType: 'lower' } }]
-  }
-]
-
 export function useRename() {
+  const { store, setStoreValue } = useStore()
   const [files, setFiles] = useState<FileItem[]>([])
   const [rules, setRules] = useState<RenameRule[]>([])
-  const [presets, setPresets] = useState<RenamePreset[]>(() => {
-    const saved = localStorage.getItem('renamePresets')
-    return saved ? JSON.parse(saved) : defaultPresets
-  })
   const [isProcessing, setIsProcessing] = useState(false)
   const [message, setMessage] = useState<string>('')
   const [messageType, setMessageType] = useState<'success' | 'error' | 'info'>('info')
   const [sortField, setSortField] = useState<SortField>('name')
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc')
 
-  useEffect(() => {
-    localStorage.setItem('renamePresets', JSON.stringify(presets))
-  }, [presets])
+  const presets = store?.renamePresets || []
 
   const applyRules = useCallback((fileName: string, index: number): string => {
     const ext = fileName.split('.').pop() ? `.${fileName.split('.').pop()}` : ''
@@ -236,7 +214,7 @@ export function useRename() {
       name: name.trim(),
       rules: [...rules]
     }
-    setPresets(prev => [...prev, newPreset])
+    setStoreValue('renamePresets', [...presets, newPreset])
   }
 
   const applyPreset = (presetId: string) => {
@@ -249,7 +227,7 @@ export function useRename() {
   }
 
   const deletePreset = (presetId: string) => {
-    setPresets(prev => prev.filter(p => p.id !== presetId))
+    setStoreValue('renamePresets', presets.filter(p => p.id !== presetId))
   }
 
   return {

@@ -10,6 +10,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'QuickInstaller'
   },
   {
+    id: 'network-radar',
+    name: '网络雷达',
+    description: '局域网设备扫描与网络延迟监控',
+    category: '系统维护',
+    icon: 'Radar',
+    componentPath: 'NetworkRadarTool'
+  },
+  {
     id: 'config-checker',
     name: '配置检测',
     description: '深度硬件信息审计与导出',

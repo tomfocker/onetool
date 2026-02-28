@@ -5,7 +5,8 @@ import { ClipboardItem } from '../../shared/types'
 
 export class ClipboardService {
   private history: ClipboardItem[] = []
-  private lastContent: string = ''
+  private lastText: string = ''
+  private lastImageDataUrl: string = ''
   private watcherInterval: NodeJS.Timeout | null = null
   private mainWindow: BrowserWindow | null = null
 
@@ -17,6 +18,12 @@ export class ClipboardService {
     this.mainWindow = window
   }
 
+  private broadcastHistory(): void {
+    if (this.mainWindow) {
+      this.mainWindow.webContents.send('clipboard-history', this.history)
+    }
+  }
+
   private generateId(): string {
     return Date.now().toString(36) + Math.random().toString(36).substr(2)
   }
@@ -24,7 +31,9 @@ export class ClipboardService {
   startWatcher(): void {
     if (this.watcherInterval) return
     
-    this.lastContent = clipboard.readText() || ''
+    this.lastText = clipboard.readText() || ''
+    const initialImage = clipboard.readImage()
+    this.lastImageDataUrl = initialImage.isEmpty() ? '' : initialImage.toDataURL()
     
     this.watcherInterval = setInterval(() => {
       if (!this.mainWindow) return
@@ -32,8 +41,8 @@ export class ClipboardService {
       const currentText = clipboard.readText()
       const currentImage = clipboard.readImage()
       
-      if (currentText && currentText !== this.lastContent) {
-        this.lastContent = currentText
+      if (currentText && currentText !== this.lastText) {
+        this.lastText = currentText
         
         const newItem: ClipboardItem = {
           id: this.generateId(),
@@ -46,26 +55,22 @@ export class ClipboardService {
         this.history = [newItem, ...this.history.filter(item => item.content !== currentText)].slice(0, 100)
         this.saveHistory()
         this.mainWindow.webContents.send('clipboard-change', newItem)
-      } else if (!currentText && !currentImage.isEmpty()) {
-        const imageSize = currentImage.getSize()
-        if (imageSize.width > 0 && imageSize.height > 0) {
-          const dataUrl = currentImage.toDataURL()
+      } else if (currentImage && !currentImage.isEmpty()) {
+        const dataUrl = currentImage.toDataURL()
+        if (dataUrl !== this.lastImageDataUrl) {
+          this.lastImageDataUrl = dataUrl
           
-          if (dataUrl !== this.lastContent) {
-            this.lastContent = dataUrl
-            
-            const newItem: ClipboardItem = {
-              id: this.generateId(),
-              type: 'image',
-              content: dataUrl,
-              timestamp: Date.now(),
-              pinned: false
-            }
-            
-            this.history = [newItem, ...this.history.filter(item => item.content !== dataUrl)].slice(0, 100)
-            this.saveHistory()
-            this.mainWindow.webContents.send('clipboard-change', newItem)
+          const newItem: ClipboardItem = {
+            id: this.generateId(),
+            type: 'image',
+            content: dataUrl,
+            timestamp: Date.now(),
+            pinned: false
           }
+          
+          this.history = [newItem, ...this.history.filter(item => item.content !== dataUrl)].slice(0, 100)
+          this.saveHistory()
+          this.mainWindow.webContents.send('clipboard-change', newItem)
         }
       }
     }, 500)
@@ -97,7 +102,15 @@ export class ClipboardService {
       const historyPath = this.getHistoryPath()
       if (fs.existsSync(historyPath)) {
         const data = fs.readFileSync(historyPath, 'utf-8')
-        this.history = JSON.parse(data)
+        const parsed = JSON.parse(data)
+        if (Array.isArray(parsed)) {
+          // 清洗数据：确保每一项都是有效的 ClipboardItem
+          this.history = parsed.filter(item => 
+            item && typeof item === 'object' && item.id && item.type && item.content
+          )
+        } else {
+          this.history = []
+        }
       }
     } catch (error) {
       console.error('ClipboardService: Failed to load history:', error)
@@ -112,6 +125,7 @@ export class ClipboardService {
   deleteItem(id: string): void {
     this.history = this.history.filter(item => item.id !== id)
     this.saveHistory()
+    this.broadcastHistory()
   }
 
   togglePin(id: string): void {
@@ -119,12 +133,14 @@ export class ClipboardService {
     if (item) {
       item.pinned = !item.pinned
       this.saveHistory()
+      this.broadcastHistory()
     }
   }
 
   clearHistory(): void {
     this.history = this.history.filter(item => item.pinned)
     this.saveHistory()
+    this.broadcastHistory()
   }
 }
 

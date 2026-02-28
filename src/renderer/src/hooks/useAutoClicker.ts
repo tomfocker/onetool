@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
+import { useToolContract } from './useToolContract'
 
 export function useAutoClicker() {
+  const { registerTimer, registerIpc } = useToolContract('AutoClicker')
   const [isRunning, setIsRunning] = useState(false)
   const [clickInterval, setClickInterval] = useState(100)
   const [button, setButton] = useState<'left' | 'right' | 'middle'>('left')
@@ -55,18 +57,18 @@ export function useAutoClicker() {
 
   useEffect(() => {
     checkStatus()
-    const interval = setInterval(checkStatus, 2000)
-    return () => clearInterval(interval)
-  }, [checkStatus])
+    const timer = setInterval(checkStatus, 2000)
+    registerTimer(timer)
+  }, [checkStatus, registerTimer])
 
   useEffect(() => {
-    const unsubStarted = (window.electron as any).ipcRenderer?.on('autoclicker-started', () => setIsRunning(true))
-    const unsubStopped = (window.electron as any).ipcRenderer?.on('autoclicker-stopped', () => setIsRunning(false))
-    return () => {
-      if (unsubStarted) unsubStarted()
-      if (unsubStopped) unsubStopped()
+    if (window.electron?.ipcRenderer) {
+      const unsubStarted = window.electron.ipcRenderer.on('autoclicker-started', () => setIsRunning(true))
+      const unsubStopped = window.electron.ipcRenderer.on('autoclicker-stopped', () => setIsRunning(false))
+      registerIpc(unsubStarted)
+      registerIpc(unsubStopped)
     }
-  }, [])
+  }, [registerIpc])
 
   return {
     isRunning,

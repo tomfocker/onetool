@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Rocket, Moon, Minimize2, Info, Github, Heart, Inbox, Camera, Save } from 'lucide-react'
+import { Rocket, Moon, Minimize2, Info, Github, Heart, Inbox, Camera, Save, Activity, ShieldCheck, CheckCircle2, XCircle } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -37,6 +37,18 @@ export const SettingsPage: React.FC = () => {
   const [autoStartEnabled, setAutoStartEnabled] = useState(false)
   const [minimizeToTray, setMinimizeToTray] = useState(true)
   const [autoRemoveAfterDrag, setAutoRemoveAfterDrag] = useState(false)
+  const [doctorReport, setDoctorReport] = useState<any>(null)
+  const [isChecking, setIsChecking] = useState(false)
+
+  const runDoctor = async () => {
+    setIsChecking(true)
+    try {
+      const res = await (window.electron as any).ipcRenderer.invoke('doctor-run-audit')
+      if (res.success) setDoctorReport(res.data)
+    } finally {
+      setIsChecking(false)
+    }
+  }
 
   useEffect(() => {
     const checkAutoStart = async () => {
@@ -137,6 +149,42 @@ export const SettingsPage: React.FC = () => {
           </CardContent>
         </Card>
       </div>
+
+      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2 text-lg font-bold">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+                系统环境自检
+              </CardTitle>
+              <CardDescription>诊断核心依赖（FFmpeg, Winget等）是否就绪</CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={runDoctor} disabled={isChecking} className="rounded-xl">
+              {isChecking ? <Activity className="w-4 h-4 animate-spin" /> : '立即诊断'}
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {doctorReport ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Object.entries(doctorReport).map(([key, value]: [string, any]) => (
+                <div key={key} className="flex items-center justify-between p-3 rounded-2xl bg-muted/30 border border-white/5">
+                  <div className="flex items-center gap-3">
+                    {value.ok ? <CheckCircle2 className="w-4 h-4 text-emerald-500" /> : <XCircle className="w-4 h-4 text-red-500" />}
+                    <span className="text-xs font-bold uppercase tracking-wider">{key}</span>
+                  </div>
+                  <span className="text-[10px] text-muted-foreground font-mono truncate max-w-[120px]">
+                    {value.ok ? (value.version || 'Ready') : (value.error || 'Failed')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-xs text-muted-foreground italic">点击“立即诊断”检查系统环境稳定性</div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
         <CardHeader>
