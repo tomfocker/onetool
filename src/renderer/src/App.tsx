@@ -95,8 +95,7 @@ function AppContent(): React.JSX.Element {
       <Sidebar currentPage={currentPage} onNavigate={(page) => { setCurrentPage(page); setRetryKey(0); setSearchQuery(''); }} />
       <div className='flex-1 flex flex-col min-w-0 relative'>
         <TitleBar />
-        <Header showSearch={currentPage === 'dashboard'} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
-        <main className='flex-1 overflow-y-auto overflow-x-hidden p-6 pt-20 scrollbar-thin'>
+        <main className='flex-1 overflow-y-auto overflow-x-hidden p-8 pt-14 scrollbar-thin'>
           <div className='max-w-[1600px] mx-auto'>
             <Suspense fallback={
               <div className="flex items-center justify-center h-full py-20">
@@ -105,7 +104,7 @@ function AppContent(): React.JSX.Element {
             }>
               <ToolErrorBoundary key={`${currentPage}-${retryKey}`} toolId={currentPage} onReset={handleToolReset}>
                 {currentPage === 'dashboard' ? (
-                  <Dashboard onNavigate={setCurrentPage} searchTerm={searchQuery} />
+                  <Dashboard onNavigate={setCurrentPage} searchTerm={searchQuery} onSearchChange={setSearchQuery} />
                 ) : ActiveComponent ? (
                   <ActiveComponent />
                 ) : (

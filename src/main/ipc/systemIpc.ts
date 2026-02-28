@@ -22,4 +22,8 @@ export function registerSystemIpc(getMainWindow: () => BrowserWindow | null) {
   ipcMain.handle('select-directory', async () => {
     return systemService.selectDirectory(getMainWindow())
   })
+
+  ipcMain.handle('get-realtime-stats', async () => {
+    return systemService.getRealtimeStats()
+  })
 }

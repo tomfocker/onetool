@@ -130,7 +130,8 @@ Write-Output "---HW_JSON_END---"
             gpu: data.gpu || 'Unknown GPU',
             monitor: monitorValue,
             disk: data.disk || 'Unknown Storage',
-            os: data.os || 'Windows'
+            os: data.os || 'Windows',
+            installTime: 1770000000000 // 这里暂时硬编码一个基准值，实际生产应从持久化存储获取
           }
         }
       } catch (error) {
@@ -188,6 +189,125 @@ Write-Output "---HW_JSON_END---"
     } catch (error) {
       return { success: false, error: (error as Error).message }
     }
+  }
+
+  async getRealtimeStats(): Promise<IpcResponse<any>> {
+    return taskQueueService.enqueue('RealtimeStats', async () => {
+      try {
+        const statsScript = `
+# CPU Load & Name
+$cpuLoad = 0
+$cpuName = ""
+try {
+    $cpuObj = Get-CimInstance Win32_Processor | Select-Object -First 1
+    $cpuLoad = $cpuObj.LoadPercentage
+    $cpuName = $cpuObj.Name.Trim()
+    if (!$cpuLoad) { 
+        $cpuLoad = (Get-Counter "\\Processor(_Total)\\% Processor Time" -ErrorAction SilentlyContinue).CounterSamples.CookedValue 
+    }
+} catch { $cpuLoad = 0 }
+
+# CPU Temp (Active Sensor Hunting)
+$cpuTemp = 0
+try {
+    # 1. Broad scan for all temperature instances
+    $candidates = Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue 
+    $activeTemps = @()
+    foreach($c in $candidates) {
+        if ($c.CurrentTemperature -gt 0) {
+            $val = [Math]::Round(($c.CurrentTemperature / 10) - 273.15, 1)
+            # Filter inactive or stuck sensors (common dummy values: 27.8, 28.0, 30.0)
+            if ($val -gt 15 -and $val -lt 110 -and $val -ne 27.8 -and $val -ne 28.0) {
+                $activeTemps += $val
+            }
+        }
+    }
+    
+    if ($activeTemps.Count -gt 0) {
+        $cpuTemp = ($activeTemps | Measure-Object -Maximum).Maximum
+    } else {
+        # 2. Performance Counter Fallback
+        $perf = Get-CimInstance -ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction SilentlyContinue
+        $pTemps = @()
+        foreach($p in $perf) {
+            $v = $p.Temperature - 273.15
+            if ($v -gt 15 -and $v -lt 110 -and $v -ne 28) { $pTemps += $v }
+        }
+        if ($pTemps.Count -gt 0) { $cpuTemp = ($pTemps | Measure-Object -Maximum).Maximum }
+    }
+} catch { $cpuTemp = 0 }
+
+# Memory
+$memUsage = 0
+$usedMem = 0
+$totalMem = 0
+try {
+    $mem = Get-CimInstance Win32_OperatingSystem
+    $totalMem = [Math]::Round($mem.TotalVisibleMemorySize / 1MB, 2)
+    $freeMem = [Math]::Round($mem.FreePhysicalMemory / 1MB, 2)
+    $usedMem = $totalMem - $freeMem
+    $memUsage = [Math]::Round(($usedMem / $totalMem) * 100, 1)
+} catch {}
+
+# GPU Load & Temp & Name
+$gpuLoad = 0
+$gpuTemp = 0
+$gpuName = ""
+try {
+    $gpuObj = Get-CimInstance Win32_VideoController | Where-Object { $_.AdapterRAM -gt 0 } | Select-Object -First 1
+    if ($gpuObj) { $gpuName = $gpuObj.Name }
+
+    if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
+        $nvi = nvidia-smi --query-gpu=utilization.gpu,temperature.gpu,name --format=csv,noheader,nounits
+        if ($nvi) {
+            $parts = $nvi.Split(',')
+            $gpuLoad = [int]$parts[0].Trim()
+            $gpuTemp = [int]$parts[1].Trim()
+            if ($parts.Count -gt 2) { $gpuName = $parts[2].Trim() }
+        }
+    } else {
+        $gpuTotal = Get-Counter "\\GPU Engine(*)\\% Utilization" -ErrorAction SilentlyContinue
+        if ($gpuTotal -and $gpuTotal.CounterSamples) {
+            $gpuLoad = [Math]::Round(($gpuTotal.CounterSamples | Measure-Object -Property CookedValue -Sum).Sum, 1)
+            if ($gpuLoad -gt 100) { $gpuLoad = 100 }
+        }
+    }
+} catch { $gpuLoad = 0 }
+
+$results = @{
+    cpuLoad = [Math]::Round([double]$cpuLoad, 1)
+    cpuTemp = $cpuTemp
+    cpuName = $cpuName
+    gpuLoad = $gpuLoad
+    gpuTemp = $gpuTemp
+    gpuName = $gpuName
+    memoryUsage = $memUsage
+    memoryUsed = $usedMem
+    memoryTotal = $totalMem
+    netUp = "0 KB/s"
+    netDown = "0 KB/s"
+}
+
+Write-Output "---STATS_JSON_START---"
+$results | ConvertTo-Json -Compress
+Write-Output "---STATS_JSON_END---"
+`
+        const rawResult = await execPowerShell(statsScript)
+        const match = rawResult.match(/---STATS_JSON_START---(.*?)---STATS_JSON_END---/s)
+        if (match && match[1]) {
+          try {
+            const data = JSON.parse(match[1].trim())
+            return { success: true, data }
+          } catch (pe) {
+            console.error('SystemService: Stats JSON Parse Error:', pe, rawResult)
+          }
+        }
+        return { success: false, error: '无法解析监控数据' }
+      } catch (error) {
+        console.error('SystemService: getRealtimeStats Error:', error)
+        return { success: false, error: (error as Error).message }
+      }
+    })
   }
 }
 

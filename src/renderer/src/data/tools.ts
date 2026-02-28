@@ -128,5 +128,13 @@ export const tools: ToolDefinition[] = [
     category: '实用工具',
     icon: 'Clock',
     componentPath: 'ScreenSaverTool'
+  },
+  {
+    id: 'server-monitor',
+    name: '服务器监控',
+    description: '支持自定义域名的云端服务器监控看板',
+    category: '系统维护',
+    icon: 'Globe',
+    componentPath: 'ServerMonitorTool'
   }
 ]

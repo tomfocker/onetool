@@ -22,10 +22,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
 
   return (
     <aside className="w-64 h-full bg-white/80 dark:bg-zinc-900/60 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800/50 flex flex-col z-20">
-      <div className="p-8">
+      <div className="pt-14 px-8 pb-4">
         <div className="flex items-center gap-3 px-2">
-          <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 cursor-pointer" onClick={() => onNavigate('dashboard')}>
-            <Package className="text-white" size={22} />
+          <div
+            className="w-10 h-10 bg-white dark:bg-zinc-800 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/10 cursor-pointer overflow-hidden border border-zinc-200 dark:border-zinc-700 transition-transform hover:scale-105 active:scale-95"
+            onClick={() => onNavigate('dashboard')}
+          >
+            <img src="icon.png" alt="OneTool" className="w-full h-full object-cover" />
           </div>
           <div className="flex flex-col">
             <span className="font-black text-lg tracking-tight">OneTool</span>
@@ -39,7 +42,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
           <button
             onClick={() => onNavigate('dashboard')}
             className={cn(
-              "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative mb-4",
+              "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative mb-4 mt-10",
               currentPage === 'dashboard'
                 ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20"
                 : "text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-foreground"

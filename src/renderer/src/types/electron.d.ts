@@ -138,6 +138,7 @@ declare global {
       }
       systemConfig: {
         getSystemConfig: () => Promise<IpcResponse<SystemConfig>>
+        getRealtimeStats: () => Promise<IpcResponse<any>>
       }
       webActivator: {
         checkVisibility: (configs: ActivatorConfig[]) => Promise<IpcResponse<{ results: boolean[] }>>

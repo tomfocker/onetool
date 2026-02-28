@@ -42,43 +42,42 @@ export function TitleBar(): React.JSX.Element {
   }
 
   return (
-    <div 
-      className="fixed top-0 left-0 right-0 h-8 z-[9999] flex items-center justify-between px-4 bg-white/80 dark:bg-gray-900/80 backdrop-blur-xl border-b border-white/20 dark:border-gray-700/30"
+    <div
+      className="fixed top-0 left-0 right-0 h-9 z-[9999] flex items-center justify-between px-3 bg-white/70 dark:bg-zinc-900/70 backdrop-blur-2xl border-b border-zinc-200/50 dark:border-zinc-800/50"
       style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
     >
-      <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-400 to-purple-500" />
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">onetool</span>
+      <div className="flex items-center gap-2.5 pl-1">
+        <span className="text-[11px] font-black uppercase tracking-[0.15em] text-zinc-900 dark:text-zinc-100 opacity-80">onetool</span>
       </div>
-      
-      <div 
-        className="flex items-center gap-1"
+
+      <div
+        className="flex items-center h-full"
         style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
       >
         <button
           onClick={handleMinimize}
-          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-200/60 dark:hover:bg-gray-700/60 transition-colors"
+          className="w-10 h-full flex items-center justify-center hover:bg-zinc-200/50 dark:hover:bg-white/5 transition-all duration-200"
           title="最小化"
         >
-          <Minus className="w-4 h-4 text-gray-600 dark:text-gray-300" />
+          <Minus className="w-4 h-4 text-zinc-600 dark:text-zinc-400" />
         </button>
         <button
           onClick={handleMaximize}
-          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-gray-200/60 dark:hover:bg-gray-700/60 transition-colors"
+          className="w-10 h-full flex items-center justify-center hover:bg-zinc-200/50 dark:hover:bg-white/5 transition-all duration-200"
           title={isMaximized ? "还原" : "最大化"}
         >
           {isMaximized ? (
-            <Maximize2 className="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" />
+            <Maximize2 className="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-400" />
           ) : (
-            <Square className="w-3.5 h-3.5 text-gray-600 dark:text-gray-300" />
+            <Square className="w-3.5 h-3.5 text-zinc-600 dark:text-zinc-400" />
           )}
         </button>
         <button
           onClick={handleClose}
-          className="w-7 h-7 flex items-center justify-center rounded-md hover:bg-red-500 group transition-colors"
+          className="w-12 h-full flex items-center justify-center hover:bg-rose-500 group transition-all duration-200"
           title="关闭"
         >
-          <X className="w-4 h-4 text-gray-600 dark:text-gray-300 group-hover:text-white" />
+          <X className="w-4 h-4 text-zinc-600 dark:text-zinc-400 group-hover:text-white transition-colors" />
         </button>
       </div>
     </div>

@@ -35,6 +35,22 @@ export interface SystemConfig {
   monitor: string
   disk: string
   os: string
+  installTime: number
+}
+
+/**
+ * 实时硬件监控数据
+ */
+export interface RealtimeStats {
+  cpuLoad: number
+  cpuTemp: number
+  gpuLoad: number
+  gpuTemp: number
+  memoryUsage: number // 百分比
+  memoryUsed: number  // GB
+  memoryTotal: number // GB
+  netUp: string
+  netDown: string
 }
 
 /**

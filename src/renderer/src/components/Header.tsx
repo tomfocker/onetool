@@ -20,7 +20,7 @@ export const Header: React.FC<HeaderProps> = ({
 
   return (
     <header className={cn(
-      'h-12 fixed top-8 left-64 right-0 flex items-center px-6 z-20 transition-all duration-300',
+      'h-12 fixed top-9 left-64 right-0 flex items-center px-6 z-20 transition-all duration-300',
       showSearch
         ? 'bg-white/60 dark:bg-[#2a2d35]/80 backdrop-blur-xl border-b border-white/20 dark:border-white/10 shadow-soft-sm'
         : 'bg-transparent border-none shadow-none pointer-events-none'

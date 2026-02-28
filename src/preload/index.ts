@@ -122,6 +122,9 @@ const storeAPI = {
 const systemConfigAPI = {
   getSystemConfig: () => {
     return ipcRenderer.invoke('get-system-config')
+  },
+  getRealtimeStats: () => {
+    return ipcRenderer.invoke('get-realtime-stats')
   }
 }
 
