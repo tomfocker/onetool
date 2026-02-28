@@ -91,7 +91,7 @@ function AppContent(): React.JSX.Element {
   const ActiveComponent = currentPage === 'dashboard' ? Dashboard : ToolComponentsMap[currentPage];
 
   return (
-    <div className='flex h-screen bg-zinc-50 dark:bg-black text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-primary/10'>
+    <div className='flex h-screen bg-zinc-50 dark:bg-background text-zinc-900 dark:text-zinc-100 overflow-hidden font-sans selection:bg-primary/10'>
       <Sidebar currentPage={currentPage} onNavigate={(page) => { setCurrentPage(page); setRetryKey(0); setSearchQuery(''); }} />
       <div className='flex-1 flex flex-col min-w-0 relative'>
         <TitleBar />

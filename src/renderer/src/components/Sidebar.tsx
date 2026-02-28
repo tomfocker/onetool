@@ -21,7 +21,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
   const categories = ['系统维护', '日常办公', '媒体处理', '实用工具']
 
   return (
-    <aside className="w-64 h-full bg-white/80 dark:bg-zinc-950/80 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800 flex flex-col z-20">
+    <aside className="w-64 h-full bg-white/80 dark:bg-zinc-900/60 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800/50 flex flex-col z-20">
       <div className="p-8">
         <div className="flex items-center gap-3 px-2">
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/20 cursor-pointer" onClick={() => onNavigate('dashboard')}>
@@ -34,14 +34,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 pb-8 scrollbar-none">
+      <nav className="flex-1 overflow-y-auto px-4 pr-1 pb-8 sidebar-scroll">
         <div className="space-y-1">
           <button
             onClick={() => onNavigate('dashboard')}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative mb-4",
-              currentPage === 'dashboard' 
-                ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20" 
+              currentPage === 'dashboard'
+                ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20"
                 : "text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-foreground"
             )}
           >
@@ -65,8 +65,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
                     onClick={() => onNavigate(tool.id)}
                     className={cn(
                       "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative",
-                      active 
-                        ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20" 
+                      active
+                        ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20"
                         : "text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-foreground"
                     )}
                   >
@@ -86,8 +86,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
             onClick={() => onNavigate('settings')}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 rounded-2xl transition-all duration-300 group relative",
-              currentPage === 'settings' 
-                ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20" 
+              currentPage === 'settings'
+                ? "bg-indigo-500 text-white shadow-xl shadow-indigo-500/20"
                 : "text-muted-foreground hover:bg-zinc-100 dark:hover:bg-white/5 hover:text-foreground"
             )}
           >
@@ -97,7 +97,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
         </div>
       </nav>
 
-      <div className="p-6 border-t border-zinc-200 dark:border-zinc-800">
+      <div className="p-6 border-t border-zinc-200 dark:border-zinc-800/50">
         <div className="text-[10px] text-center text-muted-foreground font-bold uppercase tracking-widest opacity-50">
           Engineered for Efficiency
         </div>
