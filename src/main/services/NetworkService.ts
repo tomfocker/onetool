@@ -5,19 +5,21 @@ import { IpcResponse } from '../../shared/types'
 import { taskQueueService } from './TaskQueueService'
 
 export class NetworkService {
-  constructor() {}
+  constructor() { }
 
   async ping(host: string): Promise<IpcResponse<{ alive: boolean, time: number | null }>> {
     return new Promise((resolve) => {
       const target = host.replace(/^https?:\/\//, '').split('/')[0]
-      const cmd = `chcp 65001 && ping -n 1 -w 2000 ${target}`
-      
-      exec(cmd, (error, stdout) => {
+      // Use /W 4000 for 4 second wait and set exec timeout to 6s as safety net
+      const cmd = `ping -n 1 -w 4000 ${target}`
+
+      exec(cmd, { timeout: 6000 }, (error, stdout) => {
         if (error) {
           resolve({ success: true, data: { alive: false, time: null } })
           return
         }
-        const match = stdout.match(/[=<](\d+)ms/)
+        // Match 'time=94ms' or 'time<1ms' (both Chinese and English ping output)
+        const match = stdout.match(/(?:time|时间)[=<]\s*(\d+)\s*ms/i)
         if (match && match[1]) {
           resolve({ success: true, data: { alive: true, time: parseInt(match[1]) } })
         } else {
@@ -86,15 +88,15 @@ export class NetworkService {
     return taskQueueService.enqueue('LAN_Scan', async () => {
       try {
         if (!targetSubnet) return { success: false, error: '未提供网段信息' }
-        
+
         // 快速唤醒局域网活跃设备 (广播 + 网关)
         const wakeCmd = `ping -n 1 -w 300 ${targetSubnet}.255 > nul 2>&1 & ping -n 1 -w 300 ${targetSubnet}.1 > nul 2>&1`
-        await execCommand(wakeCmd).catch(() => {})
+        await execCommand(wakeCmd).catch(() => { })
 
         const arpOutput = await execCommand('arp -a')
         const lines = arpOutput.split(/[\r\n]+/)
         const rawDevices: Array<{ ip: string; mac: string }> = []
-        
+
         for (const line of lines) {
           const match = line.trim().match(/(\d+\.\d+\.\d+\.\d+)\s+([0-9a-fA-F-]{17}|[0-9a-fA-F-]{11,14})/i)
           if (match) {
@@ -102,13 +104,13 @@ export class NetworkService {
             let mac = match[2].replace(/-/g, ':').toUpperCase()
             // 补齐 MAC 地址格式 (部分 ARP 输出可能不规范)
             if (mac.length === 12) mac = mac.match(/.{2}/g)!.join(':')
-            
+
             if (!ip.startsWith('224.') && !ip.startsWith('239.') && !ip.endsWith('.255') && ip.startsWith(targetSubnet + '.')) {
               rawDevices.push({ ip, mac })
             }
           }
         }
-        
+
         const uniqueList = Array.from(new Map(rawDevices.map(d => [d.ip, d])).values())
         if (uniqueList.length === 0) return { success: true, data: { devices: [] } }
 
@@ -128,7 +130,7 @@ export class NetworkService {
           }
           if ($results.Count -gt 0) { $results | ConvertTo-Json -Compress } else { "{}" }
         `
-        
+
         let hostMap: Record<string, string> = {}
         const resolveResult = await execPowerShell(resolveScript, 15000)
         if (resolveResult) {
@@ -151,20 +153,20 @@ export class NetworkService {
         const devices = uniqueList.map((dev: any) => {
           let name = hostMap[dev.ip] || ''
           if (dev.ip.endsWith('.1')) name = name ? `${name} (网关)` : '路由器 (网关)'
-          
+
           if (!name) {
             const prefix = dev.mac.substring(0, 8).toUpperCase()
             name = macVendors[prefix] || ''
           }
-          
+
           if (!name) {
             const firstByte = parseInt(dev.mac.substring(0, 2), 16)
             if ((firstByte & 0x02) === 2) name = '移动设备 (私有MAC)'
           }
-          
+
           return { ip: dev.ip, mac: dev.mac, name: name || '未知设备', type: '局域网设备' }
         })
-        
+
         return { success: true, data: { devices } }
       } catch (error) {
         return { success: false, error: (error as Error).message }

@@ -6,42 +6,30 @@ export interface PingResult {
   name: string
   latency: number | null
   status: 'pending' | 'success' | 'error' | 'timeout'
-  icon?: string
-  isGlobal?: boolean
 }
+
+const DEFAULT_HOSTS = [
+  { host: 'www.baidu.com', name: '百度搜索' },
+  { host: 'www.qq.com', name: '腾讯网' },
+  { host: 'www.taobao.com', name: '淘宝网' },
+  { host: 'www.bilibili.com', name: '哔哩哔哩' },
+  { host: 'github.com', name: 'GitHub' },
+  { host: 'www.microsoft.com', name: '微软' },
+  { host: 'www.apple.com.cn', name: '苹果(中国)' },
+  { host: '114.114.114.114', name: '114 DNS' },
+  { host: '223.5.5.5', name: '阿里云 DNS' },
+  { host: '8.8.8.8', name: 'Google DNS' }
+]
 
 export function useNetworkRadar() {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo[]>([])
-  const [pingResults, setPingResults] = useState<PingResult[]>([
-    { host: 'www.baidu.com', name: '百度', latency: null, status: 'pending', isGlobal: true },
-    { host: 'www.google.com', name: '谷歌', latency: null, status: 'pending', isGlobal: true },
-    { host: '1.1.1.1', name: 'Cloudflare', latency: null, status: 'pending', isGlobal: true },
-    { host: '114.114.114.114', name: '114 DNS', latency: null, status: 'pending', isGlobal: true }
-  ])
+  const [pingResults, setPingResults] = useState<PingResult[]>(
+    DEFAULT_HOSTS.map(h => ({ ...h, latency: null, status: 'pending' }))
+  )
   const [lanDevices, setLanDevices] = useState<LanDevice[]>([])
   const [isScanningLan, setIsScanningLan] = useState(false)
   const [isPinging, setIsPinging] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
-
-  const webPing = async (url: string, signal: AbortSignal): Promise<number | null> => {
-    const startTime = performance.now()
-    const controller = new AbortController()
-    
-    // 级联信号
-    signal.addEventListener('abort', () => controller.abort())
-    const timeoutId = setTimeout(() => controller.abort(), 3000)
-    
-    try {
-      await fetch(`https://${url}/favicon.ico`, {
-        method: 'HEAD', mode: 'no-cors', cache: 'no-store', signal: controller.signal
-      })
-      clearTimeout(timeoutId)
-      return Math.round(performance.now() - startTime)
-    } catch (e) {
-      clearTimeout(timeoutId)
-      return null
-    }
-  }
 
   const runPingTest = useCallback(async () => {
     if (abortControllerRef.current) abortControllerRef.current.abort()
@@ -49,45 +37,46 @@ export function useNetworkRadar() {
     const signal = abortControllerRef.current.signal
 
     setIsPinging(true)
-    
-    // 初始化结果状态，设为 pending
-    setPingResults(prev => prev.map(r => ({ ...r, status: 'pending', latency: null })))
 
-    // 预获取当前待测列表
-    let currentTargets: PingResult[] = []
-    setPingResults(prev => {
-      currentTargets = [...prev]
-      return prev
-    })
+    // Set all to pending upfront.
+    setPingResults(
+      DEFAULT_HOSTS.map(h => ({ ...h, latency: null, status: 'pending' }))
+    )
 
-    for (let i = 0; i < currentTargets.length; i++) {
-      if (signal.aborted) break
-      const target = currentTargets[i]
+    const pingOne = async (target: { host: string; name: string }, index: number) => {
       let latency: number | null = null
       let success = false
-
       try {
-        if (target.isGlobal) {
-          latency = await webPing(target.host, signal)
-          success = latency !== null
-        } else {
-          const res = await window.electron.network.ping(target.host)
-          if (signal.aborted) break
-          latency = res.data?.time || null
-          success = res.data?.alive || false
-        }
-      } catch (e) { success = false }
-
+        const res = await Promise.race([
+          window.electron.network.ping(target.host),
+          new Promise<any>(resolve => setTimeout(() => resolve({ success: true, data: { alive: false, time: null } }), 5500))
+        ])
+        if (signal.aborted) return
+        latency = res.data?.time ?? null
+        success = res.data?.alive || false
+      } catch {
+        success = false
+      }
+      if (signal.aborted) return
       setPingResults(prev => {
         const next = [...prev]
-        if (next[i]) {
-          next[i] = { ...next[i], latency, status: success ? 'success' : 'error' }
-        }
+        if (next[index]) next[index] = { ...next[index], latency, status: success ? 'success' : 'error' }
         return next
       })
     }
-    if (!signal.aborted) setIsPinging(false)
-  }, []) // 移除 pingResults 依赖项
+
+    // Run pings in batches of 3 to avoid resource contention
+    const CONCURRENCY = 3
+    for (let i = 0; i < DEFAULT_HOSTS.length; i += CONCURRENCY) {
+      if (signal.aborted) break
+      const batch = DEFAULT_HOSTS.slice(i, i + CONCURRENCY).map((t, j) => pingOne(t, i + j))
+      await Promise.all(batch)
+    }
+
+    if (!signal.aborted) {
+      setIsPinging(false)
+    }
+  }, [])
 
   const fetchNetworkInfo = useCallback(async () => {
     try {
@@ -100,9 +89,11 @@ export function useNetworkRadar() {
 
   const scanLan = useCallback(async () => {
     if (networkInfo.length === 0) return
-    const primaryIp = networkInfo[0].ip
+    // Prefer true private subnets over tailscale/VPNs
+    const activeInterface = networkInfo.find(i => /^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(i.ip)) || networkInfo[0]
+    const primaryIp = activeInterface.ip
     const subnet = primaryIp.split('.').slice(0, 3).join('.')
-    
+
     setIsScanningLan(true)
     try {
       const res = await window.electron.network.scanLan(subnet)
