@@ -116,7 +116,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '
   }, [systemInfo])
 
   return (
-    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
+    <div className="space-y-6 pb-20">
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-8 pb-4 border-b border-zinc-100 dark:border-zinc-800/50">
         <div className="flex flex-col md:flex-row md:items-center justify-between flex-1 gap-6">
           <div className="space-y-2.5">

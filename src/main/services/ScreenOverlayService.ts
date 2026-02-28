@@ -1,104 +1,110 @@
-import { BrowserWindow, screen, app } from 'electron'
+import { BrowserWindow, screen, desktopCapturer, ipcMain } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { IpcResponse } from '../../shared/types'
 
 export class ScreenOverlayService {
-  private overlayWindow: BrowserWindow | null = null
+  private overlayWindows: Map<number, BrowserWindow> = new Map()
+  private screenMap: Map<number, string> = new Map()
   private mainWindow: BrowserWindow | null = null
-
-  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
   }
 
-  private async captureScreen(): Promise<string | null> {
-    const { desktopCapturer, screen } = require('electron')
-    const cursorPoint = screen.getCursorScreenPoint()
-    const display = screen.getDisplayNearestPoint(cursorPoint)
+  constructor() {
+    // 全局监听器：分发截图数据给对应的窗口
+    ipcMain.on('screen-overlay:ready', (event) => {
+      for (const [displayId, win] of this.overlayWindows.entries()) {
+        if (!win.isDestroyed() && event.sender.id === win.webContents.id) {
+          const dataUrl = this.screenMap.get(displayId)
+          if (dataUrl) {
+            win.webContents.send('screen-overlay:screenshot', dataUrl)
+          }
+          break
+        }
+      }
+    })
+  }
+
+  /**
+   * 批量抓取所有屏幕的高清快照
+   */
+  private async captureAllScreens(): Promise<void> {
+    const displays = screen.getAllDisplays()
+    this.screenMap.clear()
 
     try {
+      // 请求高清采样
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
-        thumbnailSize: {
-          width: Math.round(display.bounds.width * display.scaleFactor),
-          height: Math.round(display.bounds.height * display.scaleFactor)
-        }
+        thumbnailSize: { width: 3840, height: 2160 }
       })
-      const source = sources.find(s => s.display_id === display.id.toString()) || sources[0]
-      return source ? source.thumbnail.toDataURL() : null
+
+      for (const display of displays) {
+        let source = sources.find(s => s.display_id === display.id.toString())
+        if (!source) {
+          const targetRatio = display.bounds.width / display.bounds.height
+          source = sources.find(s => {
+            const size = s.thumbnail.getSize()
+            return Math.abs((size.width / size.height) - targetRatio) < 0.1
+          }) || sources[0]
+        }
+
+        if (source) {
+          this.screenMap.set(display.id, source.thumbnail.toDataURL())
+        }
+      }
     } catch (error) {
-      console.error('ScreenOverlayService: captureScreen error:', error)
-      return null
+      console.error('[ScreenOverlayService] Batch capture failed:', error)
     }
   }
 
-  async start(): Promise<IpcResponse<{ screenDataUrl?: string }>> {
+  async start(): Promise<IpcResponse<any>> {
     try {
-      if (this.overlayWindow) {
-        this.overlayWindow.close()
-        this.overlayWindow = null
-      }
+      this.close() // 清除旧窗口
 
-      // 【1】提前截图，在此之前不应该有覆盖层的窗口影响当前画面
-      const screenDataUrl = await this.captureScreen()
-
-      const cursorPoint = screen.getCursorScreenPoint()
+      await this.captureAllScreens()
       const displays = screen.getAllDisplays()
-      const targetDisplay = displays.find(d =>
-        cursorPoint.x >= d.bounds.x &&
-        cursorPoint.x < d.bounds.x + d.bounds.width &&
-        cursorPoint.y >= d.bounds.y &&
-        cursorPoint.y < d.bounds.y + d.bounds.height
-      ) || screen.getPrimaryDisplay()
 
-      const { x, y, width, height } = targetDisplay.bounds
+      for (const display of displays) {
+        const { x, y, width, height } = display.bounds
 
-      this.overlayWindow = new BrowserWindow({
-        x, y, width, height,
-        transparent: true,
-        frame: false,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        focusable: true,
-        webPreferences: {
-          preload: join(__dirname, '../preload/index.js'),
-          sandbox: false
-        }
-      })
-
-      this.overlayWindow.setIgnoreMouseEvents(false)
-      this.overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-      // 监听覆盖层页面准备就绪的信号
-      const { ipcMain } = require('electron')
-      const onOverlayReady = (event: Electron.IpcMainEvent) => {
-        if (this.overlayWindow && event.sender.id === this.overlayWindow.webContents.id) {
-          if (screenDataUrl) {
-            this.overlayWindow.webContents.send('screen-overlay:screenshot', screenDataUrl)
+        const win = new BrowserWindow({
+          x, y, width, height,
+          transparent: true,
+          frame: false,
+          alwaysOnTop: true,
+          skipTaskbar: true,
+          resizable: false,
+          focusable: true,
+          show: false, // 准备好截图后再显示 (可选)
+          enableLargerThanScreen: true,
+          fullscreen: true,
+          webPreferences: {
+            preload: join(__dirname, '../preload/index.js'),
+            sandbox: false
           }
-        }
-      }
-      ipcMain.on('screen-overlay:ready', onOverlayReady)
-
-      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-        // 【2】移除 URL 携带超大图片 base64 参数
-        const url = new URL(`${process.env['ELECTRON_RENDERER_URL']}#/screen-overlay`)
-        this.overlayWindow.loadURL(url.toString())
-      } else {
-        this.overlayWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
-          hash: '/screen-overlay'
         })
+
+        win.setAlwaysOnTop(true, 'screen-saver')
+        win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+        if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+          win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/screen-overlay`)
+        } else {
+          win.loadFile(join(__dirname, '../../renderer/index.html'), { hash: '/screen-overlay' })
+        }
+
+        win.once('ready-to-show', () => win.show())
+
+        win.on('closed', () => {
+          this.overlayWindows.delete(display.id)
+        })
+
+        this.overlayWindows.set(display.id, win)
       }
 
-      this.overlayWindow.on('closed', () => {
-        this.overlayWindow = null
-        ipcMain.removeListener('screen-overlay:ready', onOverlayReady)
-      })
-
-      // 不再把 Base64 数据返回给 IPC 的调用方（避免无意义的性能开销和序列化）
       return { success: true, data: {} }
     } catch (error) {
       return { success: false, error: (error as Error).message }
@@ -107,10 +113,11 @@ export class ScreenOverlayService {
 
   close(): IpcResponse {
     try {
-      if (this.overlayWindow) {
-        this.overlayWindow.close()
-        this.overlayWindow = null
-      }
+      this.overlayWindows.forEach(win => {
+        if (!win.isDestroyed()) win.close()
+      })
+      this.overlayWindows.clear()
+      this.screenMap.clear()
       return { success: true }
     } catch (error) {
       return { success: false, error: (error as Error).message }

@@ -341,7 +341,7 @@ export const ImageProcessorTool: React.FC = () => {
 
   return (
     <div className="space-y-3">
-      <div className="animate-fade-in-up">
+      <div className="">
         <h2 className="text-lg font-semibold mb-0.5">图片处理</h2>
         <p className="text-xs text-muted-foreground italic">💡 请先在下方设置压缩参数，然后再拖入图片即可获得结果</p>
       </div>

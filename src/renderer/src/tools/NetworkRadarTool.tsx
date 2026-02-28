@@ -104,7 +104,7 @@ export const NetworkRadarTool: React.FC = () => {
   }, [])
 
   return (
-    <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-10">
+    <div className="max-w-5xl mx-auto space-y-6 pb-10">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-500 to-indigo-600 bg-clip-text text-transparent">
           网络雷达
@@ -133,10 +133,9 @@ export const NetworkRadarTool: React.FC = () => {
               {pingResults.map((result, idx) => (
                 <div key={idx} className="p-4 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between hover:bg-white/10 transition-all">
                   <div className="flex items-center gap-3">
-                    <div className={`w-2 h-2 rounded-full ${
-                      result.status === 'success' ? (result.latency! < 100 ? 'bg-green-500' : 'bg-yellow-500') :
-                      result.status === 'error' ? 'bg-red-500' : 'bg-zinc-500 animate-pulse'
-                    }`} />
+                    <div className={`w-2 h-2 rounded-full ${result.status === 'success' ? (result.latency! < 100 ? 'bg-green-500' : 'bg-yellow-500') :
+                        result.status === 'error' ? 'bg-red-500' : 'bg-zinc-500 animate-pulse'
+                      }`} />
                     <div>
                       <div className="text-sm font-medium">{result.name}</div>
                       <div className="text-[10px] text-muted-foreground">{result.host}</div>
@@ -146,11 +145,10 @@ export const NetworkRadarTool: React.FC = () => {
                     {result.status === 'pending' ? (
                       <span className="text-xs text-muted-foreground">测试中...</span>
                     ) : (
-                      <span className={`text-sm font-mono font-bold ${
-                        !result.latency ? 'text-red-500' :
-                        result.latency < 100 ? 'text-green-500' :
-                        result.latency < 300 ? 'text-yellow-500' : 'text-red-500'
-                      }`}>
+                      <span className={`text-sm font-mono font-bold ${!result.latency ? 'text-red-500' :
+                          result.latency < 100 ? 'text-green-500' :
+                            result.latency < 300 ? 'text-yellow-500' : 'text-red-500'
+                        }`}>
                         {result.latency ? `${result.latency}ms` : '超时'}
                       </span>
                     )}
@@ -180,7 +178,7 @@ export const NetworkRadarTool: React.FC = () => {
               <div className="flex flex-col items-center justify-center py-12 space-y-6">
                 <div className="radar-container">
                   {[1, 2, 3].map(i => (
-                    <div key={i} className="radar-circle" style={{ inset: `${(i-1)*30}px`, opacity: 1 - i*0.2 }} />
+                    <div key={i} className="radar-circle" style={{ inset: `${(i - 1) * 30}px`, opacity: 1 - i * 0.2 }} />
                   ))}
                   <div className="radar-sweep" />
                   <div className="radar-center" />
@@ -231,7 +229,7 @@ export const NetworkRadarTool: React.FC = () => {
               <Activity className="text-emerald-500" size={20} />
               当前活跃网卡
             </h2>
-            
+
             <div className="space-y-4">
               {networkInfo.length > 0 ? networkInfo.map((info, idx) => (
                 <div key={idx} className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/10 space-y-3">
@@ -242,7 +240,7 @@ export const NetworkRadarTool: React.FC = () => {
                     </div>
                     <span className="text-[10px] bg-emerald-500/20 text-emerald-500 px-2 py-0.5 rounded-full font-bold uppercase">已连接</span>
                   </div>
-                  
+
                   <div className="space-y-2">
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground">IPv4 地址</span>

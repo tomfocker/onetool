@@ -296,7 +296,7 @@ export const QRCodeTool: React.FC = () => {
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-pink-500/5 dark:bg-pink-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-6xl mx-auto px-6 py-8 relative z-10">
-        <div className="text-center mb-8 animate-fade-in-up">
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
             二维码生成器
           </h1>
@@ -314,11 +314,10 @@ export const QRCodeTool: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as typeof activeTab)}
-                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
-                    activeTab === tab.id
+                  className={`flex-1 px-4 py-2 rounded-lg font-medium transition-all duration-200 flex items-center justify-center gap-2 ${activeTab === tab.id
                       ? 'bg-white/70 dark:bg-white/20 text-foreground shadow-soft-sm'
                       : 'text-muted-foreground hover:text-foreground hover:bg-white/30 dark:hover:bg-white/5'
-                  }`}
+                    }`}
                 >
                   <span>{tab.icon}</span>
                   {tab.label}
@@ -339,11 +338,10 @@ export const QRCodeTool: React.FC = () => {
                       <button
                         key={preset.label}
                         onClick={() => setText(preset.value)}
-                        className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-200 ${
-                          text === preset.value
+                        className={`px-3 py-1.5 rounded-lg text-sm transition-all duration-200 ${text === preset.value
                             ? 'bg-purple-500/30 text-purple-400 dark:text-purple-300 border border-purple-500/50'
                             : 'bg-white/30 dark:bg-white/5 text-muted-foreground border border-white/20 dark:border-white/10 hover:border-purple-500/30'
-                        }`}
+                          }`}
                       >
                         {preset.icon} {preset.label}
                       </button>
@@ -371,17 +369,15 @@ export const QRCodeTool: React.FC = () => {
                       <button
                         key={level.value}
                         onClick={() => setQrOptions(prev => ({ ...prev, errorCorrectionLevel: level.value as typeof qrOptions.errorCorrectionLevel }))}
-                        className={`w-full p-3 rounded-xl border-2 transition-all duration-200 text-left ${
-                          qrOptions.errorCorrectionLevel === level.value
+                        className={`w-full p-3 rounded-xl border-2 transition-all duration-200 text-left ${qrOptions.errorCorrectionLevel === level.value
                             ? 'border-purple-500/50 bg-purple-500/10'
                             : 'border-white/20 dark:border-white/10 hover:border-purple-500/30 bg-white/30 dark:bg-white/5'
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center justify-between">
                           <span className="font-medium">{level.label}</span>
-                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                            qrOptions.errorCorrectionLevel === level.value ? 'border-purple-400' : 'border-muted-foreground'
-                          }`}>
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${qrOptions.errorCorrectionLevel === level.value ? 'border-purple-400' : 'border-muted-foreground'
+                            }`}>
                             {qrOptions.errorCorrectionLevel === level.value && (
                               <div className="w-2.5 h-2.5 rounded-full bg-purple-400" />
                             )}
@@ -717,9 +713,8 @@ export const QRCodeTool: React.FC = () => {
       </div>
 
       {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg animate-slide-in-right z-50 ${
-          toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
-        }`}>
+        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg animate-slide-in-right z-50 ${toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
+          }`}>
           <div className="flex items-center gap-2 text-white">
             {toast.type === 'success' ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

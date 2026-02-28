@@ -159,7 +159,11 @@ declare global {
         startDrag: (filePath: string) => void
       }
       translate: {
-        translateImage: (base64Image: string) => Promise<IpcResponse<{ originalText: string; translatedText: string }>>
+        translateImage: (base64Image: string) => Promise<IpcResponse<Array<{
+          index: number
+          text: string
+          translatedText: string
+        }>>>
       }
     }
   }

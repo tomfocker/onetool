@@ -167,7 +167,7 @@ export const ScreenRecorderTool: React.FC = () => {
       <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-4xl mx-auto px-6 py-8 relative z-10">
-        <div className="text-center mb-8 animate-fade-in-up">
+        <div className="text-center mb-8">
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-red-400 to-purple-500 bg-clip-text text-transparent">
             屏幕录制
           </h1>

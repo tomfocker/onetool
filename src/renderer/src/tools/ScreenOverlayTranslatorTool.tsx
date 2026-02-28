@@ -77,9 +77,11 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-bold">
             <Settings2 className="w-4 h-4 text-blue-500" />
-            翻译 API 配置 (大模型)
+            性能更强、更实惠的文本大模型 (推荐 DeepSeek)
           </CardTitle>
-          <CardDescription className="text-xs">配置视觉大模型接口 (推荐使用 gpt-4o 或兼容 OpenAI 标准的视觉模型)</CardDescription>
+          <CardDescription className="text-xs">
+            由于已集成<b>本地 OCR</b>，您现在可以使用任何纯文本模型（如 <code>deepseek-chat</code>），费用降低 95% 且速度飞快。
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

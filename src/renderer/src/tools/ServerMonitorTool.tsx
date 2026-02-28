@@ -29,7 +29,7 @@ const ServerMonitorTool: React.FC = () => {
     }
 
     return (
-        <div className="h-[calc(100vh-160px)] flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+        <div className="h-[calc(100vh-160px)] flex flex-col gap-6">
             <div className="flex items-center justify-between">
                 <div className="space-y-1">
                     <h2 className="text-2xl font-black tracking-tight flex items-center gap-2">

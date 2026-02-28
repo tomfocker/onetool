@@ -123,7 +123,7 @@ export const RenameTool: React.FC = () => {
   )
 
   return (
-    <div className='max-w-5xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20'>
+    <div className='max-w-5xl mx-auto space-y-8 pb-20'>
       <div className='text-center space-y-2 mb-10'>
         <h1 className='text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-400 bg-clip-text text-transparent'>
           批量重命名

@@ -103,13 +103,15 @@ function AppContent(): React.JSX.Element {
               </div>
             }>
               <ToolErrorBoundary key={`${currentPage}-${retryKey}`} toolId={currentPage} onReset={handleToolReset}>
-                {currentPage === 'dashboard' ? (
-                  <Dashboard onNavigate={setCurrentPage} searchTerm={searchQuery} onSearchChange={setSearchQuery} />
-                ) : ActiveComponent ? (
-                  <ActiveComponent />
-                ) : (
-                  <div className="text-center py-20 text-muted-foreground">页面不存在</div>
-                )}
+                <div key={currentPage} className="animate-in fade-in slide-in-from-bottom-4 duration-500 ease-out h-full">
+                  {currentPage === 'dashboard' ? (
+                    <Dashboard onNavigate={setCurrentPage} searchTerm={searchQuery} onSearchChange={setSearchQuery} />
+                  ) : ActiveComponent ? (
+                    <ActiveComponent />
+                  ) : (
+                    <div className="text-center py-20 text-muted-foreground">页面不存在</div>
+                  )}
+                </div>
               </ToolErrorBoundary>
             </Suspense>
           </div>

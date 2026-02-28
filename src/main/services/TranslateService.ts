@@ -1,77 +1,83 @@
 import { IpcResponse } from '../../shared/types'
 import { settingsService } from './SettingsService'
+import { ocrService, OcrLine } from './OcrService'
 
-export interface TranslationResult {
-    originalText: string
+export interface TranslatedLine extends OcrLine {
     translatedText: string
 }
 
 export class TranslateService {
     constructor() { }
 
-    async translateImage(base64Image: string): Promise<IpcResponse<TranslationResult>> {
+    async translateImage(base64Image: string): Promise<IpcResponse<TranslatedLine[]>> {
         try {
-            const settings = settingsService.getSettings()
+            const ocrRes = await ocrService.recognize(base64Image)
+            if (!ocrRes.success || !ocrRes.data || ocrRes.data.length === 0) {
+                return { success: false, error: ocrRes.error || '未识别到有效文字' }
+            }
 
+            const ocrLines = ocrRes.data
+            const settings = settingsService.getSettings()
             const apiUrl = settings.translateApiUrl || 'https://api.openai.com/v1'
             const apiKey = settings.translateApiKey
             const model = settings.translateModel || 'gpt-4o'
 
-            if (!apiKey) {
-                return { success: false, error: '请先在设置中配置大模型 API Key' }
-            }
+            if (!apiKey) return { success: false, error: '请先在设置中配置大模型 API Key' }
 
-            // 为了确保兼容包含 data:image 前缀或不包含的数据格式
-            const base64Data = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image
+            const linesText = ocrLines.map((l) => `[${l.index}] ${l.text}`).join('\n')
 
-            const prompt = `你是一个精准的翻译和 OCR 助手。
-请识别图片中的文本。如果文本是外语，请将其翻译为中文；如果是中文，则翻译为英文。
-请严格仅返回 JSON 格式结果，不要有任何额外的文字内容、代码块或 Markdown 标记。格式如下：
+            const prompt = `你是一个专业的屏幕翻译专家。
+任务要求：
+1. 接收到的文本是多行 OCR 识别结果，每行前有编号 [n]。
+2. 请对每一行内容进行语境校对并翻译成中文（如果是中文则译为英文）。
+3. 保持翻译结果的行数与输入完全一致。
+4. 必须仅返回指定 JSON 格式，不含任何 Markdown 标签或说明。
+
+JSON 格式要求（必须是对象，不能是顶层数组）：
 {
-  "originalText": "识别出的原文内容",
-  "translatedText": "翻译后的文字内容"
+  "lines": [
+    {"index": 0, "translatedText": "第一行的译文"},
+    {"index": 1, "translatedText": "第二行的译文"}
+  ]
 }`
 
             const response = await fetch(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
                 body: JSON.stringify({
-                    model: model,
+                    model,
                     messages: [
-                        {
-                            role: 'user',
-                            content: [
-                                { type: 'text', text: prompt },
-                                {
-                                    type: 'image_url',
-                                    image_url: {
-                                        url: `data:image/jpeg;base64,${base64Data}`
-                                    }
-                                }
-                            ]
-                        }
+                        { role: 'system', content: prompt },
+                        { role: 'user', content: linesText }
                     ],
-                    response_format: { type: "json_object" }
+                    response_format: { type: 'json_object' }
                 })
             })
 
             if (!response.ok) {
-                const errorData = await response.text()
-                console.error('TranslateService API Error:', errorData)
-                throw new Error(`API Request failed with status ${response.status}`)
+                let errorMsg = `API 请求失败 (${response.status})`
+                try { const e = await response.json(); errorMsg = e.error?.message || errorMsg } catch (e) { }
+                throw new Error(errorMsg)
             }
 
             const data = await response.json()
             const content = data.choices?.[0]?.message?.content
+            if (!content) throw new Error('API 返回内容为空')
 
-            if (!content) {
-                throw new Error('Invalid translation response')
+            let translatedLines: any[] = []
+            try {
+                const parsed = JSON.parse(content)
+                translatedLines = parsed.lines || parsed.results || parsed.translations ||
+                    (Array.isArray(parsed) ? parsed : Object.values(parsed)[0])
+            } catch (e) {
+                throw new Error('翻译结果解析失败: ' + content.substring(0, 50))
             }
 
-            const result = JSON.parse(content) as TranslationResult
+            const result: TranslatedLine[] = ocrLines.map((line) => {
+                const t = translatedLines.find((t: any) => t.index === line.index) || translatedLines[line.index]
+                return { ...line, translatedText: t?.translatedText || '翻译失败' }
+            })
+
             return { success: true, data: result }
         } catch (error) {
             console.error('TranslateService Error:', error)

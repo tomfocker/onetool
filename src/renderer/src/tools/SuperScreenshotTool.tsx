@@ -191,7 +191,7 @@ export const SuperScreenshotTool: React.FC = () => {
   }, [step, enhancedMode, baseImage, firstBounds, baseOpacity, autoCopy, localAutoSave, savePath, showNotification, handleStartCapture, handleReset, compositeImages, setCapturedImage, setBaseImage, setFirstBounds, setStep])
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 animate-fade-in pb-10">
+    <div className="max-w-4xl mx-auto space-y-6 pb-10">
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-400 to-cyan-500 bg-clip-text text-transparent">
           叠加截图

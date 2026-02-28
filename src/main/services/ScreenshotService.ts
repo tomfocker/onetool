@@ -17,10 +17,12 @@ export class ScreenshotService {
     this.mainWindow = window
   }
 
+  /**
+   * 高清截图：优化多显匹配与 DPI 采样
+   */
   async capture(bounds: { x: number; y: number; width: number; height: number }): Promise<IpcResponse<string>> {
-    console.log('[ScreenshotService] Capture requested:', bounds)
+    console.log('[ScreenshotService] High-res capture requested:', bounds)
     try {
-      // 保证输入坐标为整数
       const cleanBounds = {
         x: Math.round(bounds.x),
         y: Math.round(bounds.y),
@@ -28,93 +30,62 @@ export class ScreenshotService {
         height: Math.round(bounds.height)
       }
 
-      // 1. 根据 bounds 中心点找到所在的显示器
+      // 1. 获取所在显示器
       const targetDisplay = screen.getDisplayNearestPoint({
         x: cleanBounds.x + cleanBounds.width / 2,
         y: cleanBounds.y + cleanBounds.height / 2
       })
 
-      console.log('[ScreenshotService] Target Display:', {
-        id: targetDisplay.id,
-        bounds: targetDisplay.bounds,
-        scaleFactor: targetDisplay.scaleFactor
-      })
-
       const scaleFactor = targetDisplay.scaleFactor
 
-      // 2. 获取所有屏幕源
+      // 2. 获取源（增加优先匹配逻辑）
+      // 请求更大的尺寸以确保高清采样
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
         thumbnailSize: {
-          width: Math.round(targetDisplay.bounds.width * scaleFactor),
-          height: Math.round(targetDisplay.bounds.height * scaleFactor)
+          width: Math.max(800, Math.round(targetDisplay.bounds.width * scaleFactor)),
+          height: Math.max(600, Math.round(targetDisplay.bounds.height * scaleFactor))
         }
       })
 
-      // 尝试匹配显示器 ID
-      // 某些环境下 display_id 可能是 string(id), string(index), 或 number
+      // 优先通过 display_id 匹配，如果没有（比如某些旧系统），尝试通过缩略图宽高比例匹配
       let source = sources.find(s => s.display_id === targetDisplay.id.toString())
       if (!source) {
-        // 备选方案：按名称或索引尝试匹配 (Windows 下可能有 "Screen 1", "Screen 2")
-        console.warn('[ScreenshotService] ID match failed, attempting fallback index match')
-        const allDisplays = screen.getAllDisplays().sort((a, b) => a.bounds.x - b.bounds.x)
-        const displayIndex = allDisplays.findIndex(d => d.id === targetDisplay.id)
-        if (displayIndex !== -1 && sources[displayIndex]) {
-          source = sources[displayIndex]
-        } else {
-          source = sources[0]
-        }
+        // 备选方案：通过比例匹配 (容错 10% 误差)
+        const targetRatio = targetDisplay.bounds.width / targetDisplay.bounds.height
+        source = sources.find(s => {
+          const size = s.thumbnail.getSize()
+          const ratio = size.width / size.height
+          return Math.abs(ratio - targetRatio) < 0.1
+        }) || sources[0]
       }
-
-      if (!source) {
-        console.error('[ScreenshotService] No capture source found')
-        return { success: false, error: '无法获取屏幕源' }
-      }
-
-      console.log('[ScreenshotService] Mapping to source:', {
-        name: source.name,
-        display_id: source.display_id,
-        imgSize: source.thumbnail.getSize()
-      })
 
       const img = source.thumbnail
+      const imgSize = img.getSize()
 
-      // 3. 计算选区在该显示器内的相对坐标
+      // 3. 计算选区在该显示器内的相对坐标（物理像素）
       const localX = cleanBounds.x - targetDisplay.bounds.x
       const localY = cleanBounds.y - targetDisplay.bounds.y
 
-      // 4. 计算图片实际尺寸，防止越界
-      const imgSize = img.getSize()
-      let cropX = Math.round(localX * scaleFactor)
-      let cropY = Math.round(localY * scaleFactor)
-      let cropW = Math.round(cleanBounds.width * scaleFactor)
-      let cropH = Math.round(cleanBounds.height * scaleFactor)
+      // 这里的缩放比例计算：图片实际高度 / 显示器逻辑高度
+      // 解决某些高 DPI 环境下缩放比不完全等于 scaleFactor 的微小偏差
+      const actualScaleX = imgSize.width / targetDisplay.bounds.width
+      const actualScaleY = imgSize.height / targetDisplay.bounds.height
 
-      console.log('[ScreenshotService] Before clamp:', { cropX, cropY, cropW, cropH, localX, localY })
+      let cropX = Math.round(localX * actualScaleX)
+      let cropY = Math.round(localY * actualScaleY)
+      let cropW = Math.round(cleanBounds.width * actualScaleX)
+      let cropH = Math.round(cleanBounds.height * actualScaleY)
 
-      // 限制边界
-      cropX = Math.max(0, cropX)
-      // 处理底部可能由于任务栏或缩放导致的 1-2 像素偏移
-      cropY = Math.max(0, cropY)
+      // 限制边界防止越界报错
+      cropX = Math.max(0, Math.min(cropX, imgSize.width - 1))
+      cropY = Math.max(0, Math.min(cropY, imgSize.height - 1))
+      cropW = Math.max(1, Math.min(cropW, imgSize.width - cropX))
+      cropH = Math.max(1, Math.min(cropH, imgSize.height - cropY))
 
-      if (cropX + cropW > imgSize.width) {
-        cropW = imgSize.width - cropX
-      }
-      if (cropY + cropH > imgSize.height) {
-        cropH = imgSize.height - cropY
-      }
-
-      console.log('[ScreenshotService] After clamp:', { cropX, cropY, cropW, cropH })
-
-      // 容错：如果宽高极小，尝试微调至少保留 1 像素，除非完全在外部
-      if (cropW <= 0 || cropH <= 0) {
-        console.error('[ScreenshotService] Selection out of current screen source bounds')
-        return { success: false, error: '选区位置无效或在显示范围外' }
-      }
-
+      // 4. 执行裁剪并转换。使用 PNG 格式保证最高质量（用于 OCR 识别）
       const cropped = img.crop({ x: cropX, y: cropY, width: cropW, height: cropH })
       const dataUrl = cropped.toDataURL()
-      console.log('[ScreenshotService] Capture success, dataUrl length:', dataUrl.length)
 
       return { success: true, data: dataUrl }
     } catch (e) {
@@ -164,6 +135,9 @@ export class ScreenshotService {
     }
   }
 
+  /**
+   * 开启全屏选区窗口 (支持多显示器)
+   */
   openSelectionWindow(restrictBounds?: { x: number; y: number; width: number; height: number }, resultChannel: string = 'screenshot-selection-result', enhanced: boolean = false): void {
     if (this.selectionWindows.length > 0) return
 
@@ -171,7 +145,6 @@ export class ScreenshotService {
     const displays = screen.getAllDisplays()
 
     for (const display of displays) {
-      // 如果有限制区域，只在所在显示器开启，否则全屏开启
       if (restrictBounds) {
         const isOverlap = (
           restrictBounds.x < display.bounds.x + display.bounds.width &&
@@ -196,7 +169,7 @@ export class ScreenshotService {
         enableLargerThanScreen: true,
         backgroundColor: '#00000000',
         fullscreenable: true,
-        kiosk: true, // 使用 kiosk 模式强制覆盖任务栏和所有边缘
+        kiosk: true,
         webPreferences: {
           preload: join(__dirname, '../preload/index.js'),
           sandbox: false
@@ -213,7 +186,9 @@ export class ScreenshotService {
       const restrictQuery = restrictBounds ? `&restrict=${encodeURIComponent(JSON.stringify(restrictBounds))}` : ''
       const modeQuery = resultChannel === 'recorder-selection-result' ? '&mode=recorder' : ''
       const enhancedQuery = enhanced ? `&enhanced=true` : ''
+      // 关键！传递显示器原始偏移，方便 renderer 修正坐标
       const displayQuery = `&display=${display.id}&dx=${display.bounds.x}&dy=${display.bounds.y}`
+
       const url = is.dev && process.env['ELECTRON_RENDERER_URL']
         ? `${process.env['ELECTRON_RENDERER_URL']}${route}?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
         : join(__dirname, '../../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
@@ -226,9 +201,7 @@ export class ScreenshotService {
 
       win.on('closed', () => {
         const index = this.selectionWindows.indexOf(win)
-        if (index > -1) {
-          this.selectionWindows.splice(index, 1)
-        }
+        if (index > -1) this.selectionWindows.splice(index, 1)
       })
 
       this.selectionWindows.push(win)
@@ -239,7 +212,6 @@ export class ScreenshotService {
     const senderWindow = BrowserWindow.fromWebContents(sender)
     const senderBounds = senderWindow?.getBounds()
 
-    // 关闭所有选区窗口
     const windowsToClose = [...this.selectionWindows]
     this.selectionWindows = []
     windowsToClose.forEach(win => {
