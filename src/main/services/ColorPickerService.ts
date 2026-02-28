@@ -17,7 +17,7 @@ export class ColorPickerService {
   private lastG = -1
   private lastB = -1
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -80,10 +80,10 @@ Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
             this.lastR = r
             this.lastG = g
             this.lastB = b
-            
+
             const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
             const rgb = `RGB(${r}, ${g}, ${b})`
-            
+
             this.mainWindow.webContents.send('color-picker:update', { hex, r, g, b, rgb, x: data.x, y: data.y })
           }
         }
@@ -144,9 +144,15 @@ Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
 
   async pick(): Promise<IpcResponse<{ color?: any }>> {
     const displays = screen.getAllDisplays()
+
+    // 【修复1】先截图，再隐藏主窗口
+    // desktopCapturer 需要有可见窗口才能正常工作
+    const screenshotMap = await this.captureAllScreens()
+
     if (this.mainWindow) this.mainWindow.hide()
 
-    const screenshotMap = await this.captureAllScreens()
+    // 记录每个 display 对应的 overlay 窗口，用于 ready 信号匹配
+    const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
 
     this.colorPickerWindows = displays.map(display => {
       const { x, y, width, height } = display.bounds
@@ -159,28 +165,45 @@ Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
         resizable: false,
         focusable: true,
         show: false,
+        fullscreenable: true,
+        kiosk: true, // 强制覆盖任务栏
         webPreferences: {
-          preload: join(__dirname, '../../preload/index.js'),
+          preload: join(__dirname, '../preload/index.js'),
           sandbox: false
         }
       })
 
       win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
 
-      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-        win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/color-picker-overlay`)
-      } else {
-        win.loadFile(join(__dirname, '../../renderer/index.html'), { hash: '/color-picker-overlay' })
-      }
+      displayMap.set(win.webContents.id, { win, displayId: display.id })
 
-      win.webContents.once('did-finish-load', () => {
-        const dataUrl = screenshotMap.get(display.id)
-        if (dataUrl) win.webContents.send('color-picker:screenshot', dataUrl)
-      })
+      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+        win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/color-picker-overlay?display=${display.id}`)
+      } else {
+        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}#/color-picker-overlay?display=${display.id}`)
+      }
 
       win.once('ready-to-show', () => win.show())
       return win
     })
+
+    // 【修复2】监听 overlay 渲染进程发来的 ready 信号，再发送截图
+    // 彻底消除竞态条件（did-finish-load 早于 React useEffect 注册监听器）
+    const onOverlayReady = (event: Electron.IpcMainEvent) => {
+      const webContentsId = event.sender.id
+      const entry = displayMap.get(webContentsId)
+      if (!entry) return
+
+      const dataUrl = screenshotMap.get(entry.displayId)
+      if (dataUrl) {
+        entry.win.webContents.send('color-picker:screenshot', dataUrl)
+      } else {
+        // 没有对应截图时，尝试用第一张截图兜底
+        const fallback = screenshotMap.values().next().value
+        if (fallback) entry.win.webContents.send('color-picker:screenshot', fallback)
+      }
+    }
+    ipcMain.on('color-picker:overlay-ready', onOverlayReady)
 
     return new Promise((resolve) => {
       const onPicked = (_event, data) => {
@@ -192,12 +215,14 @@ Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
         cleanup()
         resolve({ success: false, error: 'Cancelled' })
       }
-      
+
       const cleanup = () => {
         ipcMain.removeListener('color-picker:confirm-pick', onPicked)
         ipcMain.removeListener('color-picker:cancel-pick', onCancelled)
+        ipcMain.removeListener('color-picker:overlay-ready', onOverlayReady)
         this.colorPickerWindows.forEach(win => { if (!win.isDestroyed()) win.close() })
         this.colorPickerWindows = []
+        displayMap.clear()
         if (this.mainWindow) {
           this.mainWindow.show()
           this.mainWindow.focus()

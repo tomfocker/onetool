@@ -18,6 +18,7 @@ import { screenOverlayService } from './services/ScreenOverlayService'
 import { screenRecorderService } from './services/ScreenRecorderService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
+import { screenshotService } from './services/ScreenshotService'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -36,6 +37,7 @@ import { registerStoreIpc } from './ipc/storeIpc'
 import { registerDoctorIpc } from './ipc/doctorIpc'
 import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
+import { registerScreenshotIpc } from './ipc/screenshotIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -74,6 +76,7 @@ function createWindow(): void {
   webActivatorService.setMainWindow(mainWindow)
   quickInstallerService.setMainWindow(mainWindow)
   windowManagerService.setMainWindow(mainWindow)
+  screenshotService.setMainWindow(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -149,6 +152,7 @@ app.whenReady().then(() => {
   registerStoreIpc(() => mainWindow)
   registerDoctorIpc()
   registerSystemIpc(() => mainWindow)
+  registerScreenshotIpc()
 
   // Silent system health check
   setTimeout(async () => {

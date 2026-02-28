@@ -255,21 +255,21 @@ export const ConfigChecker: React.FC = () => {
           return (
             <Card
               key={item.id}
-              className={cn(
-                'glass-card border-none transition-all duration-500 group overflow-hidden relative',
-                hasData ? 'hover:scale-[1.02]' : 'opacity-70'
-              )}
+              className="glass-card border-none group overflow-hidden relative"
             >
               {/* 装饰光晕 */}
               <div className={cn(
-                'absolute top-0 right-0 w-24 h-24 blur-2xl -mr-8 -mt-8 opacity-10 transition-opacity duration-500 group-hover:opacity-20',
+                'absolute top-0 right-0 w-24 h-24 blur-2xl -mr-8 -mt-8 opacity-10 transition-opacity duration-500 group-hover:opacity-25 pointer-events-none',
                 `bg-gradient-to-br ${item.gradient}`
               )} />
 
-              <CardContent className="p-5">
+              <CardContent className={cn(
+                'p-5 transition-transform duration-300',
+                hasData && 'group-hover:scale-[1.02]'
+              )}>
                 <div className="flex items-start gap-4">
                   <div className={cn(
-                    'w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md shrink-0 transition-transform duration-500 group-hover:rotate-6',
+                    'w-11 h-11 rounded-xl bg-gradient-to-br flex items-center justify-center text-white shadow-md shrink-0 transition-transform duration-300 group-hover:scale-110',
                     item.gradient
                   )}>
                     <item.icon size={20} />

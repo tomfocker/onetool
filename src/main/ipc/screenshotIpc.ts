@@ -42,13 +42,13 @@ export function registerScreenshotIpc() {
     return screenshotService.copyToClipboard(dataUrl)
   })
 
-  ipcMain.handle('recorder-selection-open', async (_event, restrictBounds) => {
+  ipcMain.handle('screenshot-selection-open', async (_event, restrictBounds) => {
     screenshotService.openSelectionWindow(restrictBounds)
     return { success: true }
   })
 
-  ipcMain.handle('recorder-selection-close', async (_event, bounds) => {
-    screenshotService.closeSelectionWindow(bounds)
+  ipcMain.handle('screenshot-selection-close', async (_event, bounds) => {
+    screenshotService.closeSelectionWindow(_event.sender, bounds)
     return { success: true }
   })
 }

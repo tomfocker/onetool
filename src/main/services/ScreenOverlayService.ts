@@ -7,7 +7,7 @@ export class ScreenOverlayService {
   private overlayWindow: BrowserWindow | null = null
   private mainWindow: BrowserWindow | null = null
 
-  constructor() {}
+  constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -17,7 +17,7 @@ export class ScreenOverlayService {
     const { desktopCapturer, screen } = require('electron')
     const cursorPoint = screen.getCursorScreenPoint()
     const display = screen.getDisplayNearestPoint(cursorPoint)
-    
+
     try {
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
@@ -61,7 +61,7 @@ export class ScreenOverlayService {
         resizable: false,
         focusable: true,
         webPreferences: {
-          preload: join(__dirname, '../../preload/index.js'),
+          preload: join(__dirname, '../preload/index.js'),
           sandbox: false
         }
       })

@@ -49,7 +49,7 @@ export function useNetworkRadar() {
       try {
         const res = await Promise.race([
           window.electron.network.ping(target.host),
-          new Promise<any>(resolve => setTimeout(() => resolve({ success: true, data: { alive: false, time: null } }), 5500))
+          new Promise<any>(resolve => setTimeout(() => resolve({ success: true, data: { alive: false, time: null } }), 10000))
         ])
         if (signal.aborted) return
         latency = res.data?.time ?? null
@@ -65,8 +65,8 @@ export function useNetworkRadar() {
       })
     }
 
-    // Run pings in batches of 3 to avoid resource contention
-    const CONCURRENCY = 3
+    // 减少并发数，避免同时过多 ping 进程抢占系统资源
+    const CONCURRENCY = 2
     for (let i = 0; i < DEFAULT_HOSTS.length; i += CONCURRENCY) {
       if (signal.aborted) break
       const batch = DEFAULT_HOSTS.slice(i, i + CONCURRENCY).map((t, j) => pingOne(t, i + j))

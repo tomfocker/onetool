@@ -10,18 +10,23 @@ export class NetworkService {
   async ping(host: string): Promise<IpcResponse<{ alive: boolean, time: number | null }>> {
     return new Promise((resolve) => {
       const target = host.replace(/^https?:\/\//, '').split('/')[0]
-      // Use /W 4000 for 4 second wait and set exec timeout to 6s as safety net
-      const cmd = `ping -n 1 -w 4000 ${target}`
+      // chcp 65001 ensures stdout is UTF-8 so JS regex can match "时间="
+      // /W 4000 limits the wait time, and exec timeout 6000 limits hanging.
+      const cmd = `chcp 65001 && ping -n 1 -w 4000 ${target}`
 
       exec(cmd, { timeout: 6000 }, (error, stdout) => {
         if (error) {
           resolve({ success: true, data: { alive: false, time: null } })
           return
         }
-        // Match 'time=94ms' or 'time<1ms' (both Chinese and English ping output)
-        const match = stdout.match(/(?:time|时间)[=<]\s*(\d+)\s*ms/i)
+
+        // Match both English "time=..." / "time<..." and Chinese "时间=..." / "时间<..."
+        const match = stdout.match(/(?:time|时间)[=<]\s*(\d+)/i)
+
         if (match && match[1]) {
-          resolve({ success: true, data: { alive: true, time: parseInt(match[1]) } })
+          const time = parseInt(match[1])
+          // time<1ms matched as 1, which works perfectly.
+          resolve({ success: true, data: { alive: true, time } })
         } else {
           resolve({ success: true, data: { alive: false, time: null } })
         }

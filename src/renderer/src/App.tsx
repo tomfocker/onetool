@@ -6,6 +6,7 @@ import { Dashboard } from '@/components/Dashboard'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
+import { ScreenshotSelectionOverlay } from '@/tools/SuperScreenshotTool'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
 import { NotificationContainer } from '@/components/NotificationContainer'
@@ -22,6 +23,7 @@ function AppContent(): React.JSX.Element {
   const [isScreenOverlay, setIsScreenOverlay] = useState(false)
   const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
   const [isRecorderSelection, setIsRecorderSelection] = useState(false)
+  const [isScreenshotSelection, setIsScreenshotSelection] = useState(false)
 
   const handleToolReset = useCallback(() => {
     setRetryKey(prev => prev + 1)
@@ -63,6 +65,7 @@ function AppContent(): React.JSX.Element {
       setIsScreenOverlay(hash.startsWith('#/screen-overlay'))
       setIsColorPickerOverlay(hash.startsWith('#/color-picker-overlay'))
       setIsRecorderSelection(hash.startsWith('#/recorder-selection'))
+      setIsScreenshotSelection(hash.startsWith('#/screenshot-selection'))
     }
     handleHashChange()
     window.addEventListener('hashchange', handleHashChange)
@@ -72,6 +75,7 @@ function AppContent(): React.JSX.Element {
   if (isScreenOverlay) return <ScreenOverlay />
   if (isColorPickerOverlay) return <ColorPickerOverlay />
   if (isRecorderSelection) return <RecorderSelectionOverlay />
+  if (isScreenshotSelection) return <ScreenshotSelectionOverlay />
 
   const ActiveComponent = currentPage === 'dashboard' ? Dashboard : ToolComponentsMap[currentPage];
 

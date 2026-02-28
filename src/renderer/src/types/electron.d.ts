@@ -1,11 +1,11 @@
-import { 
-  IpcResponse, 
-  SystemConfig, 
-  RenameFileItem, 
-  ActivatorConfig, 
-  WindowInfo, 
-  ClipboardItem, 
-  NetworkInterfaceInfo, 
+import {
+  IpcResponse,
+  SystemConfig,
+  RenameFileItem,
+  ActivatorConfig,
+  WindowInfo,
+  ClipboardItem,
+  NetworkInterfaceInfo,
   LanDevice,
   AppSettings,
   GlobalStore
@@ -70,8 +70,10 @@ declare global {
         pick: () => Promise<IpcResponse<{ color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number } }>>
         confirm: (color: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void
         cancel: () => void
+        notifyReady: () => void
         onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
         onScreenshot: (callback: (dataUrl: string) => void) => () => void
+        onSelected: (callback: (data: any) => void) => () => void
       }
       network: {
         scanLan: (subnet: string) => Promise<IpcResponse<{ devices: LanDevice[] }>>
@@ -154,4 +156,4 @@ declare global {
   }
 }
 
-export {}
+export { }

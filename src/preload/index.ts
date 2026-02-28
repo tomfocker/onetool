@@ -316,6 +316,10 @@ const colorPickerAPI = {
   cancel: () => {
     return ipcRenderer.send('color-picker:cancel-pick')
   },
+  // overlay 渲染进程就绪后调用，通知主进程可以发送截图了
+  notifyReady: () => {
+    ipcRenderer.send('color-picker:overlay-ready')
+  },
   onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
     const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
     ipcRenderer.on('color-picker:update', handler)
@@ -390,11 +394,22 @@ if (process.contextIsolated) {
   // @ts-ignore
   window.electron = {
     ...electronAPI,
+    ipcRenderer: {
+      on: (channel: string, func: (...args: any[]) => void) => {
+        const subscription = (_event: any, ...args: any[]) => func(...args)
+        ipcRenderer.on(channel, subscription)
+        return () => ipcRenderer.removeListener(channel, subscription)
+      },
+      send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
+      invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
+    },
     rename: renameAPI,
     capswriter: capswriterAPI,
     quickInstaller: quickInstallerAPI,
     autoClicker: autoClickerAPI,
     autoStart: autoStartAPI,
+    settings: settingsAPI,
+    store: storeAPI,
     systemConfig: systemConfigAPI,
     screenSaver: screenSaverAPI,
     webActivator: webActivatorAPI,
@@ -403,6 +418,7 @@ if (process.contextIsolated) {
     window: windowAPI,
     floatBall: floatBallAPI,
     screenOverlay: screenOverlayAPI,
+    screenshot: screenshotAPI,
     colorPicker: colorPickerAPI,
     network: networkAPI
   }

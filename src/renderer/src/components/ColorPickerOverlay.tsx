@@ -14,6 +14,10 @@ export const ColorPickerOverlay: React.FC = () => {
       setScreenshot(dataUrl)
     })
 
+    // 监听器注册完毕后，立即通知主进程可以发送截图了
+    // 这样可彻底消除 did-finish-load 早于 React 注册监听器的竞态条件
+    window.electron.colorPicker.notifyReady()
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         window.electron.colorPicker.cancel()
@@ -33,14 +37,14 @@ export const ColorPickerOverlay: React.FC = () => {
     const img = imageRef.current
     const canvas = canvasRef.current
     const rect = img.getBoundingClientRect()
-    
+
     // 计算坐标映射比例（逻辑像素 -> 原始截图像素）
     const scaleX = img.naturalWidth / rect.width
     const scaleY = img.naturalHeight / rect.height
-    
+
     const x = Math.floor((e.clientX - rect.left) * scaleX)
     const y = Math.floor((e.clientY - rect.top) * scaleY)
-    
+
     setMousePos({ x: e.clientX, y: e.clientY })
 
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
@@ -54,7 +58,7 @@ export const ColorPickerOverlay: React.FC = () => {
         const g = pixel[1]
         const b = pixel[2]
         const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-        
+
         setCurrentColor(prev => {
           if (prev.hex === hex) return prev
           return { hex, r, g, b }
@@ -92,7 +96,7 @@ export const ColorPickerOverlay: React.FC = () => {
 
   // 即使没有截图，也显示一个透明层用于捕获 ESC
   return (
-    <div 
+    <div
       className={`fixed inset-0 overflow-hidden select-none bg-black/20 ${screenshot ? 'cursor-none' : 'cursor-wait'}`}
       onMouseMove={handleMouseMove}
       onMouseDown={handleMouseDown}
@@ -100,7 +104,7 @@ export const ColorPickerOverlay: React.FC = () => {
       {!screenshot ? (
         <div className="flex flex-col items-center justify-center h-full text-white">
           <div className="bg-black/60 px-6 py-4 rounded-2xl border border-white/20 backdrop-blur-xl animate-pulse">
-             正在准备取色层... (按 ESC 退出)
+            正在准备取色层... (按 ESC 退出)
           </div>
         </div>
       ) : (
@@ -112,11 +116,11 @@ export const ColorPickerOverlay: React.FC = () => {
             alt="screenshot"
             onLoad={onImageLoad}
           />
-          
+
           <canvas ref={canvasRef} className="hidden" />
 
           {/* 放大镜 UI */}
-          <div 
+          <div
             className="absolute pointer-events-none"
             style={{
               left: mousePos.x + 20,
@@ -125,7 +129,7 @@ export const ColorPickerOverlay: React.FC = () => {
             }}
           >
             <div className="bg-black/80 backdrop-blur-md rounded-lg border border-white/20 p-2 flex flex-col items-center gap-1 shadow-2xl">
-              <div 
+              <div
                 className="w-16 h-8 rounded border border-white/40"
                 style={{ backgroundColor: currentColor.hex }}
               />
@@ -149,12 +153,12 @@ export const ColorPickerOverlay: React.FC = () => {
             }}
           >
             <div className="absolute inset-0 flex items-center justify-center">
-                <div className="absolute w-full h-[1px] bg-white/40" />
-                <div className="absolute h-full w-[1px] bg-white/40" />
-                <div 
-                    className="w-3 h-3 border border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)] z-10"
-                    style={{ backgroundColor: currentColor.hex }}
-                />
+              <div className="absolute w-full h-[1px] bg-white/40" />
+              <div className="absolute h-full w-[1px] bg-white/40" />
+              <div
+                className="w-3 h-3 border border-white shadow-[0_0_0_1px_rgba(0,0,0,0.5)] z-10"
+                style={{ backgroundColor: currentColor.hex }}
+              />
             </div>
           </div>
         </>

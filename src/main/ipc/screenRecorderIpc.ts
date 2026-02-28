@@ -1,5 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { screenRecorderService } from '../services/ScreenRecorderService'
+import { screenshotService } from '../services/ScreenshotService'
 import { ScreenRecorderConfigSchema } from '../../shared/ipc-schemas'
 
 export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | null) {
@@ -30,5 +31,15 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
 
   ipcMain.handle('screen-recorder-get-default-path', async () => {
     return screenRecorderService.getDefaultPath()
+  })
+
+  ipcMain.handle('recorder-selection-open', async () => {
+    screenshotService.openSelectionWindow(undefined, 'recorder-selection-result')
+    return { success: true }
+  })
+
+  ipcMain.handle('recorder-selection-close', async (_event, bounds) => {
+    screenshotService.closeSelectionWindow(_event.sender, bounds)
+    return { success: true }
   })
 }

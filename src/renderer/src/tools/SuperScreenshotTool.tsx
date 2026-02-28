@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { Camera, Layers, Copy, Check, Info, RotateCcw, Save } from 'lucide-react'
 import { useSuperScreenshot } from '../hooks/useSuperScreenshot'
+import { useScreenshotSelection } from '../hooks/useScreenshotSelection'
 import { useGlobalStore } from '@/store'
 
 export const SuperScreenshotTool: React.FC = () => {
@@ -78,7 +79,7 @@ export const SuperScreenshotTool: React.FC = () => {
     if (step !== 'idle') return
     handleReset()
     setStep('capturing-base')
-    await (window.electron as any).ipcRenderer.invoke('recorder-selection-open')
+    await (window.electron as any).ipcRenderer.invoke('screenshot-selection-open')
   }, [step, handleReset, setStep])
 
   const handleDownload = async () => {
@@ -100,16 +101,27 @@ export const SuperScreenshotTool: React.FC = () => {
       handleStartCapture()
     })
 
-    const handleResult = async (_event: any, bounds: any) => {
+    const handleResult = async (bounds: any) => {
+      console.log('[SuperScreenshotTool] Received bounds from IPC:', bounds)
       if (!bounds) {
+        console.log('[SuperScreenshotTool] No bounds received, resetting...')
         if (step === 'capturing-base') handleReset()
         return
       }
 
-      if (!window.electron?.screenshot) return
+      if (!window.electron?.screenshot) {
+        console.error('[SuperScreenshotTool] screenshot API not found')
+        return
+      }
+
+      console.log('[SuperScreenshotTool] Calling capture with:', bounds)
       const res = await window.electron.screenshot.capture(bounds)
+      console.log('[SuperScreenshotTool] Capture API result:', res)
+
       if (!res.success || !res.data) {
-        showNotification({ type: 'error', message: '截图失败' })
+        const errorMsg = res.error || '未知错误'
+        console.error('[SuperScreenshotTool] Capture failed:', errorMsg)
+        showNotification({ type: 'error', message: `截图失败: ${errorMsg}` })
         handleReset()
         return
       }
@@ -136,7 +148,7 @@ export const SuperScreenshotTool: React.FC = () => {
           setStep('capturing-overlay')
           showNotification({ type: 'info', message: '请立即选取高亮区域', duration: 2000 })
           setTimeout(() => {
-            (window.electron as any).ipcRenderer.invoke('recorder-selection-open', bounds)
+            (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', bounds)
           }, 300)
         } else if (step === 'capturing-overlay' && baseImage && firstBounds) {
           const resultDataUrl = await compositeImages(baseImage, dataUrl, bounds, firstBounds, baseOpacity)
@@ -160,7 +172,7 @@ export const SuperScreenshotTool: React.FC = () => {
       }
     }
 
-    const unsubscribeResult = (window.electron as any).ipcRenderer?.on('recorder-selection-result', handleResult)
+    const unsubscribeResult = (window.electron as any).ipcRenderer?.on('screenshot-selection-result', handleResult)
     return () => {
       if (unsubscribeTrigger) unsubscribeTrigger()
       if (unsubscribeResult) unsubscribeResult()
@@ -360,6 +372,81 @@ export const SuperScreenshotTool: React.FC = () => {
           </div>
         </div>
       </div>
+    </div>
+  )
+}
+
+export const ScreenshotSelectionOverlay: React.FC = () => {
+  const { rect, isDragging, onStart, onMove, onEnd, restrictBounds } = useScreenshotSelection()
+
+  return (
+    <div
+      className="fixed inset-0 z-[9999] cursor-crosshair select-none overflow-hidden"
+      style={{
+        width: '100vw',
+        height: '100vh',
+        backgroundColor: restrictBounds ? 'transparent' : 'rgba(0,0,0,0.2)'
+      }}
+      onMouseDown={onStart}
+      onMouseMove={onMove}
+      onMouseUp={onEnd}
+      onContextMenu={(e) => e.preventDefault()}
+    >
+      {/* 限制区域及其外部阴影 */}
+      {restrictBounds && (
+        <>
+          <div
+            className="absolute bg-black/40 pointer-events-none"
+            style={{ left: 0, top: 0, right: 0, height: restrictBounds.y }}
+          />
+          <div
+            className="absolute bg-black/40 pointer-events-none"
+            style={{ left: 0, bottom: 0, right: 0, height: `calc(100vh - ${restrictBounds.y + restrictBounds.height}px)` }}
+          />
+          <div
+            className="absolute bg-black/40 pointer-events-none"
+            style={{ left: 0, top: restrictBounds.y, width: restrictBounds.x, height: restrictBounds.height }}
+          />
+          <div
+            className="absolute bg-black/40 pointer-events-none"
+            style={{ left: restrictBounds.x + restrictBounds.width, top: restrictBounds.y, right: 0, height: restrictBounds.height }}
+          />
+          <div
+            className="absolute border border-blue-500/50 pointer-events-none"
+            style={{
+              left: restrictBounds.x,
+              top: restrictBounds.y,
+              width: restrictBounds.width,
+              height: restrictBounds.height
+            }}
+          />
+        </>
+      )}
+
+      <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-blue-500/90 text-white px-6 py-3 rounded-2xl text-sm font-medium border border-blue-400/30 shadow-2xl pointer-events-none z-[100] animate-fade-in whitespace-nowrap">
+        📸 拖拽选择截图区域 (Esc 退出，右键取消)
+      </div>
+
+      {rect && (
+        <div
+          className="absolute border-2 border-blue-400 bg-transparent transition-none"
+          style={{
+            left: rect.x,
+            top: rect.y,
+            width: rect.width,
+            height: rect.height,
+            boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.4)'
+          }}
+        >
+          <div className="absolute -top-8 left-0 bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded shadow-lg whitespace-nowrap flex items-center gap-1 font-mono">
+            {Math.round(rect.width)} × {Math.round(rect.height)}
+          </div>
+          <div className="absolute -top-1 -left-1 w-3 h-3 border-t-2 border-l-2 border-blue-400" />
+          <div className="absolute -top-1 -right-1 w-3 h-3 border-t-2 border-r-2 border-blue-400" />
+          <div className="absolute -bottom-1 -left-1 w-3 h-3 border-b-2 border-l-2 border-blue-400" />
+          <div className="absolute -bottom-1 -right-1 w-3 h-3 border-b-2 border-r-2 border-blue-400" />
+        </div>
+      )}
     </div>
   )
 }
