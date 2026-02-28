@@ -4,17 +4,23 @@ export function useScreenshotSelection() {
   const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [restrictBounds, setRestrictBounds] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [isEnhanced, setIsEnhanced] = useState(false)
   const startPos = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.hash.split('?')[1])
     const restrictStr = params.get('restrict')
+    const dx = parseInt(params.get('dx') || '0')
+    const dy = parseInt(params.get('dy') || '0')
+
+    const enhancedStr = params.get('enhanced')
+    if (enhancedStr === 'true') {
+      setIsEnhanced(true)
+    }
+
     if (restrictStr) {
       try {
         const bounds = JSON.parse(decodeURIComponent(restrictStr))
-        const dx = parseInt(params.get('dx') || '0')
-        const dy = parseInt(params.get('dy') || '0')
-
         setRestrictBounds({
           x: bounds.x - dx,
           y: bounds.y - dy,
@@ -81,7 +87,6 @@ export function useScreenshotSelection() {
       const maxX = restrictBounds.x + restrictBounds.width
       const maxY = restrictBounds.y + restrictBounds.height
 
-      // 修正起始点和当前点
       const clampedStartX = Math.max(minX, Math.min(maxX, startX))
       const clampedStartY = Math.max(minY, Math.min(maxY, startY))
       const clampedCurrentX = Math.max(minX, Math.min(maxX, currentX))
@@ -107,12 +112,12 @@ export function useScreenshotSelection() {
       return
     }
     setIsDragging(false)
-    if (rect.width > 10 && rect.height > 10) {
+    if (rect.width > 5 && rect.height > 5) {
       (window.electron as any).ipcRenderer.invoke('screenshot-selection-close', rect)
     } else {
       setRect(null)
     }
   }
 
-  return { rect, isDragging, onStart, onMove, onEnd, restrictBounds }
+  return { rect, isDragging, onStart, onMove, onEnd, restrictBounds, isEnhanced }
 }

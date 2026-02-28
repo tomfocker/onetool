@@ -42,8 +42,8 @@ export function registerScreenshotIpc() {
     return screenshotService.copyToClipboard(dataUrl)
   })
 
-  ipcMain.handle('screenshot-selection-open', async (_event, restrictBounds) => {
-    screenshotService.openSelectionWindow(restrictBounds)
+  ipcMain.handle('screenshot-selection-open', async (_event, restrictBounds, enhanced) => {
+    screenshotService.openSelectionWindow(restrictBounds, 'screenshot-selection-result', enhanced)
     return { success: true }
   })
 

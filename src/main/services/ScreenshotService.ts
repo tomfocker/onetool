@@ -164,7 +164,7 @@ export class ScreenshotService {
     }
   }
 
-  openSelectionWindow(restrictBounds?: { x: number; y: number; width: number; height: number }, resultChannel: string = 'screenshot-selection-result'): void {
+  openSelectionWindow(restrictBounds?: { x: number; y: number; width: number; height: number }, resultChannel: string = 'screenshot-selection-result', enhanced: boolean = false): void {
     if (this.selectionWindows.length > 0) return
 
     this.selectionResultsChannel = resultChannel
@@ -211,15 +211,16 @@ export class ScreenshotService {
 
       const restrictQuery = restrictBounds ? `&restrict=${encodeURIComponent(JSON.stringify(restrictBounds))}` : ''
       const modeQuery = resultChannel === 'recorder-selection-result' ? '&mode=recorder' : ''
+      const enhancedQuery = enhanced ? `&enhanced=true` : ''
       const displayQuery = `&display=${display.id}&dx=${display.bounds.x}&dy=${display.bounds.y}`
       const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-        ? `${process.env['ELECTRON_RENDERER_URL']}#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}`
-        : join(__dirname, '../../renderer/index.html') + `#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}`
+        ? `${process.env['ELECTRON_RENDERER_URL']}#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
+        : join(__dirname, '../../renderer/index.html') + `#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
 
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         win.loadURL(url)
       } else {
-        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}`)
+        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}#/screenshot-selection?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`)
       }
 
       win.on('closed', () => {

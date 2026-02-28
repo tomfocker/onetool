@@ -4,6 +4,17 @@ import { useSuperScreenshot } from '../hooks/useSuperScreenshot'
 import { useScreenshotSelection } from '../hooks/useScreenshotSelection'
 import { useGlobalStore } from '@/store'
 
+const formatDateTime = () => {
+  const now = new Date()
+  const year = now.getFullYear()
+  const month = String(now.getMonth() + 1).padStart(2, '0')
+  const day = String(now.getDate()).padStart(2, '0')
+  const hours = String(now.getHours()).padStart(2, '0')
+  const minutes = String(now.getMinutes()).padStart(2, '0')
+  const seconds = String(now.getSeconds()).padStart(2, '0')
+  return `${year}${month}${day}_${hours}${minutes}${seconds}`
+}
+
 export const SuperScreenshotTool: React.FC = () => {
   const showNotification = useGlobalStore((state) => state.showNotification)
 
@@ -79,8 +90,8 @@ export const SuperScreenshotTool: React.FC = () => {
     if (step !== 'idle') return
     handleReset()
     setStep('capturing-base')
-    await (window.electron as any).ipcRenderer.invoke('screenshot-selection-open')
-  }, [step, handleReset, setStep])
+    await (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', null, enhancedMode)
+  }, [step, handleReset, setStep, enhancedMode])
 
   const handleDownload = async () => {
     if (!capturedImage || !window.electron?.screenshot) return
@@ -131,7 +142,7 @@ export const SuperScreenshotTool: React.FC = () => {
       if (!enhancedMode) {
         setCapturedImage(dataUrl)
         if (localAutoSave && savePath) {
-          const fullPath = `${savePath}\\screenshot-${Date.now()}.png`
+          const fullPath = `${savePath}\\screenshot-${formatDateTime()}.png`
           await window.electron.screenshot.saveImage(dataUrl, fullPath)
         }
         if (autoCopy) {
@@ -146,16 +157,16 @@ export const SuperScreenshotTool: React.FC = () => {
           setBaseImage(dataUrl)
           setFirstBounds(bounds)
           setStep('capturing-overlay')
-          showNotification({ type: 'info', message: '请立即选取高亮区域', duration: 2000 })
+          showNotification({ type: 'info', message: '请选取高亮区域', duration: 2000 })
           setTimeout(() => {
-            (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', bounds)
+            (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', bounds, true)
           }, 300)
         } else if (step === 'capturing-overlay' && baseImage && firstBounds) {
           const resultDataUrl = await compositeImages(baseImage, dataUrl, bounds, firstBounds, baseOpacity)
           if (resultDataUrl) {
             setCapturedImage(resultDataUrl)
             if (localAutoSave && savePath) {
-              const fullPath = `${savePath}\\screenshot-${Date.now()}.png`
+              const fullPath = `${savePath}\\screenshot-${formatDateTime()}.png`
               await window.electron.screenshot.saveImage(resultDataUrl, fullPath)
             }
             if (autoCopy) {
@@ -377,7 +388,7 @@ export const SuperScreenshotTool: React.FC = () => {
 }
 
 export const ScreenshotSelectionOverlay: React.FC = () => {
-  const { rect, isDragging, onStart, onMove, onEnd, restrictBounds } = useScreenshotSelection()
+  const { rect, isDragging, onStart, onMove, onEnd, restrictBounds, isEnhanced } = useScreenshotSelection()
 
   return (
     <div
@@ -424,7 +435,9 @@ export const ScreenshotSelectionOverlay: React.FC = () => {
       )}
 
       <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-blue-500/90 text-white px-6 py-3 rounded-2xl text-sm font-medium border border-blue-400/30 shadow-2xl pointer-events-none z-[100] animate-fade-in whitespace-nowrap">
-        📸 拖拽选择截图区域 (Esc 退出，右键取消)
+        {restrictBounds
+          ? '✨ 第二步：请在底图内标注重点 (聚光灯效果)'
+          : (isEnhanced ? '📸 第一步：请选取整体底图区域 (Esc 退出，右键取消)' : '📸 请选取要截取的区域 (Esc 退出，右键取消)')}
       </div>
 
       {rect && (
