@@ -1,5 +1,7 @@
 import { app, dialog, BrowserWindow } from 'electron'
+import { spawn } from 'child_process'
 import { execPowerShell } from '../utils/processUtils'
+import { logger } from '../utils/logger'
 import { IpcResponse, SystemConfig } from '../../shared/types'
 import { taskQueueService } from './TaskQueueService'
 
@@ -308,6 +310,26 @@ Write-Output "---STATS_JSON_END---"
         return { success: false, error: (error as Error).message }
       }
     })
+  }
+
+  async executeCommand(command: string): Promise<IpcResponse> {
+    try {
+      logger.info(`[SystemService] Attempting to launch: ${command}`)
+
+      // 在 Windows 上使用 start 命令启动是打开面板最稳妥的方式
+      const child = spawn('cmd.exe', ['/c', 'start', '', command], {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      })
+
+      child.unref()
+      
+      return { success: true }
+    } catch (error) {
+      logger.error(`[SystemService] executeCommand Error:`, error)
+      return { success: false, error: (error as Error).message }
+    }
   }
 }
 

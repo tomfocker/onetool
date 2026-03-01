@@ -125,6 +125,9 @@ const systemConfigAPI = {
   },
   getRealtimeStats: () => {
     return ipcRenderer.invoke('get-realtime-stats')
+  },
+  executeCommand: (command: string) => {
+    return ipcRenderer.invoke('execute-command', command)
   }
 }
 

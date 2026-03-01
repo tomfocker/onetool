@@ -136,5 +136,13 @@ export const tools: ToolDefinition[] = [
     category: '系统维护',
     icon: 'Globe',
     componentPath: 'ServerMonitorTool'
+  },
+  {
+    id: 'windows-manager',
+    name: '管理面板',
+    description: '快速唤起 Windows 常用管理面板',
+    category: '系统维护',
+    icon: 'LayoutGrid',
+    componentPath: 'WindowsManagerTool'
   }
 ]

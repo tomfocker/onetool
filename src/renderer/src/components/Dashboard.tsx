@@ -41,7 +41,8 @@ const toolGradientMap: Record<string, string> = {
   'screenshot-tool': 'from-blue-400 to-cyan-500',
   'file-dropover': 'from-indigo-400 to-purple-500',
   'translator': 'from-purple-500 to-pink-500',
-  'network-radar': 'from-blue-600 to-cyan-600'
+  'network-radar': 'from-blue-600 to-cyan-600',
+  'windows-manager': 'from-slate-600 to-zinc-800'
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '', onSearchChange }) => {

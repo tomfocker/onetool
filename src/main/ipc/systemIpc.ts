@@ -26,4 +26,8 @@ export function registerSystemIpc(getMainWindow: () => BrowserWindow | null) {
   ipcMain.handle('get-realtime-stats', async () => {
     return systemService.getRealtimeStats()
   })
+
+  ipcMain.handle('execute-command', async (_event, command: string) => {
+    return systemService.executeCommand(command)
+  })
 }

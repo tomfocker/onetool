@@ -168,6 +168,16 @@ export const toolComponents: ToolComponent[] = [
     version: '1.0.0',
     icon: 'Languages',
     installed: true
+  },
+  {
+    id: 'windows-manager',
+    name: 'Windows 管理面板',
+    description: '快速打开设备管理器、注册表、服务等常用管理面板，并标注其运行命令',
+    category: '系统工具',
+    size: 1,
+    version: '1.0.0',
+    icon: 'LayoutGrid',
+    installed: true
   }
 ]
 
