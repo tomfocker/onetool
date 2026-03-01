@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { translateService, TranslationResult } from '../services/TranslateService'
+import { translateService } from '../services/TranslateService'
 
 export function registerTranslateIpc() {
     ipcMain.handle('translate:image', async (_event, base64Image: string) => {

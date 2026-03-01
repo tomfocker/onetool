@@ -73,8 +73,14 @@
     "appId": "com.onetool",
     "productName": "onetool",
     "copyright": "Copyright © 2025 八骏马",
+    "asar": true,
+    "files": [
+      "out/**/*",
+      "!release/**/*",
+      "!release_new/**/*"
+    ],
     "directories": {
-      "output": "release"
+      "output": "release_new"
     },
     "extraResources": [
       {
@@ -91,11 +97,9 @@
       }
     ],
     "win": {
-      "target": [
-        "zip"
-      ],
+      "target": "nsis",
       "icon": "resources/icon.png",
-      "sign": "./scripts/sign-dummy.bat"
+      "sign": null
     },
     "nsis": {
       "oneClick": false,
