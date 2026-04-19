@@ -91,6 +91,36 @@ export function buildLatencyProbeHosts(): Array<{ host: string; name: string }> 
   return PUBLIC_PROBE_HOSTS.map((probe) => ({ ...probe }))
 }
 
+export function mapLatencyProbeResults(
+  probeHosts: Array<{ host: string; name: string }>,
+  response:
+    | { success: boolean; data?: Array<{ host: string; alive: boolean; time: number | null }> }
+    | null
+    | undefined
+): Array<{ host: string; name: string; latency: number | null; status: 'success' | 'error' | 'timeout' }> {
+  if (!response?.success || !Array.isArray(response.data)) {
+    return probeHosts.map((item) => ({ ...item, latency: null, status: 'error' }))
+  }
+
+  const resultMap = new Map<string, { alive: boolean; time: number | null }>()
+  for (const item of response.data) {
+    resultMap.set(item.host, { alive: item.alive, time: item.time })
+  }
+
+  return probeHosts.map((item) => {
+    const result = resultMap.get(item.host)
+    if (!result) {
+      return { ...item, latency: null, status: 'error' as const }
+    }
+
+    if (result.alive) {
+      return { ...item, latency: result.time, status: 'success' as const }
+    }
+
+    return { ...item, latency: result.time, status: 'timeout' as const }
+  })
+}
+
 export function formatPingLatency(latency: number | null): string {
   return latency == null ? '超时' : `${latency}ms`
 }

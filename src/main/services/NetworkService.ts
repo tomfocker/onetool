@@ -16,9 +16,9 @@ export class NetworkService {
       const parsed = parsePingOutput(output)
       logger.info('[NetworkService] ping result', { host, target, parsed, output })
       return { success: true, data: parsed }
-    } catch {
-      logger.warn('[NetworkService] ping threw unexpectedly', { host, target })
-      return { success: true, data: { alive: false, time: null } }
+    } catch (error) {
+      logger.error('[NetworkService] ping command failed unexpectedly', { host, target, error })
+      return { success: false, error: 'ping 服务不可用' }
     }
   }
 
@@ -34,13 +34,21 @@ export class NetworkService {
           const res = await this.ping(host)
           return {
             host, // 保持传入时的原样 (比如带 http://)，方便前端匹配
+            success: res.success,
             alive: res.data?.alive ?? false,
             time: res.data?.time ?? null
           }
         })
       )
+      if (results.length > 0 && results.every((item) => item.success === false)) {
+        logger.error('[NetworkService] pingBatch failed because all probes errored internally', { hosts })
+        return { success: false, error: 'Ping 服务不可用' }
+      }
       logger.info('[NetworkService] pingBatch completed', { results })
-      return { success: true, data: results }
+      return {
+        success: true,
+        data: results.map(({ success: _success, ...item }) => item)
+      }
     } catch (e) {
       logger.error('[NetworkService] pingBatch failed', e)
       return { success: false, error: (e as Error).message }

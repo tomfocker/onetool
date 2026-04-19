@@ -152,6 +152,8 @@ export const NetworkRadarTool: React.FC = () => {
                   <div className="text-right">
                     {result.status === 'pending' ? (
                       <span className="text-xs text-muted-foreground">测试中...</span>
+                    ) : result.status === 'error' ? (
+                      <span className="text-sm font-mono font-bold text-red-500">探测失败</span>
                     ) : (
                       <span className={`text-sm font-mono font-bold ${result.latency == null ? 'text-red-500' :
                           result.latency < 100 ? 'text-green-500' :

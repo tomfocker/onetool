@@ -158,3 +158,34 @@ test('browser discovery, activation, and visibility share the same browser suppo
   assert.equal(discoveryRegex, activationRegex)
   assert.equal(visibilityRegex, activationRegex)
 })
+
+test('getWindowList returns a failure when every discovery source throws', async () => {
+  const { WebActivatorService } = loadWebActivatorServiceModule({
+    execPowerShell: async () => {
+      throw new Error('window discovery failed')
+    },
+    execPowerShellEncoded: async () => {
+      throw new Error('tab discovery failed')
+    }
+  })
+  const service = new WebActivatorService()
+
+  const result = await service.getWindowList()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /无法获取窗口列表/)
+})
+
+test('checkVisibility returns a failure when the visibility script throws', async () => {
+  const { WebActivatorService } = loadWebActivatorServiceModule({
+    execPowerShellEncoded: async () => {
+      throw new Error('visibility probe failed')
+    }
+  })
+  const service = new WebActivatorService()
+
+  const result = await service.checkVisibility([{ type: 'app', pattern: 'notepad' }])
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /无法检测窗口激活状态/)
+})

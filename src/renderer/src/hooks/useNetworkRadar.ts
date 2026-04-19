@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { NetworkInterfaceInfo as NetworkInfo, LanDevice } from '../../../shared/types'
-import { buildLatencyProbeHosts, pickPreferredLanInterface } from '../../../shared/networkRadar'
+import { buildLatencyProbeHosts, mapLatencyProbeResults, pickPreferredLanInterface } from '../../../shared/networkRadar'
 
 export interface PingResult {
   host: string
@@ -38,24 +38,7 @@ export function useNetworkRadar() {
       const res = await window.electron.network.pingBatch(probeHosts.map((item) => item.host))
       console.log('[NetworkRadar] pingBatch response', { probeHosts, res })
       if (signal.aborted) return
-      if (res.success && Array.isArray(res.data)) {
-        // 根据 host 顺序映射结果
-        const resultMap = new Map<string, { alive: boolean; time: number | null }>()
-        for (const r of res.data) {
-          resultMap.set(r.host, { alive: r.alive, time: r.time })
-        }
-        setPingResults(
-          probeHosts.map(h => {
-            const r = resultMap.get(h.host)
-            if (!r) return { ...h, latency: null, status: 'error' as const }
-            return { ...h, latency: r.time, status: r.alive ? 'success' as const : 'error' as const }
-          })
-        )
-      } else {
-        setPingResults(
-          probeHosts.map((item) => ({ ...item, latency: null, status: 'error' as const }))
-        )
-      }
+      setPingResults(mapLatencyProbeResults(probeHosts, res))
     } catch {
       setPingResults(
         probeHosts.map((item) => ({ ...item, latency: null, status: 'error' as const }))
