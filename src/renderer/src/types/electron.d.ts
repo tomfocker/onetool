@@ -17,6 +17,7 @@ import {
   WslRestoreMode,
   WslSpaceReclaimResult
 } from '../../../shared/types'
+import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 
 declare global {
   interface Window {
@@ -121,8 +122,11 @@ declare global {
         getWindows: () => Promise<IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>>
         getScreens: () => Promise<IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>>
         getDefaultPath: () => Promise<IpcResponse<string>>
+        getSession: () => Promise<IpcResponse<RecorderSessionUpdate>>
         onToggleHotkey: (callback: () => void) => () => void
         selectOutput: () => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
+        prepareSelection: (bounds: RecorderBounds) => Promise<IpcResponse<RecorderSelectionPreview>>
+        expandPanel: () => Promise<IpcResponse>
         startRecording: (config: {
           outputPath: string
           format: string
@@ -141,6 +145,7 @@ declare global {
           outputPath?: string
           error?: string
         }) => void) => () => void
+        onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => () => void
       }
       screenSaver: {
         start: () => Promise<IpcResponse>
