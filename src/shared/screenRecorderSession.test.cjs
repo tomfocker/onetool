@@ -46,6 +46,10 @@ test('ensureRecorderOutputPath rewrites mismatched extensions and preserves matc
   assert.equal(ensureRecorderOutputPath('C:/tmp/capture.mp4', 'mp4'), 'C:/tmp/capture.mp4')
 })
 
+test('ensureRecorderOutputPath replaces a trailing dot with the expected extension', () => {
+  assert.equal(ensureRecorderOutputPath('C:/tmp/capture.', 'mp4'), 'C:/tmp/capture.mp4')
+})
+
 test('toRecorderSessionUpdate returns the full authoritative snapshot', () => {
   assert.deepEqual(
     toRecorderSessionUpdate({

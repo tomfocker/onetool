@@ -3,6 +3,7 @@ import { electronAPI } from '@electron-toolkit/preload'
 import { z } from 'zod'
 import {
   AutoClickerConfig,
+  RecorderSessionUpdate,
   ScreenRecorderConfig,
   WebActivatorToggleSchema,
   WebActivatorShortcutSchema
@@ -235,6 +236,12 @@ const screenRecorderAPI = {
   getScreens: () => {
     return ipcRenderer.invoke('screen-recorder-get-screens')
   },
+  prepareSelection: (bounds: { x: number; y: number; width: number; height: number }) => {
+    return ipcRenderer.invoke('screen-recorder-prepare-selection', bounds)
+  },
+  expandPanel: () => {
+    return ipcRenderer.invoke('screen-recorder-expand-panel')
+  },
   onStarted: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('screen-recorder-started', handler)
@@ -268,6 +275,13 @@ const screenRecorderAPI = {
     ipcRenderer.on('screen-recorder-toggle-hotkey', handler)
     return () => {
       ipcRenderer.removeListener('screen-recorder-toggle-hotkey', handler)
+    }
+  },
+  onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => {
+    const handler = (_event: any, data: RecorderSessionUpdate) => callback(data)
+    ipcRenderer.on('screen-recorder-session-updated', handler)
+    return () => {
+      ipcRenderer.removeListener('screen-recorder-session-updated', handler)
     }
   }
 }

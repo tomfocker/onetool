@@ -116,7 +116,7 @@ export function ensureRecorderOutputPath(outputPath: string, format: 'mp4' | 'gi
   }
 
   const expectedExtension = getOutputExtension(format)
-  const match = outputPath.match(/\.[^/\\]+$/)
+  const match = outputPath.match(/\.[^/\\]*$/)
   if (!match) {
     return `${outputPath}${expectedExtension}`
   }

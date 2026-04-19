@@ -1,125 +1,215 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
+import type { RecorderSessionUpdate } from '../../../shared/ipc-schemas'
+import { ensureRecorderOutputPath } from '../../../shared/screenRecorderSession'
+
+type RecorderFormat = 'mp4' | 'gif'
+type RecorderQuality = 'low' | 'medium' | 'high'
+type RecorderMode = 'full' | 'area'
+type ScreenSource = { id: string; name: string; display_id: string; thumbnail: string }
+
+const INITIAL_SESSION: RecorderSessionUpdate = {
+  status: 'idle',
+  mode: 'full',
+  outputPath: '',
+  recordingTime: '00:00:00',
+  selectionBounds: null,
+  selectionPreviewDataUrl: null,
+  selectedDisplayId: null
+}
 
 export function useScreenRecorder() {
-  const [outputPath, setOutputPath] = useState<string>('')
-  const [format, setFormat] = useState<'mp4' | 'gif' | 'webm'>('mp4')
+  const [outputPath, setOutputPath] = useState('')
+  const [format, setFormat] = useState<RecorderFormat>('mp4')
   const [fps, setFps] = useState(30)
-  const [quality, setQuality] = useState<'low' | 'medium' | 'high'>('medium')
-  const [recordingMode, setRecordingMode] = useState<'full' | 'area'>('full')
-  const [selectedScreen, setSelectedScreen] = useState<{ id: string; name: string; display_id: string } | null>(null)
-  const [screenList, setScreenList] = useState<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>([])
-  const [isRecording, setIsRecording] = useState(false)
-  const [recordingTime, setRecordingTime] = useState('00:00:00')
-  const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+  const [quality, setQuality] = useState<RecorderQuality>('medium')
+  const [draftMode, setDraftMode] = useState<RecorderMode>('full')
+  const [selectedScreen, setSelectedScreen] = useState<ScreenSource | null>(null)
+  const [screenList, setScreenList] = useState<ScreenSource[]>([])
+  const [session, setSession] = useState<RecorderSessionUpdate>(INITIAL_SESSION)
   const [recorderHotkey, setRecorderHotkey] = useState('Alt+Shift+R')
   const [isSavingHotkey, setIsSavingHotkey] = useState(false)
   const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
 
-  const recordingStartTime = useRef<number | null>(null)
-  const recordingInterval = useRef<NodeJS.Timeout | null>(null)
-
-  const startRecordingTimer = useCallback(() => {
-    if (recordingInterval.current) clearInterval(recordingInterval.current)
-    recordingInterval.current = setInterval(() => {
-      if (recordingStartTime.current) {
-        const elapsed = Date.now() - recordingStartTime.current
-        const hours = Math.floor(elapsed / 3600000)
-        const minutes = Math.floor((elapsed % 3600000) / 60000)
-        const seconds = Math.floor((elapsed % 60000) / 1000)
-        setRecordingTime(`${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`)
-      }
-    }, 1000)
-  }, [])
-
-  const stopRecordingTimer = useCallback(() => {
-    if (recordingInterval.current) {
-      clearInterval(recordingInterval.current)
-      recordingInterval.current = null
+  const loadScreens = useCallback(async () => {
+    if (!window.electron?.screenRecorder?.getScreens) {
+      return
     }
-    recordingStartTime.current = null
-  }, [])
 
-  const handleModeChange = useCallback(async (mode: 'full' | 'area') => {
-    setRecordingMode(mode)
+    const response = await window.electron.screenRecorder.getScreens()
+    if (!response.success || !response.data) {
+      return
+    }
 
-    if (mode === 'full' && window.electron?.screenRecorder?.getScreens) {
-      const res = await window.electron.screenRecorder.getScreens()
-      if (res.success && res.data) {
-        setScreenList(res.data)
-        if (res.data.length > 0 && !selectedScreen) {
-          setSelectedScreen(res.data[0])
+    const screens = response.data
+
+    setScreenList(screens)
+    setSelectedScreen((current) => {
+      if (current) {
+        const matchedScreen = screens.find((screen) => screen.id === current.id)
+        if (matchedScreen) {
+          return matchedScreen
         }
       }
-    } else {
-      setSelectedScreen(null)
+
+      if (session.selectedDisplayId) {
+        const matchedByDisplay = screens.find((screen) => screen.display_id === session.selectedDisplayId)
+        if (matchedByDisplay) {
+          return matchedByDisplay
+        }
+      }
+
+      return screens[0] ?? null
+    })
+  }, [session.selectedDisplayId])
+
+  const handleModeChange = useCallback(async (mode: RecorderMode) => {
+    setDraftMode(mode)
+
+    if (mode === 'full') {
+      await loadScreens()
+      return
     }
-  }, [selectedScreen])
+
+    if (session.selectedDisplayId) {
+      setSelectedScreen((current) => {
+        if (current?.display_id === session.selectedDisplayId) {
+          return current
+        }
+
+        return screenList.find((screen) => screen.display_id === session.selectedDisplayId) ?? current
+      })
+    }
+  }, [loadScreens, screenList, session.selectedDisplayId])
 
   const startRecording = useCallback(async () => {
-    if (!outputPath) return { success: false, error: '请先选择保存位置' }
-
-    let finalOutputPath = outputPath;
-    const ext = format === 'gif' ? '.gif' : '.mp4';
-    if (!finalOutputPath.toLowerCase().endsWith(ext)) {
-      finalOutputPath = finalOutputPath.replace(/\.[^/.]+$/, "") + ext;
-      setOutputPath(finalOutputPath);
+    if (!outputPath) {
+      return { success: false, error: '请先选择保存位置' }
     }
 
-    const config: any = { outputPath: finalOutputPath, format, fps, quality }
-    if (recordingMode === 'area') {
-      if (!selectionRect) return { success: false, error: '请先选择录制区域' }
-      config.bounds = selectionRect
-    } else if (recordingMode === 'full') {
-      if (selectedScreen) {
-        config.displayId = selectedScreen.display_id
+    const finalOutputPath = ensureRecorderOutputPath(outputPath, format)
+    if (finalOutputPath !== outputPath) {
+      setOutputPath(finalOutputPath)
+    }
+
+    const config: {
+      outputPath: string
+      format: RecorderFormat
+      fps: number
+      quality: RecorderQuality
+      bounds?: NonNullable<RecorderSessionUpdate['selectionBounds']>
+      displayId?: string
+    } = {
+      outputPath: finalOutputPath,
+      format,
+      fps,
+      quality
+    }
+
+    if (draftMode === 'area') {
+      if (!session.selectionBounds) {
+        return { success: false, error: '请先选择录制区域' }
       }
+
+      config.bounds = session.selectionBounds
+
+      if (session.selectedDisplayId) {
+        config.displayId = session.selectedDisplayId
+      }
+    } else if (selectedScreen) {
+      config.displayId = selectedScreen.display_id
     }
 
-    return await window.electron.screenRecorder.startRecording(config)
-  }, [outputPath, format, fps, quality, recordingMode, selectionRect, selectedScreen])
+    return window.electron.screenRecorder.startRecording(config)
+  }, [draftMode, format, fps, outputPath, quality, selectedScreen, session.selectedDisplayId, session.selectionBounds])
 
   const stopRecording = useCallback(async () => {
-    return await window.electron.screenRecorder.stopRecording()
+    return window.electron.screenRecorder.stopRecording()
+  }, [])
+
+  const setSelectionRect = useCallback((nextBounds: RecorderSessionUpdate['selectionBounds']) => {
+    if (!nextBounds || !window.electron?.screenRecorder?.prepareSelection) {
+      return
+    }
+
+    void window.electron.screenRecorder.prepareSelection(nextBounds)
   }, [])
 
   useEffect(() => {
     const init = async () => {
       if (window.electron?.screenRecorder?.getDefaultPath) {
-        const res = await window.electron.screenRecorder.getDefaultPath()
-        if (res.success && res.data) setOutputPath(res.data)
+        const response = await window.electron.screenRecorder.getDefaultPath()
+        if (response.success && response.data) {
+          setOutputPath(response.data)
+        }
       }
+
       if (window.electron?.screenRecorder?.getHotkey) {
-        const res = await window.electron.screenRecorder.getHotkey()
-        if (res.success && res.data) setRecorderHotkey(res.data)
+        const response = await window.electron.screenRecorder.getHotkey()
+        if (response.success && response.data) {
+          setRecorderHotkey(response.data)
+        }
       }
+
+      await loadScreens()
     }
+
     init()
-    handleModeChange('full')
+  }, [loadScreens])
 
-    if (!window.electron?.screenRecorder) return
+  useEffect(() => {
+    if (!window.electron?.screenRecorder?.onSessionUpdated) {
+      return
+    }
 
-    const unsubStarted = window.electron.screenRecorder.onStarted(() => {
-      setIsRecording(true)
-      recordingStartTime.current = Date.now()
-      startRecordingTimer()
-    })
+    const unsubscribe = window.electron.screenRecorder.onSessionUpdated((nextSession) => {
+      setSession(nextSession)
 
-    const unsubProgress = window.electron.screenRecorder.onProgress((data) => {
-      if (data.timemark) setRecordingTime(data.timemark)
-    })
+      if (nextSession.outputPath) {
+        setOutputPath(nextSession.outputPath)
+      }
 
-    const unsubStopped = window.electron.screenRecorder.onStopped(() => {
-      setIsRecording(false)
-      stopRecordingTimer()
+      if (nextSession.status === 'recording' || nextSession.status === 'finishing') {
+        setDraftMode(nextSession.mode)
+      }
     })
 
     return () => {
-      unsubStarted()
-      unsubProgress()
-      unsubStopped()
-      stopRecordingTimer()
+      unsubscribe()
     }
-  }, [startRecordingTimer, stopRecordingTimer])
+  }, [])
+
+  useEffect(() => {
+    if (draftMode === 'full' && screenList.length === 0) {
+      return
+    }
+
+    if (draftMode !== 'full') {
+      return
+    }
+
+    setSelectedScreen((current) => {
+      if (current) {
+        const matchedScreen = screenList.find((screen) => screen.id === current.id)
+        if (matchedScreen) {
+          return matchedScreen
+        }
+      }
+
+      if (session.selectedDisplayId) {
+        const matchedByDisplay = screenList.find((screen) => screen.display_id === session.selectedDisplayId)
+        if (matchedByDisplay) {
+          return matchedByDisplay
+        }
+      }
+
+      return screenList[0] ?? null
+    })
+  }, [draftMode, screenList, session.selectedDisplayId])
+
+  const isRecording = session.status === 'recording' || session.status === 'finishing'
+  const recordingMode = isRecording ? session.mode : draftMode
+  const selectionRect = recordingMode === 'area' ? session.selectionBounds : null
+  const recordingTime = session.recordingTime
 
   return {
     outputPath, setOutputPath,
@@ -131,7 +221,8 @@ export function useScreenRecorder() {
     screenList,
     isRecording,
     recordingTime,
-    selectionRect, setSelectionRect,
+    selectionRect,
+    setSelectionRect,
     recorderHotkey, setRecorderHotkey,
     isSavingHotkey, setIsSavingHotkey,
     isRecordingHotkey, setIsRecordingHotkey,
