@@ -46,6 +46,20 @@ export const FileDropoverTool: React.FC = () => {
     setTimeout(() => setToast(null), 3000)
   }
 
+  const syncFloatBallVisibility = async () => {
+    if (!window.electron?.floatBall?.getState) {
+      return
+    }
+
+    try {
+      const res = await window.electron.floatBall.getState()
+      if (res.success && typeof res.data?.visible === 'boolean') {
+        setIsFloatBallVisible(res.data.visible)
+      }
+    } catch (_error) {
+    }
+  }
+
   useEffect(() => {
     if (settings?.floatBallHotkey && !isRecordingHotkey) {
       setLocalHotkey(settings.floatBallHotkey)
@@ -86,9 +100,15 @@ export const FileDropoverTool: React.FC = () => {
       setAutoRemoveAfterDrag(savedAutoRemove === 'true')
     }
 
-    const savedVisible = localStorage.getItem('floatball-visible')
-    if (savedVisible !== null) {
-      setIsFloatBallVisible(savedVisible === 'true')
+    void syncFloatBallVisibility()
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = window.electron?.ipcRenderer?.on?.('floatball-visibility-changed', (visible: boolean) => {
+      setIsFloatBallVisible(visible)
+    })
+    return () => {
+      unsubscribe?.()
     }
   }, [])
 
@@ -117,13 +137,24 @@ export const FileDropoverTool: React.FC = () => {
     localStorage.setItem('floatball-autoRemoveAfterDrag', checked.toString())
   }
 
-  const handleToggleVisibility = () => {
-    const newVisible = !isFloatBallVisible
-    setIsFloatBallVisible(newVisible)
-    localStorage.setItem('floatball-visible', newVisible.toString())
+  const handleToggleVisibility = async () => {
+    let currentVisible = isFloatBallVisible
 
-    if (window.electron?.ipcRenderer) {
-      window.electron.ipcRenderer.send('floatball-toggle-visibility', newVisible)
+    if (window.electron?.floatBall?.getState) {
+      try {
+        const res = await window.electron.floatBall.getState()
+        if (res.success && typeof res.data?.visible === 'boolean') {
+          currentVisible = res.data.visible
+        }
+      } catch (_error) {
+      }
+    }
+
+    const newVisible = !currentVisible
+    setIsFloatBallVisible(newVisible)
+
+    if (window.electron?.floatBall?.setVisible) {
+      window.electron.floatBall.setVisible(newVisible)
     }
   }
 

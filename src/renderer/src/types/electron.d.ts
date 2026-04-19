@@ -173,6 +173,10 @@ declare global {
         setPosition: (x: number, y: number) => void
         resize: (width: number, height: number) => void
         startDrag: (filePath: string) => void
+        hideWindow: () => void
+        showWindow: () => void
+        setVisible: (visible: boolean) => void
+        getState: () => Promise<IpcResponse<{ exists: boolean; visible: boolean }>>
       }
       translate: {
         translateImage: (base64Image: string) => Promise<IpcResponse<Array<{

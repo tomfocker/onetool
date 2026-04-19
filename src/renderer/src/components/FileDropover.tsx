@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Inbox, X, Trash2, File, Folder } from 'lucide-react'
+import { X, Trash2, File, Folder } from 'lucide-react'
+import { buildStoredFiles } from '../../../shared/fileDropover'
+import appIcon from '../../../../resources/icon.png'
 
 interface StoredFile {
   id: string
@@ -12,8 +14,6 @@ export const FileDropover: React.FC = () => {
   const [storedFiles, setStoredFiles] = useState<StoredFile[]>([])
   const [isExpanded, setIsExpanded] = useState(false)
   const [isPanelRendering, setIsPanelRendering] = useState(false)
-  const [isVisible, setIsVisible] = useState(true)
-  const [isDragging, setIsDragging] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [autoRemoveAfterDrag, setAutoRemoveAfterDrag] = useState(false)
   const [windowSize, setWindowSize] = useState({ width: 120, height: 120 })
@@ -27,6 +27,7 @@ export const FileDropover: React.FC = () => {
 
   const floatBallRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
+  const dragDepthRef = useRef(0)
   const startPosRef = useRef({ offsetX: 0, offsetY: 0 })
   const animationFrameRef = useRef<number | null>(null)
   const pendingTargetRef = useRef<{ targetX: number; targetY: number } | null>(null)
@@ -117,30 +118,6 @@ export const FileDropover: React.FC = () => {
   }
 
   useEffect(() => {
-    const electron = window.electron as any
-    if (electron?.ipcRenderer) {
-      const unsub = electron.ipcRenderer.on('floatball-toggle', () => {
-        setIsVisible(prev => {
-          const next = !prev
-          if (!next) {
-            // Wait for exit animation to finish before truly hiding the window
-            setTimeout(() => {
-              if (electron?.floatBall?.hideWindow) {
-                electron.floatBall.hideWindow()
-              }
-            }, 300)
-          }
-          return next
-        })
-      })
-      return () => {
-        unsub()
-      }
-    }
-    return undefined
-  }, [])
-
-  useEffect(() => {
     return () => {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current)
@@ -148,30 +125,122 @@ export const FileDropover: React.FC = () => {
     }
   }, [])
 
+  const commitDroppedFiles = useCallback((files: File[]) => {
+    const electron = window.electron as any
+    const newFiles = buildStoredFiles(
+      files,
+      (file) => {
+        if (electron?.webUtils?.getPathForFile) {
+          return electron.webUtils.getPathForFile(file as File)
+        }
+        return (file as any).path
+      }
+    ) as StoredFile[]
+
+    if (newFiles.length === 0) {
+      return
+    }
+
+    setStoredFiles((prev) => {
+      const existingPaths = new Set(prev.map((file) => file.path))
+      const uniqueNewFiles = newFiles.filter((file) => !existingPaths.has(file.path))
+      return uniqueNewFiles.length > 0 ? [...prev, ...uniqueNewFiles] : prev
+    })
+  }, [])
+
+  const hasFilePayload = (types: Iterable<string> | undefined) => {
+    return Array.from(types ?? []).includes('Files')
+  }
+
+  useEffect(() => {
+    const handleWindowDragEnter = (event: DragEvent) => {
+      if (!hasFilePayload(event.dataTransfer?.types)) {
+        return
+      }
+
+      event.preventDefault()
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy'
+      }
+      dragDepthRef.current += 1
+      setIsDraggingOver(true)
+    }
+
+    const handleWindowDragOver = (event: DragEvent) => {
+      if (!hasFilePayload(event.dataTransfer?.types)) {
+        return
+      }
+
+      event.preventDefault()
+      if (event.dataTransfer) {
+        event.dataTransfer.dropEffect = 'copy'
+      }
+      setIsDraggingOver(true)
+    }
+
+    const handleWindowDragLeave = (event: DragEvent) => {
+      if (!hasFilePayload(event.dataTransfer?.types)) {
+        return
+      }
+
+      event.preventDefault()
+      dragDepthRef.current = Math.max(0, dragDepthRef.current - 1)
+      if (dragDepthRef.current === 0) {
+        setIsDraggingOver(false)
+      }
+    }
+
+    const handleWindowDrop = (event: DragEvent) => {
+      if (!hasFilePayload(event.dataTransfer?.types)) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      dragDepthRef.current = 0
+      setIsDraggingOver(false)
+      commitDroppedFiles(Array.from(event.dataTransfer?.files ?? []))
+    }
+
+    window.addEventListener('dragenter', handleWindowDragEnter, true)
+    window.addEventListener('dragover', handleWindowDragOver, true)
+    window.addEventListener('dragleave', handleWindowDragLeave, true)
+    window.addEventListener('drop', handleWindowDrop, true)
+
+    return () => {
+      window.removeEventListener('dragenter', handleWindowDragEnter, true)
+      window.removeEventListener('dragover', handleWindowDragOver, true)
+      window.removeEventListener('dragleave', handleWindowDragLeave, true)
+      window.removeEventListener('drop', handleWindowDrop, true)
+    }
+  }, [commitDroppedFiles])
+
   const handleDragOver = (e: React.DragEvent) => {
+    if (!hasFilePayload(e.dataTransfer.types)) {
+      return
+    }
+
     e.preventDefault()
     e.stopPropagation()
+    e.dataTransfer.dropEffect = 'copy'
     setIsDraggingOver(true)
   }
 
   const handleDragLeave = () => {
+    dragDepthRef.current = 0
     setIsDraggingOver(false)
   }
 
   const handleDrop = (e: React.DragEvent) => {
+    if (!hasFilePayload(e.dataTransfer.types)) {
+      return
+    }
+
     e.preventDefault()
     e.stopPropagation()
+    dragDepthRef.current = 0
     setIsDraggingOver(false)
-
-    const files = Array.from(e.dataTransfer.files)
-    const newFiles: StoredFile[] = files.map((file, index) => ({
-      id: Date.now().toString() + index,
-      path: (file as any).path || file.name,
-      name: file.name,
-      isDirectory: false
-    }))
-
-    setStoredFiles(prev => [...prev, ...newFiles])
+    commitDroppedFiles(Array.from(e.dataTransfer.files))
   }
 
   const handleFileDragStart = (e: React.DragEvent, file: StoredFile) => {
@@ -206,15 +275,15 @@ export const FileDropover: React.FC = () => {
     e.stopPropagation()
     e.preventDefault()
     const electron = window.electron as any
-    if (electron?.floatBall) {
-      electron.floatBall.close()
+    if (electron?.floatBall?.setVisible) {
+      electron.floatBall.setVisible(false)
     }
   }
 
   return (
     <div
       ref={floatBallRef}
-      className={`w-full h-full relative select-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.01] pointer-events-none'}`}
+      className="w-full h-full relative select-none"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
@@ -234,64 +303,19 @@ export const FileDropover: React.FC = () => {
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className={`w-[60px] h-[60px] rounded-full overflow-hidden relative transition-all duration-500 ease-apple flex items-center justify-center group ${isDraggingOver ? 'scale-110' : 'hover:scale-105 shadow-xl'
+        <div className={`w-[72px] h-[72px] relative transition-all duration-300 ease-out flex items-center justify-center group ${isDraggingOver ? 'scale-110' : 'hover:scale-105'
           }`}
           style={{
-            boxShadow: isDraggingOver ? '0 0 30px rgba(168,85,247,0.5)' : '0 10px 30px -10px rgba(0,0,0,0.5)'
+            filter: isDraggingOver
+              ? 'drop-shadow(0 0 18px rgba(127, 86, 217, 0.55))'
+              : 'drop-shadow(0 8px 18px rgba(78, 49, 138, 0.28))'
           }}>
-          {/* 深色半透明底色层 */}
-          <div className="absolute inset-0 bg-slate-950/80 rounded-full z-0" />
-
-          {/* Siri 风格流光动态模糊球体容器 */}
-          <div
-            className="absolute z-0 mix-blend-screen pointer-events-none rounded-full overflow-hidden"
-            style={{ inset: '-20%', opacity: 0.8 }}
-          >
-            <div
-              className="absolute w-[80%] h-[80%] rounded-full animate-siri-blob"
-              style={{
-                background: 'radial-gradient(circle at center, rgba(59,130,246,1) 0%, rgba(59,130,246,0) 70%)',
-                top: '50%', left: '50%',
-                marginTop: '-40%', marginLeft: '-40%',
-                filter: 'blur(10px)',
-                willChange: 'transform',
-                animationDelay: '0s'
-              }}
-            />
-            <div
-              className="absolute w-[80%] h-[80%] rounded-full animate-siri-blob"
-              style={{
-                background: 'radial-gradient(circle at center, rgba(168,85,247,1) 0%, rgba(168,85,247,0) 70%)',
-                top: '50%', left: '50%',
-                marginTop: '-40%', marginLeft: '-40%',
-                filter: 'blur(10px)',
-                willChange: 'transform',
-                animationDelay: '-2s'
-              }}
-            />
-            <div
-              className="absolute w-[80%] h-[80%] rounded-full animate-siri-blob"
-              style={{
-                background: 'radial-gradient(circle at center, rgba(236,72,153,1) 0%, rgba(236,72,153,0) 70%)',
-                top: '50%', left: '50%',
-                marginTop: '-40%', marginLeft: '-40%',
-                filter: 'blur(10px)',
-                willChange: 'transform',
-                animationDelay: '-4s'
-              }}
-            />
-          </div>
-
-          {/* 顶层玻璃质感遮罩与内边框 */}
-          <div
-            className="absolute rounded-full z-10 flex items-center justify-center pointer-events-none shadow-inner"
-            style={{ inset: '0px', border: '1px solid rgba(255,255,255,0.1)' }}
+          <img
+            src={appIcon}
+            alt="OneTool"
+            className="w-full h-full object-contain pointer-events-none transition-transform duration-300 group-hover:scale-105"
+            draggable={false}
           />
-
-          {/* 核心图标层 */}
-          <div className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none">
-            <Inbox className="w-5 h-5 text-white transition-transform duration-300 group-hover:scale-110" style={{ filter: 'drop-shadow(0 0 8px rgba(255,255,255,0.5))' }} />
-          </div>
         </div>
 
         {storedFiles.length > 0 && (
@@ -316,7 +340,7 @@ export const FileDropover: React.FC = () => {
         <div className="p-3 border-b border-white/20 dark:border-white/10 flex items-center justify-between no-drag">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 backdrop-blur-sm border border-white/20 dark:border-white/10 rounded-xl">
-              <Inbox className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <img src={appIcon} alt="OneTool" className="w-4 h-4 object-contain" draggable={false} />
             </div>
             <span className="font-semibold text-sm">文件暂存</span>
           </div>
@@ -344,7 +368,7 @@ export const FileDropover: React.FC = () => {
                 ? 'from-emerald-500/20 to-teal-400/10 scale-110'
                 : 'from-muted/50 to-muted/30'
                 }`}>
-                <Inbox className="w-8 h-8 opacity-50" />
+                <img src={appIcon} alt="OneTool" className="w-8 h-8 object-contain opacity-60" draggable={false} />
               </div>
               <p className="text-sm text-muted-foreground mt-3">拖入文件到此处暂存</p>
             </div>
@@ -393,30 +417,6 @@ export const FileDropover: React.FC = () => {
         )}
       </div>
 
-      <style>{`
-        @keyframes siri-blob {
-          0%, 100% { transform: translate(-20%, -20%) scale(1); }
-          33% { transform: translate(25%, 15%) scale(1.1); }
-          66% { transform: translate(-10%, 25%) scale(0.95); }
-        }
-        .animate-siri-blob {
-          animation: siri-blob 6s infinite alternate cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        @keyframes spin-slow {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        .animate-spin-slow {
-          animation: spin-slow 3s linear infinite;
-        }
-        @keyframes pulse-glow {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.8; filter: brightness(1.2); }
-        }
-        .pulse-glow {
-          animation: pulse-glow 2s ease-in-out infinite;
-        }
-      `}</style>
     </div>
   )
 }

@@ -25,6 +25,12 @@ const renameAPI = {
   }
 }
 
+const webUtilsAPI = {
+  getPathForFile: (file: File) => {
+    return webUtils.getPathForFile(file)
+  }
+}
+
 const capswriterAPI = {
   startServer: () => {
     return ipcRenderer.invoke('capswriter-start-server')
@@ -322,6 +328,12 @@ const floatBallAPI = {
   },
   showWindow: () => {
     ipcRenderer.send('floatball-show-window')
+  },
+  setVisible: (visible: boolean) => {
+    ipcRenderer.send('floatball-set-visibility', visible)
+  },
+  getState: () => {
+    return ipcRenderer.invoke('floatball-get-state')
   }
 }
 
@@ -460,6 +472,7 @@ if (process.contextIsolated) {
         send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
         invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
       },
+      webUtils: webUtilsAPI,
       rename: renameAPI,
       capswriter: capswriterAPI,
       quickInstaller: quickInstallerAPI,
@@ -489,7 +502,7 @@ if (process.contextIsolated) {
   // @ts-ignore
   window.electron = {
     ...electronAPI,
-    ipcRenderer: {
+      ipcRenderer: {
       on: (channel: string, func: (...args: any[]) => void) => {
         const subscription = (_event: any, ...args: any[]) => func(...args)
         ipcRenderer.on(channel, subscription)
@@ -497,8 +510,9 @@ if (process.contextIsolated) {
       },
       send: (channel: string, ...args: any[]) => ipcRenderer.send(channel, ...args),
       invoke: (channel: string, ...args: any[]) => ipcRenderer.invoke(channel, ...args)
-    },
-    rename: renameAPI,
+      },
+      webUtils: webUtilsAPI,
+      rename: renameAPI,
     capswriter: capswriterAPI,
     quickInstaller: quickInstallerAPI,
     autoClicker: autoClickerAPI,

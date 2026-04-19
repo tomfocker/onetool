@@ -27,28 +27,23 @@ export function registerFloatBallIpc() {
     })
 
     ipcMain.on('floatball-hide-window', () => {
-        const floatBall = windowManagerService.getFloatBallWindow()
-        if (floatBall) {
-            floatBall.hide()
-        }
+        windowManagerService.hideFloatBallWindow()
     })
 
     ipcMain.on('floatball-show-window', () => {
-        const floatBall = windowManagerService.getFloatBallWindow()
-        if (floatBall) {
-            floatBall.showInactive()
-        }
+        windowManagerService.showFloatBallWindow()
     })
 
     ipcMain.on('floatball-toggle-visibility', (event, visible: boolean) => {
-        const floatBall = windowManagerService.getFloatBallWindow()
-        if (floatBall) {
-            if (visible) {
-                floatBall.showInactive()
-            } else {
-                floatBall.hide()
-            }
-        }
+        windowManagerService.setFloatBallVisible(Boolean(visible))
+    })
+
+    ipcMain.on('floatball-set-visibility', (event, visible: boolean) => {
+        windowManagerService.setFloatBallVisible(Boolean(visible))
+    })
+
+    ipcMain.handle('floatball-get-state', () => {
+        return windowManagerService.getFloatBallState()
     })
 
     ipcMain.handle('settings-set-floatball-hotkey', async (event, hotkey: string) => {

@@ -6,6 +6,21 @@ import { execPowerShell, execPowerShellEncoded } from '../utils/processUtils'
 import { IpcResponse } from '../../shared/types'
 import { processRegistry } from './ProcessRegistry'
 
+const SUPPORTED_BROWSER_NAMES = [
+  'msedge',
+  'chrome',
+  'brave',
+  'firefox',
+  '360chrome',
+  'sogouexplorer',
+  'vivaldi',
+  'opera',
+  'yandex',
+  'thor'
+]
+
+const SUPPORTED_BROWSER_REGEX = `^(${SUPPORTED_BROWSER_NAMES.join('|')})$`
+
 export class WebActivatorService {
   private mainWindow: BrowserWindow | null = null
   private shortcuts = new Set<string>()
@@ -33,7 +48,7 @@ export class WebActivatorService {
         Add-Type -AssemblyName UIAutomationClient
         Add-Type -AssemblyName UIAutomationTypes
         $res = New-Object System.Collections.ArrayList
-        $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox|thor)$" -and $_.MainWindowHandle -ne 0 }
+        $browserProcs = Get-Process | Where-Object { $_.ProcessName -match "${SUPPORTED_BROWSER_REGEX}" -and $_.MainWindowHandle -ne 0 }
         $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
         foreach ($p in $browserProcs) {
             try {
@@ -81,7 +96,7 @@ export class WebActivatorService {
     const unique = new Map();
     allResults.forEach(w => {
       if (w.title && w.title.trim()) {
-        const key = w.type + "-" + w.processName + "-" + w.title;
+        const key = w.type + "-" + w.processName + "-" + w.hwnd + "-" + w.title;
         if (!unique.has(key)) unique.set(key, w);
       }
     });
@@ -145,8 +160,8 @@ export class WebActivatorService {
     }
   }
 
-  async toggleTab(pattern: string): Promise<{ success: boolean; action?: string; error?: string }> {
-    const configBase64 = Buffer.from(JSON.stringify({ pattern })).toString('base64');
+  async toggleTab(pattern: string, hwndId?: number): Promise<{ success: boolean; action?: string; error?: string }> {
+    const configBase64 = Buffer.from(JSON.stringify({ pattern, hwnd: hwndId || 0 })).toString('base64');
     try {
       const script = `
         $ErrorActionPreference = 'SilentlyContinue'
@@ -174,11 +189,19 @@ export class WebActivatorService {
         $jsonRaw = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${configBase64}"))
         $cfgData = $jsonRaw | ConvertFrom-Json
         $targetName = $cfgData.pattern
+        $preferredHwnd = [int64]$cfgData.hwnd
 
-        $browserNameRegex = "^(msedge|chrome|brave|firefox|360chrome|sogouexplorer|vivaldi|opera|yandex|thor)$"
+        $browserNameRegex = "${SUPPORTED_BROWSER_REGEX}"
         $itemCond = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::TabItem)
 
-        function Find-And-Activate {
+        function Find-And-Activate([bool]$respectPreferredHandle) {
+            if ($respectPreferredHandle -and $preferredHwnd -ne 0) {
+                if ([Win32]::IsWindow([IntPtr]$preferredHwnd)) {
+                    $hnds = @([IntPtr]$preferredHwnd)
+                } else {
+                    $hnds = @()
+                }
+            } else {
             $procs = Get-Process | Where-Object { $_.ProcessName -match $browserNameRegex }
             $hnds = @()
             foreach ($p in $procs) {
@@ -190,6 +213,7 @@ export class WebActivatorService {
                 } catch {}
             }
             $hnds = $hnds | Where-Object { $_ -ne 0 } | Select-Object -Unique
+            }
 
             foreach ($hwnd in $hnds) {
                 if (-not [Win32]::IsWindow($hwnd)) { continue }
@@ -222,7 +246,10 @@ export class WebActivatorService {
         }
 
         # 尝试第一次搜索
-        $res = Find-And-Activate
+        $res = Find-And-Activate $true
+        if (-not $res -and $preferredHwnd -ne 0) {
+            $res = Find-And-Activate $false
+        }
         if ($res) { 
             Write-Output "ACTION:ACTIVATE"
             exit 
@@ -237,7 +264,10 @@ export class WebActivatorService {
             }
         }
         Start-Sleep -Milliseconds 600
-        $res = Find-And-Activate
+        $res = Find-And-Activate $true
+        if (-not $res -and $preferredHwnd -ne 0) {
+            $res = Find-And-Activate $false
+        }
         
         if ($res) { Write-Output "ACTION:ACTIVATE" }
         else { Write-Output "NOT_FOUND" }
@@ -291,11 +321,18 @@ export class WebActivatorService {
               }
           } else {
               $pattern = $cfg.pattern -replace "'", "''"
-              $browserProc = Get-Process | Where-Object { $_.ProcessName -match "^(msedge|chrome|brave|firefox|360chrome|sogouexplorer|vivaldi|opera|yandex)$" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Where-Object {
-                  ($_.MainWindowTitle -match [regex]::Escape($pattern))
-              } | Select-Object -First 1
-              if ($browserProc) {
-                  $bHwnd = $browserProc.MainWindowHandle
+              $bHwnd = [IntPtr]::Zero
+              if ($cfg.hwnd -ne 0) {
+                  $preferred = [IntPtr]$cfg.hwnd
+                  if ([Win32V]::IsWindow($preferred)) { $bHwnd = $preferred }
+              }
+              if ($bHwnd -eq [IntPtr]::Zero) {
+                  $browserProc = Get-Process | Where-Object { $_.ProcessName -match "${SUPPORTED_BROWSER_REGEX}" -and $_.MainWindowHandle -ne [IntPtr]::Zero } | Where-Object {
+                      ($_.MainWindowTitle -match [regex]::Escape($pattern))
+                  } | Select-Object -First 1
+                  if ($browserProc) { $bHwnd = $browserProc.MainWindowHandle }
+              }
+              if ($bHwnd -ne [IntPtr]::Zero) {
                   $bRoot = [Win32V]::GetAncestor($bHwnd, 2)
                   $isActive = ($fgHwnd -eq $bHwnd -or $fgRoot -eq $bRoot) -and -not [Win32V]::IsIconic($bHwnd)
               }
@@ -323,7 +360,7 @@ export class WebActivatorService {
         if (!config.shortcut || config.shortcut.endsWith('+') || config.shortcut === 'Alt') continue
         const normalizedShortcut = config.shortcut.replace('Ctrl', 'CommandOrControl')
         const success = globalShortcut.register(normalizedShortcut, async () => {
-          const result = config.type === 'app' ? await this.toggleApp(config.pattern, config.hwnd) : await this.toggleTab(config.pattern)
+          const result = config.type === 'app' ? await this.toggleApp(config.pattern, config.hwnd) : await this.toggleTab(config.pattern, config.hwnd)
           if (this.mainWindow) {
             this.mainWindow.webContents.send('web-activator-shortcut-triggered', { id: config.id, action: result.success ? result.action : 'not_found' })
           }

@@ -2,6 +2,7 @@ import { globalShortcut, BrowserWindow } from 'electron'
 import { settingsService } from './SettingsService'
 import { screenOverlayService } from './ScreenOverlayService'
 import { IpcResponse } from '../../shared/types'
+import { windowManagerService } from './WindowManagerService'
 
 export class HotkeyService {
   private mainWindow: BrowserWindow | null = null
@@ -57,11 +58,7 @@ export class HotkeyService {
       const settings = settingsService.getSettings()
       globalShortcut.unregister(settings.floatBallHotkey)
       globalShortcut.register(settings.floatBallHotkey, () => {
-        const { windowManagerService } = require('./WindowManagerService')
-        const floatBall = windowManagerService.getFloatBallWindow()
-        if (floatBall && !floatBall.isDestroyed()) {
-          floatBall.webContents.send('floatball-toggle')
-        }
+        windowManagerService.toggleFloatBallVisibility()
       })
     } catch (e) {
       console.error('HotkeyService: Error registering floatball shortcut:', e)
@@ -146,15 +143,12 @@ export class HotkeyService {
       const settings = settingsService.getSettings()
       globalShortcut.unregister(settings.floatBallHotkey)
       const success = globalShortcut.register(hotkey, () => {
-        const { windowManagerService } = require('./WindowManagerService')
-        const floatBall = windowManagerService.getFloatBallWindow()
-        if (floatBall && !floatBall.isDestroyed()) {
-          floatBall.webContents.send('floatball-toggle')
-        }
+        windowManagerService.toggleFloatBallVisibility()
       })
 
       if (success) {
         settingsService.updateSettings({ floatBallHotkey: hotkey })
+        this.registerFloatBallShortcut()
         return { success: true }
       } else {
         this.registerFloatBallShortcut()

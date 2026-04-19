@@ -17,7 +17,7 @@ export function registerWebActivatorIpc() {
       const validConfig = WebActivatorToggleSchema.parse(config)
       let result;
       if (validConfig.type === 'app') result = await webActivatorService.toggleApp(validConfig.pattern, validConfig.id)
-      else result = await webActivatorService.toggleTab(validConfig.pattern)
+      else result = await webActivatorService.toggleTab(validConfig.pattern, validConfig.id)
 
       if (result.success) return { success: true, data: { action: result.action } }
       else return { success: false, error: result.error }
