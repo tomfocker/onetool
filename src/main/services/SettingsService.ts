@@ -2,7 +2,7 @@ import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { EventEmitter } from 'events'
-import type { AppSettings } from '../../shared/types'
+import type { AppSettings, IpcResponse } from '../../shared/types'
 
 export class SettingsService extends EventEmitter {
   private settings: AppSettings = {
@@ -29,22 +29,9 @@ export class SettingsService extends EventEmitter {
     return path.join(userDataPath, 'settings.json')
   }
 
-  private saveTimer: NodeJS.Timeout | null = null
-  saveSettings(): void {
-    this.emit('changed', this.settings)
-
-    if (this.saveTimer) {
-      clearTimeout(this.saveTimer)
-    }
-
-    this.saveTimer = setTimeout(async () => {
-      try {
-        const settingsPath = this.getSettingsPath()
-        await fs.promises.writeFile(settingsPath, JSON.stringify(this.settings, null, 2))
-      } catch (error) {
-        console.error('SettingsService: Failed to save settings asynchronously:', error)
-      }
-    }, 1000)
+  private async saveSettings(): Promise<void> {
+    const settingsPath = this.getSettingsPath()
+    await fs.promises.writeFile(settingsPath, JSON.stringify(this.settings, null, 2))
   }
 
   loadSettings(): void {
@@ -63,9 +50,20 @@ export class SettingsService extends EventEmitter {
     return this.settings
   }
 
-  updateSettings(updates: Partial<AppSettings>): void {
+  async updateSettings(updates: Partial<AppSettings>): Promise<IpcResponse> {
+    const previousSettings = this.settings
     this.settings = { ...this.settings, ...updates }
-    this.saveSettings()
+
+    try {
+      await this.saveSettings()
+      this.emit('changed', this.settings)
+      return { success: true }
+    } catch (error) {
+      this.settings = previousSettings
+      const message = error instanceof Error ? error.message : String(error)
+      console.error('SettingsService: Failed to save settings:', error)
+      return { success: false, error: message }
+    }
   }
 }
 

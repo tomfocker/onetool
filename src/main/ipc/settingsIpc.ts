@@ -8,9 +8,8 @@ export function registerSettingsIpc(getMainWindow: () => BrowserWindow | null) {
   })
 
   // 更新设置
-  ipcMain.handle('settings-update', (_event, updates) => {
-    settingsService.updateSettings(updates)
-    return { success: true }
+  ipcMain.handle('settings-update', async (_event, updates) => {
+    return settingsService.updateSettings(updates)
   })
 
   // 监听内部设置变更并推送到前端

@@ -45,7 +45,7 @@ npm run release:win
 4. 上传构建工件
 5. 创建 GitHub 草稿 Release 并附带安装包、便携版和更新元数据
 
-草稿 Release 需要在 GitHub 上手动或自动发布为正式 Release 之后，运行时更新器才会把它当作可见版本。
+草稿 Release 需要在 GitHub 上手动或自动发布为正式 Release 之后，Windows 运行时更新器才会把它当作可见版本。
 
 运行时更新行为由设置控制：
 
@@ -68,7 +68,7 @@ npm run release:win
 
 ## 当前边界
 
-这条链路解决的是“持续产出正式工件”的问题。运行时更新器只读取已发布的 Release，草稿 Release 不会对客户端可见。当前还没有解决：
+这条链路解决的是“持续产出正式工件”与“Windows 运行时只读取已发布 Release”的问题。当前还没有解决：
 
 - 自动更新客户端接入
 - SmartScreen 信任积累

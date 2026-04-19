@@ -222,7 +222,7 @@ app.whenReady().then(() => {
         autoCheckForUpdatesEnabled,
         nextAutoCheckForUpdatesEnabled,
         app.isPackaged,
-        process.env.NODE_ENV === 'production'
+        is.dev
       )
     ) {
       void appUpdateService.checkForUpdates()
