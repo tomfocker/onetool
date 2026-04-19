@@ -5,7 +5,6 @@ import { IpcResponse } from '../../shared/types'
 import {
   UpdateState,
   createAvailableUpdateState,
-  createDownloadingUpdateState,
   createIdleUpdateState
 } from '../../shared/appUpdate'
 
@@ -87,6 +86,22 @@ function createCheckingState(currentVersion: string): UpdateState {
   }
 }
 
+function createDownloadingState(details: {
+  currentVersion: string
+  latestVersion: string
+  releaseNotes: string | null
+  progressPercent: number
+}): UpdateState {
+  return {
+    status: 'downloading',
+    currentVersion: details.currentVersion,
+    latestVersion: details.latestVersion,
+    releaseNotes: details.releaseNotes,
+    progressPercent: Math.round(details.progressPercent),
+    errorMessage: null
+  }
+}
+
 function createDownloadedState(details: {
   currentVersion: string
   latestVersion: string
@@ -111,6 +126,10 @@ function sameState(left: UpdateState, right: UpdateState): boolean {
     left.progressPercent === right.progressPercent &&
     left.errorMessage === right.errorMessage
   )
+}
+
+function hasActiveDownload(state: UpdateState): boolean {
+  return (state.status === 'available' || state.status === 'downloading') && Boolean(state.latestVersion)
 }
 
 export class AppUpdateService extends EventEmitter {
@@ -168,7 +187,11 @@ export class AppUpdateService extends EventEmitter {
     })
 
     this.autoUpdater.on('update-available', (info: UpdateInfo) => {
-      const latestVersion = info?.version ?? this.state.latestVersion ?? ''
+      const latestVersion = info?.version?.trim() ?? this.state.latestVersion ?? ''
+      if (!latestVersion) {
+        return
+      }
+
       this.updateFromAvailable(latestVersion, normalizeReleaseNotes(info?.releaseNotes) ?? this.state.releaseNotes)
     })
 
@@ -177,25 +200,33 @@ export class AppUpdateService extends EventEmitter {
     })
 
     this.autoUpdater.on('download-progress', (progress: { percent?: number }) => {
-      const latestVersion = this.state.latestVersion ?? ''
-      this.setState(
-        createDownloadingUpdateState({
-          currentVersion: this.state.currentVersion,
-          latestVersion,
-          progressPercent: progress?.percent ?? 0
-        })
-      )
+      if (!hasActiveDownload(this.state)) {
+        return
+      }
+
+      this.setState(createDownloadingState({
+        currentVersion: this.state.currentVersion,
+        latestVersion: this.state.latestVersion as string,
+        releaseNotes: this.state.releaseNotes,
+        progressPercent: progress?.percent ?? 0
+      }))
     })
 
     this.autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-      const latestVersion = info?.version ?? this.state.latestVersion ?? ''
-      this.setState(
-        createDownloadedState({
-          currentVersion: this.state.currentVersion,
-          latestVersion,
-          releaseNotes: normalizeReleaseNotes(info?.releaseNotes) ?? this.state.releaseNotes
-        })
-      )
+      if (!hasActiveDownload(this.state)) {
+        return
+      }
+
+      const latestVersion = info?.version?.trim() ?? this.state.latestVersion ?? ''
+      if (!latestVersion) {
+        return
+      }
+
+      this.setState(createDownloadedState({
+        currentVersion: this.state.currentVersion,
+        latestVersion,
+        releaseNotes: normalizeReleaseNotes(info?.releaseNotes) ?? this.state.releaseNotes
+      }))
     })
 
     this.autoUpdater.on('error', (error: Error | string) => {
@@ -218,17 +249,27 @@ export class AppUpdateService extends EventEmitter {
       return { success: true }
     }
 
-    this.initialized = true
+    try {
+      if (!this.shouldAutoCheckOnStartup()) {
+        this.initialized = true
+        return { success: true }
+      }
 
-    if (!this.shouldAutoCheckOnStartup()) {
-      return { success: true }
+      if (!(await this.getAutoCheckEnabled())) {
+        this.initialized = true
+        return { success: true }
+      }
+
+      const result = await this.checkForUpdates()
+      if (result.success) {
+        this.initialized = true
+      }
+
+      return result
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      return { success: false, error: message }
     }
-
-    if (!(await this.getAutoCheckEnabled())) {
-      return { success: true }
-    }
-
-    return this.checkForUpdates()
   }
 
   async checkForUpdates(): Promise<IpcResponse> {

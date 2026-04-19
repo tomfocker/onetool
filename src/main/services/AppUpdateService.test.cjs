@@ -50,7 +50,7 @@ function loadAppUpdateServiceModule(overrides = {}) {
 
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
-      return {
+      return overrides.electronModule || {
         app: {
           isPackaged: false,
           getVersion: () => '1.0.0'
@@ -244,4 +244,122 @@ test('update-downloaded marks the service ready to install', async () => {
   assert.deepEqual(states, ['checking', 'available', 'downloading', 'downloaded'])
   assert.equal(autoUpdater.downloadUpdateCalls, 1)
   assert.equal(autoUpdater.quitAndInstallCalls, 1)
+})
+
+test('release notes survive update-downloaded when no new notes are provided', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
+  const service = new AppUpdateService()
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3' })
+  }
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+
+  assert.equal(service.getState().status, 'downloaded')
+  assert.equal(service.getState().latestVersion, '1.2.3')
+  assert.equal(service.getState().releaseNotes, 'Release notes')
+})
+
+test('stray download-progress and update-downloaded events do not move the service from idle', () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
+  const service = new AppUpdateService()
+  const states = []
+
+  service.on('state-changed', (state) => {
+    states.push(state.status)
+  })
+
+  autoUpdater.emit('download-progress', { percent: 33 })
+  autoUpdater.emit('update-downloaded', { version: '1.2.3' })
+
+  assert.equal(service.getState().status, 'idle')
+  assert.equal(service.getState().latestVersion, null)
+  assert.deepEqual(states, [])
+})
+
+test('initialize runs auto-check in packaged production when enabled', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  autoUpdater.checkForUpdatesCalls = 0
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.checkForUpdatesCalls += 1
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+  const service = new AppUpdateService({
+    isDevelopment: false,
+    getSettings: async () => ({ autoCheckForUpdates: true })
+  })
+
+  const result = await service.initialize()
+
+  assert.equal(result.success, true)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 1)
+  assert.equal(service.getState().status, 'available')
+})
+
+test('initialize skips auto-check in packaged production when disabled', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    isDevelopment: false,
+    getSettings: async () => ({ autoCheckForUpdates: false })
+  })
+
+  const result = await service.initialize()
+
+  assert.equal(result.success, true)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'idle')
+})
+
+test('initialize can retry after a startup settings failure', async () => {
+  let attempts = 0
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    isDevelopment: false,
+    getSettings: async () => {
+      attempts += 1
+      if (attempts === 1) {
+        throw new Error('settings unavailable')
+      }
+
+      return { autoCheckForUpdates: true }
+    }
+  })
+
+  const first = await service.initialize()
+  const second = await service.initialize()
+
+  assert.equal(first.success, false)
+  assert.match(first.error, /settings unavailable/)
+  assert.equal(second.success, true)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 1)
 })
