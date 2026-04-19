@@ -8,7 +8,14 @@ import {
   NetworkInterfaceInfo,
   LanDevice,
   AppSettings,
-  GlobalStore
+  GlobalStore,
+  LocalProxyConfig,
+  LocalProxyStatus,
+  WslBackupFormat,
+  WslBackupInfo,
+  WslOverview,
+  WslRestoreMode,
+  WslSpaceReclaimResult
 } from '../../../shared/types'
 
 declare global {
@@ -68,21 +75,23 @@ declare global {
         onHistory: (callback: (history: ClipboardItem[]) => void) => () => void
       }
       colorPicker: {
-        enable: () => Promise<IpcResponse>
-        disable: () => Promise<IpcResponse>
         pick: () => Promise<IpcResponse<{ color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number } }>>
         confirm: (color: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void
         cancel: () => void
         notifyReady: () => void
-        onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => () => void
         onScreenshot: (callback: (dataUrl: string) => void) => () => void
-        onSelected: (callback: (data: any) => void) => () => void
       }
       network: {
         scanLan: (subnet: string) => Promise<IpcResponse<{ devices: LanDevice[] }>>
         getInfo: () => Promise<IpcResponse<{ interfaces: NetworkInterfaceInfo[] }>>
         ping: (host: string) => Promise<IpcResponse<{ time: number | null; alive: boolean }>>
         pingBatch: (hosts: string[]) => Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>>
+      }
+      localProxy: {
+        getStatus: () => Promise<IpcResponse<LocalProxyStatus>>
+        setConfig: (config: LocalProxyConfig) => Promise<IpcResponse<LocalProxyStatus>>
+        disable: () => Promise<IpcResponse<LocalProxyStatus>>
+        openSystemSettings: () => Promise<IpcResponse>
       }
       rename: {
         renameFiles: (files: string[], mode: string, options: any) => Promise<IpcResponse<{ results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }> }>>
@@ -166,6 +175,18 @@ declare global {
           text: string
           translatedText: string
         }>>>
+      }
+      wsl: {
+        getOverview: () => Promise<IpcResponse<WslOverview>>
+        getBackups: () => Promise<IpcResponse<WslBackupInfo[]>>
+        setDefault: (name: string) => Promise<IpcResponse<WslOverview>>
+        terminate: (name: string) => Promise<IpcResponse<WslOverview>>
+        shutdownAll: () => Promise<IpcResponse<WslOverview>>
+        createBackup: (name: string, format: WslBackupFormat) => Promise<IpcResponse<WslBackupInfo[]>>
+        deleteBackup: (id: string) => Promise<IpcResponse<WslBackupInfo[]>>
+        restoreBackup: (id: string, mode: WslRestoreMode, targetName?: string) => Promise<IpcResponse<WslOverview>>
+        reclaimSpace: (name: string) => Promise<IpcResponse<WslSpaceReclaimResult>>
+        launchShell: (name: string) => Promise<IpcResponse>
       }
     }
   }

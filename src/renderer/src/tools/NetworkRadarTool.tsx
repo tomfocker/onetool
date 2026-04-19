@@ -12,6 +12,7 @@ import {
   Server
 } from 'lucide-react'
 import { useNetworkRadar } from '../hooks/useNetworkRadar'
+import { formatPingLatency } from '../../../shared/networkRadar'
 
 const styles = `
   @keyframes radar-sweep {
@@ -121,7 +122,7 @@ export const NetworkRadarTool: React.FC = () => {
                 全局延迟测试
               </h2>
               <button
-                onClick={runPingTest}
+                onClick={() => { void runPingTest() }}
                 disabled={isPinging}
                 className={`p-2 rounded-lg bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all ${isPinging ? 'animate-spin' : ''}`}
               >
@@ -145,11 +146,11 @@ export const NetworkRadarTool: React.FC = () => {
                     {result.status === 'pending' ? (
                       <span className="text-xs text-muted-foreground">测试中...</span>
                     ) : (
-                      <span className={`text-sm font-mono font-bold ${!result.latency ? 'text-red-500' :
+                      <span className={`text-sm font-mono font-bold ${result.latency == null ? 'text-red-500' :
                           result.latency < 100 ? 'text-green-500' :
                             result.latency < 300 ? 'text-yellow-500' : 'text-red-500'
                         }`}>
-                        {result.latency ? `${result.latency}ms` : '超时'}
+                        {formatPingLatency(result.latency)}
                       </span>
                     )}
                   </div>

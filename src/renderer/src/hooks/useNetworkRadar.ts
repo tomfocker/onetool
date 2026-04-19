@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { NetworkInterfaceInfo as NetworkInfo, LanDevice } from '../../../shared/types'
+import { buildLatencyProbeHosts, pickPreferredLanInterface } from '../../../shared/networkRadar'
 
 export interface PingResult {
   host: string
@@ -8,24 +9,17 @@ export interface PingResult {
   status: 'pending' | 'success' | 'error' | 'timeout'
 }
 
-const DEFAULT_HOSTS = [
-  { host: 'www.baidu.com', name: '百度搜索' },
-  { host: 'www.qq.com', name: '腾讯网' },
-  { host: 'www.taobao.com', name: '淘宝网' },
-  { host: 'www.bilibili.com', name: '哔哩哔哩' },
-  { host: 'github.com', name: 'GitHub' },
-  { host: 'www.microsoft.com', name: '微软' },
-  { host: 'www.apple.com.cn', name: '苹果(中国)' },
-  { host: '114.114.114.114', name: '114 DNS' },
-  { host: '223.5.5.5', name: '阿里云 DNS' },
-  { host: '8.8.8.8', name: 'Google DNS' }
-]
+function createPendingResults(): PingResult[] {
+  return buildLatencyProbeHosts().map((item) => ({
+    ...item,
+    latency: null,
+    status: 'pending'
+  }))
+}
 
 export function useNetworkRadar() {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo[]>([])
-  const [pingResults, setPingResults] = useState<PingResult[]>(
-    DEFAULT_HOSTS.map(h => ({ ...h, latency: null, status: 'pending' }))
-  )
+  const [pingResults, setPingResults] = useState<PingResult[]>(createPendingResults())
   const [lanDevices, setLanDevices] = useState<LanDevice[]>([])
   const [isScanningLan, setIsScanningLan] = useState(false)
   const [isPinging, setIsPinging] = useState(false)
@@ -35,14 +29,14 @@ export function useNetworkRadar() {
     if (abortControllerRef.current) abortControllerRef.current.abort()
     abortControllerRef.current = new AbortController()
     const signal = abortControllerRef.current.signal
+    const probeHosts = buildLatencyProbeHosts()
 
     setIsPinging(true)
-    setPingResults(
-      DEFAULT_HOSTS.map(h => ({ ...h, latency: null, status: 'pending' }))
-    )
+    setPingResults(createPendingResults())
 
     try {
-      const res = await window.electron.network.pingBatch(DEFAULT_HOSTS.map(h => h.host))
+      const res = await window.electron.network.pingBatch(probeHosts.map((item) => item.host))
+      console.log('[NetworkRadar] pingBatch response', { probeHosts, res })
       if (signal.aborted) return
       if (res.success && Array.isArray(res.data)) {
         // 根据 host 顺序映射结果
@@ -51,15 +45,21 @@ export function useNetworkRadar() {
           resultMap.set(r.host, { alive: r.alive, time: r.time })
         }
         setPingResults(
-          DEFAULT_HOSTS.map(h => {
+          probeHosts.map(h => {
             const r = resultMap.get(h.host)
             if (!r) return { ...h, latency: null, status: 'error' as const }
             return { ...h, latency: r.time, status: r.alive ? 'success' as const : 'error' as const }
           })
         )
+      } else {
+        setPingResults(
+          probeHosts.map((item) => ({ ...item, latency: null, status: 'error' as const }))
+        )
       }
     } catch {
-      // 静默失败，保持 pending 状态
+      setPingResults(
+        probeHosts.map((item) => ({ ...item, latency: null, status: 'error' as const }))
+      )
     }
 
     if (!signal.aborted) {
@@ -71,15 +71,17 @@ export function useNetworkRadar() {
     try {
       const res = await window.electron.network.getInfo()
       if (res.success && res.data?.interfaces) {
-        setNetworkInfo(Array.isArray(res.data.interfaces) ? res.data.interfaces : [res.data.interfaces])
+        const interfaces = Array.isArray(res.data.interfaces) ? res.data.interfaces : [res.data.interfaces]
+        setNetworkInfo(interfaces)
+        return interfaces
       }
     } catch (e) { console.error('Failed to get network info:', e) }
+    return []
   }, [])
 
   const scanLan = useCallback(async () => {
-    if (networkInfo.length === 0) return
-    // Prefer true private subnets over tailscale/VPNs
-    const activeInterface = networkInfo.find(i => /^192\.168\.|^10\.|^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(i.ip)) || networkInfo[0]
+    const activeInterface = pickPreferredLanInterface(networkInfo)
+    if (!activeInterface) return
     const primaryIp = activeInterface.ip
     const subnet = primaryIp.split('.').slice(0, 3).join('.')
 
@@ -94,10 +96,17 @@ export function useNetworkRadar() {
   }, [networkInfo])
 
   useEffect(() => {
-    fetchNetworkInfo()
-    runPingTest()
+    let disposed = false
+
+    const initialize = async () => {
+      await fetchNetworkInfo()
+      if (!disposed) runPingTest()
+    }
+
+    initialize()
     const timer = setInterval(fetchNetworkInfo, 10000)
     return () => {
+      disposed = true
       clearInterval(timer)
       if (abortControllerRef.current) abortControllerRef.current.abort()
     }

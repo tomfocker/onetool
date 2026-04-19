@@ -27,6 +27,7 @@ import { registerClipboardIpc } from './ipc/clipboardIpc'
 import { registerColorPickerIpc } from './ipc/colorPickerIpc'
 import { registerHotkeyIpc } from './ipc/hotkeyIpc'
 import { registerNetworkIpc } from './ipc/networkIpc'
+import { registerLocalProxyIpc } from './ipc/localProxyIpc'
 import { registerRenameIpc } from './ipc/renameIpc'
 import { registerQuickInstallerIpc } from './ipc/quickInstallerIpc'
 import { registerScreenOverlayIpc } from './ipc/screenOverlayIpc'
@@ -41,6 +42,7 @@ import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
+import { registerWslIpc } from './ipc/wslIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -145,6 +147,7 @@ app.whenReady().then(() => {
   registerClipboardIpc()
   registerColorPickerIpc()
   registerHotkeyIpc()
+  registerLocalProxyIpc()
   registerNetworkIpc()
   registerTranslateIpc()
   registerRenameIpc()
@@ -159,6 +162,7 @@ app.whenReady().then(() => {
   registerScreenshotIpc()
   registerFloatBallIpc()
   registerWebActivatorIpc()
+  registerWslIpc()
 
   // Silent system health check
   setTimeout(async () => {

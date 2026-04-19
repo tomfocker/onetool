@@ -68,8 +68,8 @@ export const ColorPickerTool: React.FC = () => {
   })
   const [colorHistory, setColorHistory] = useState<ColorHistoryItem[]>([])
   const [copiedFormat, setCopiedFormat] = useState<string | null>(null)
+  const [isPicking, setIsPicking] = useState(false)
   const [manualHexInput, setManualHexInput] = useState('')
-  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('colorPickerHistory')
@@ -79,22 +79,6 @@ export const ColorPickerTool: React.FC = () => {
       } catch (e) {
         console.error('Failed to parse color history:', e)
       }
-    }
-  }, [])
-
-  useEffect(() => {
-    if (!window.electron?.colorPicker) return
-
-    const unsubscribeUpdate = window.electron.colorPicker.onUpdate((data) => {
-      updateColorFromData(data)
-      setMousePosition({ x: data.x, y: data.y })
-    })
-
-    window.electron.colorPicker.enable()
-
-    return () => {
-      unsubscribeUpdate()
-      window.electron.colorPicker.disable()
     }
   }, [])
 
@@ -114,15 +98,20 @@ export const ColorPickerTool: React.FC = () => {
       localStorage.setItem('colorPickerHistory', JSON.stringify(newHistory))
       return newHistory
     })
-  }, [])
+  }, []) 
 
   const pickCurrentColor = useCallback(async () => {
+    if (isPicking) {
+      return
+    }
+
     if (!window.electron?.colorPicker?.pick) {
       saveToHistory(currentColor.hex)
       return
     }
 
     try {
+      setIsPicking(true)
       const result = await window.electron.colorPicker.pick()
       if (result.success && result.data?.color) {
         updateColorFromData(result.data.color)
@@ -130,9 +119,10 @@ export const ColorPickerTool: React.FC = () => {
       }
     } catch (error) {
       console.error('Failed to pick color:', error)
-      saveToHistory(currentColor.hex)
+    } finally {
+      setIsPicking(false)
     }
-  }, [currentColor, saveToHistory, updateColorFromData])
+  }, [currentColor.hex, isPicking, saveToHistory, updateColorFromData])
 
   const copyToClipboard = useCallback(async (text: string, format: string) => {
     try {
@@ -188,10 +178,7 @@ export const ColorPickerTool: React.FC = () => {
           <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent">
             屏幕取色器
           </h1>
-          <p className="text-muted-foreground">移动鼠标即可实时取色，点击"拾取颜色"保存到历史记录</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            鼠标位置: X={mousePosition.x}, Y={mousePosition.y}
-          </p>
+          <p className="text-muted-foreground">点击按钮进入全屏取色会话，单击任意像素后保存到历史记录</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -225,16 +212,18 @@ export const ColorPickerTool: React.FC = () => {
 
               <button
                 onClick={pickCurrentColor}
+                disabled={isPicking}
                 className="
                   w-full py-4 rounded-xl font-semibold text-lg transition-all duration-300
                   flex items-center justify-center gap-3
                   bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 hover:shadow-lg hover:shadow-purple-500/25 active:scale-[0.98]
+                  disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:shadow-none disabled:hover:from-purple-600 disabled:hover:to-pink-600 disabled:active:scale-100
                 "
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
-                <span>拾取颜色</span>
+                <span>{isPicking ? '正在取色...' : '拾取颜色'}</span>
               </button>
             </div>
 
@@ -375,14 +364,14 @@ export const ColorPickerTool: React.FC = () => {
                 <span className="text-purple-400 font-bold">1</span>
               </div>
               <h3 className="font-medium mb-1">移动鼠标</h3>
-              <p className="text-sm text-muted-foreground">移动鼠标即可实时显示鼠标位置的颜色</p>
+              <p className="text-sm text-muted-foreground">点击“拾取颜色”后，在全屏遮罩内移动鼠标预览像素颜色</p>
             </div>
             <div className="p-4 bg-background/50 rounded-xl border border-white/5">
               <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center mb-3">
                 <span className="text-purple-400 font-bold">2</span>
               </div>
               <h3 className="font-medium mb-1">保存颜色</h3>
-              <p className="text-sm text-muted-foreground">点击"拾取颜色"按钮保存当前颜色到历史记录</p>
+              <p className="text-sm text-muted-foreground">在全屏取色层内单击目标像素，立即保存到历史记录</p>
             </div>
             <div className="p-4 bg-background/50 rounded-xl border border-white/5">
               <div className="w-10 h-10 rounded-lg bg-purple-600/20 flex items-center justify-center mb-3">

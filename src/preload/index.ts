@@ -7,6 +7,7 @@ import {
   WebActivatorToggleSchema,
   WebActivatorShortcutSchema
 } from '../shared/ipc-schemas'
+import { LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 const renameAPI = {
   renameFiles: (files: string[], mode: string, options: any) => {
@@ -338,12 +339,6 @@ const screenshotAPI = {
 }
 
 const colorPickerAPI = {
-  enable: () => {
-    return ipcRenderer.invoke('color-picker:enable')
-  },
-  disable: () => {
-    return ipcRenderer.invoke('color-picker:disable')
-  },
   pick: () => {
     return ipcRenderer.invoke('color-picker:pick')
   },
@@ -357,25 +352,11 @@ const colorPickerAPI = {
   notifyReady: () => {
     ipcRenderer.send('color-picker:overlay-ready')
   },
-  onUpdate: (callback: (data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void) => {
-    const handler = (_event: any, data: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => callback(data)
-    ipcRenderer.on('color-picker:update', handler)
-    return () => {
-      ipcRenderer.removeListener('color-picker:update', handler)
-    }
-  },
   onScreenshot: (callback: (dataUrl: string) => void) => {
     const handler = (_event: any, dataUrl: string) => callback(dataUrl)
     ipcRenderer.on('color-picker:screenshot', handler)
     return () => {
       ipcRenderer.removeListener('color-picker:screenshot', handler)
-    }
-  },
-  onSelected: (callback: (data: any) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
-    ipcRenderer.on('color-picker:selected', handler)
-    return () => {
-      ipcRenderer.removeListener('color-picker:selected', handler)
     }
   }
 }
@@ -392,6 +373,54 @@ const networkAPI = {
   },
   scanLan: (subnet: string) => {
     return ipcRenderer.invoke('network:scan-lan', subnet)
+  }
+}
+
+const localProxyAPI = {
+  getStatus: () => {
+    return ipcRenderer.invoke('local-proxy:get-status')
+  },
+  setConfig: (config: LocalProxyConfig) => {
+    return ipcRenderer.invoke('local-proxy:set-config', config)
+  },
+  disable: () => {
+    return ipcRenderer.invoke('local-proxy:disable')
+  },
+  openSystemSettings: () => {
+    return ipcRenderer.invoke('local-proxy:open-system-settings')
+  }
+}
+
+const wslAPI = {
+  getOverview: () => {
+    return ipcRenderer.invoke('wsl:get-overview')
+  },
+  getBackups: () => {
+    return ipcRenderer.invoke('wsl:get-backups')
+  },
+  setDefault: (name: string) => {
+    return ipcRenderer.invoke('wsl:set-default', name)
+  },
+  terminate: (name: string) => {
+    return ipcRenderer.invoke('wsl:terminate', name)
+  },
+  shutdownAll: () => {
+    return ipcRenderer.invoke('wsl:shutdown-all')
+  },
+  createBackup: (name: string, format: WslBackupFormat) => {
+    return ipcRenderer.invoke('wsl:create-backup', name, format)
+  },
+  deleteBackup: (id: string) => {
+    return ipcRenderer.invoke('wsl:delete-backup', id)
+  },
+  restoreBackup: (id: string, mode: WslRestoreMode, targetName?: string) => {
+    return ipcRenderer.invoke('wsl:restore-backup', id, mode, targetName)
+  },
+  reclaimSpace: (name: string) => {
+    return ipcRenderer.invoke('wsl:reclaim-space', name)
+  },
+  launchShell: (name: string) => {
+    return ipcRenderer.invoke('wsl:launch-shell', name)
   }
 }
 
@@ -431,8 +460,10 @@ if (process.contextIsolated) {
       screenOverlay: screenOverlayAPI,
       screenshot: screenshotAPI,
       colorPicker: colorPickerAPI,
+      localProxy: localProxyAPI,
       network: networkAPI,
-      translate: translateAPI
+      translate: translateAPI,
+      wsl: wslAPI
     })
   } catch (error) {
     console.error(error)
@@ -467,7 +498,9 @@ if (process.contextIsolated) {
     screenOverlay: screenOverlayAPI,
     screenshot: screenshotAPI,
     colorPicker: colorPickerAPI,
+    localProxy: localProxyAPI,
     network: networkAPI,
-    translate: translateAPI
+    translate: translateAPI,
+    wsl: wslAPI
   }
 }

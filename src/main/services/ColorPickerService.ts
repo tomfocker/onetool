@@ -1,259 +1,194 @@
-import { BrowserWindow, desktopCapturer, screen, ipcMain } from 'electron'
+import { BrowserWindow, desktopCapturer, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { IpcResponse } from '../../shared/types'
-import { execPowerShell } from '../utils/processUtils'
+import {
+  buildCaptureThumbnailSize,
+  mapCaptureSourcesToDisplays,
+  PickedColor
+} from '../../shared/colorPicker'
 
 export class ColorPickerService {
   private mainWindow: BrowserWindow | null = null
-  private colorPickerWindow: BrowserWindow | null = null
   private colorPickerWindows: BrowserWindow[] = []
-  private colorPickerTimer: NodeJS.Timeout | null = null
-  private colorPickerActive = false
-  private isColorPicking = false
-  private lastX = -1
-  private lastY = -1
-  private lastR = -1
-  private lastG = -1
-  private lastB = -1
-
-  constructor() { }
+  private pickSessionPromise: Promise<IpcResponse<{ color?: PickedColor }>> | null = null
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
   }
 
-  private async getMouseAndColor(): Promise<{ x: number; y: number; r: number; g: number; b: number } | null> {
-    const script = `
-Add-Type -AssemblyName System.Drawing, System.Windows.Forms
-$pos = [System.Windows.Forms.Control]::MousePosition
-$bmp = New-Object System.Drawing.Bitmap(1, 1)
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.CopyFromScreen($pos, [System.Drawing.Point]::Empty, [System.Drawing.Size]::new(1, 1))
-$pixel = $bmp.GetPixel(0, 0)
-$g.Dispose()
-$bmp.Dispose()
-Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
-`
-    try {
-      const result = await execPowerShell(script)
-      const lines = result.trim().split(/\r?\n/)
-      const lastLine = lines[lines.length - 1]
-      const parts = lastLine.split(',')
-      if (parts.length >= 5) {
-        return {
-          x: parseInt(parts[0]),
-          y: parseInt(parts[1]),
-          r: parseInt(parts[2]),
-          g: parseInt(parts[3]),
-          b: parseInt(parts[4])
-        }
-      }
-    } catch (e) {
-      console.error('ColorPickerService: getMouseAndColor error:', e)
-    }
-    return null
-  }
-
-  private runLoop = async () => {
-    if (!this.colorPickerActive || !this.mainWindow) {
-      this.isColorPicking = false
-      return
-    }
-
-    this.isColorPicking = true
-    try {
-      const data = await this.getMouseAndColor()
-      if (data && this.colorPickerActive && this.mainWindow) {
-        const isValid = !isNaN(data.x) && !isNaN(data.y) && !isNaN(data.r) && !isNaN(data.g) && !isNaN(data.b)
-        if (isValid) {
-          const r = Math.max(0, Math.min(255, data.r))
-          const g = Math.max(0, Math.min(255, data.g))
-          const b = Math.max(0, Math.min(255, data.b))
-
-          const hasMoved = data.x !== this.lastX || data.y !== this.lastY
-          const hasColorChanged = r !== this.lastR || g !== this.lastG || b !== this.lastB
-
-          if (hasMoved || hasColorChanged) {
-            this.lastX = data.x
-            this.lastY = data.y
-            this.lastR = r
-            this.lastG = g
-            this.lastB = b
-
-            const hex = `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
-            const rgb = `RGB(${r}, ${g}, ${b})`
-
-            this.mainWindow.webContents.send('color-picker:update', { hex, r, g, b, rgb, x: data.x, y: data.y })
-          }
-        }
-      }
-    } catch (error) {
-      console.error('ColorPickerService: loop error:', error)
-    }
-
-    if (this.colorPickerActive) {
-      this.colorPickerTimer = setTimeout(this.runLoop, 100)
-    } else {
-      this.isColorPicking = false
-    }
-  }
-
-  enable(): void {
-    if (this.colorPickerActive) return
-    this.colorPickerActive = true
-    this.runLoop()
-  }
-
-  disable(): void {
-    this.colorPickerActive = false
-    if (this.colorPickerTimer) {
-      clearTimeout(this.colorPickerTimer)
-      this.colorPickerTimer = null
-    }
-  }
-
   private async captureAllScreens(): Promise<Map<number, string>> {
     const displays = screen.getAllDisplays()
-    const screenshotMap = new Map<number, string>()
+    const thumbnailSize = buildCaptureThumbnailSize(displays)
 
-    try {
-      let maxWidth = 0
-      let maxHeight = 0
-      displays.forEach(display => {
-        maxWidth = Math.max(maxWidth, Math.round(display.bounds.width * display.scaleFactor))
-        maxHeight = Math.max(maxHeight, Math.round(display.bounds.height * display.scaleFactor))
-      })
-
-      const sources = await desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: maxWidth, height: maxHeight }
-      })
-
-      for (const display of displays) {
-        const source = sources.find(s => s.display_id === display.id.toString()) || sources[displays.indexOf(display)]
-        if (source) {
-          screenshotMap.set(display.id, source.thumbnail.toDataURL())
-        }
-      }
-    } catch (error) {
-      console.error('ColorPickerService: captureAllScreens error:', error)
+    if (thumbnailSize.width === 0 || thumbnailSize.height === 0) {
+      throw new Error('No displays available for capture')
     }
-    return screenshotMap
+
+    const sources = await desktopCapturer.getSources({
+      types: ['screen'],
+      thumbnailSize
+    })
+
+    const normalizedSources = sources.map((source) => {
+      const size = source.thumbnail.getSize()
+      return {
+        display_id: source.display_id,
+        width: size.width,
+        height: size.height,
+        dataUrl: source.thumbnail.toDataURL()
+      }
+    })
+
+    const { screenshots, missingDisplayIds } = mapCaptureSourcesToDisplays(displays, normalizedSources)
+    if (missingDisplayIds.length > 0) {
+      throw new Error(`Failed to capture displays: ${missingDisplayIds.join(', ')}`)
+    }
+
+    return screenshots
   }
 
-  async pick(): Promise<IpcResponse<{ color?: any }>> {
+  async pick(): Promise<IpcResponse<{ color?: PickedColor }>> {
+    if (this.pickSessionPromise) {
+      return { success: false, error: 'Color picker is already active' }
+    }
+
     const displays = screen.getAllDisplays()
+    if (displays.length === 0) {
+      return { success: false, error: 'No displays available' }
+    }
 
-    return new Promise(async (resolve) => {
-      let cleanupCalled = false
-      const onOverlayReady = (event: Electron.IpcMainEvent) => {
-        const webContentsId = event.sender.id
-        const entry = displayMap.get(webContentsId)
-        if (!entry) return
-
-        const dataUrl = screenshotMap.get(entry.displayId)
-        if (dataUrl) {
-          entry.win.webContents.send('color-picker:screenshot', dataUrl)
-        } else {
-          const fallback = screenshotMap.values().next().value
-          if (fallback) entry.win.webContents.send('color-picker:screenshot', fallback)
-        }
-      }
-
-      const onPicked = (_event, data) => {
-        cleanup()
-        if (this.mainWindow) this.mainWindow.webContents.send('color-picker:selected', data)
-        resolve({ success: true, data: { color: data } })
-      }
-
-      const onCancelled = () => {
-        cleanup()
-        resolve({ success: false, error: 'Cancelled' })
-      }
+    this.pickSessionPromise = new Promise((resolve) => {
+      const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
+      let screenshotMap = new Map<number, string>()
+      let finished = false
 
       const cleanup = () => {
-        if (cleanupCalled) return
-        cleanupCalled = true
-
         ipcMain.removeListener('color-picker:confirm-pick', onPicked)
         ipcMain.removeListener('color-picker:cancel-pick', onCancelled)
         ipcMain.removeListener('color-picker:overlay-ready', onOverlayReady)
 
-        this.colorPickerWindows.forEach(win => {
-          if (!win.isDestroyed()) win.close()
+        this.colorPickerWindows.forEach((win) => {
+          if (!win.isDestroyed()) {
+            win.close()
+          }
         })
         this.colorPickerWindows = []
         displayMap.clear()
 
-        if (this.mainWindow) {
+        if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.show()
           this.mainWindow.focus()
         }
       }
 
-      // 记录每个 display 对应的 overlay 窗口，用于 ready 信号匹配
-      const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
-      let screenshotMap = new Map<number, string>()
+      const finish = (result: IpcResponse<{ color?: PickedColor }>) => {
+        if (finished) {
+          return
+        }
 
-      try {
-        // 【修复1】先截图，再隐藏主窗口
-        screenshotMap = await this.captureAllScreens()
+        finished = true
+        cleanup()
+        resolve(result)
+      }
 
-        if (this.mainWindow) this.mainWindow.hide()
+      const onOverlayReady = (event: Electron.IpcMainEvent) => {
+        const entry = displayMap.get(event.sender.id)
+        if (!entry) {
+          return
+        }
 
-        ipcMain.on('color-picker:overlay-ready', onOverlayReady)
-        ipcMain.once('color-picker:confirm-pick', onPicked)
-        ipcMain.once('color-picker:cancel-pick', onCancelled)
+        const dataUrl = screenshotMap.get(entry.displayId)
+        if (!dataUrl) {
+          finish({ success: false, error: `Missing screenshot for display ${entry.displayId}` })
+          return
+        }
 
-        this.colorPickerWindows = displays.map(display => {
-          const { x, y, width, height } = display.bounds
-          const win = new BrowserWindow({
-            x, y, width, height,
-            transparent: true,
-            frame: false,
-            alwaysOnTop: true,
-            skipTaskbar: true,
-            resizable: false,
-            focusable: true,
-            show: false,
-            fullscreenable: true,
-            kiosk: true,
-            webPreferences: {
-              preload: join(__dirname, '../preload/index.js'),
-              sandbox: false
-            }
-          })
+        entry.win.webContents.send('color-picker:screenshot', dataUrl)
+      }
 
-          win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-          displayMap.set(win.webContents.id, { win, displayId: display.id })
+      const onPicked = (_event: Electron.IpcMainEvent, data: PickedColor) => {
+        finish({ success: true, data: { color: data } })
+      }
 
-          if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-            win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/color-picker-overlay?display=${display.id}`)
-          } else {
-            // 【修复2】使用 loadFile + hash，避免拼接 file:// 的潜在路径问题
-            win.loadFile(join(__dirname, '../../renderer/index.html'), {
-              hash: `/color-picker-overlay?display=${display.id}`
-            })
+      const onCancelled = () => {
+        finish({ success: false, error: 'Cancelled' })
+      }
+
+      const buildOverlayRoute = (displayId: number, x: number, y: number) => {
+        return `/color-picker-overlay?display=${displayId}&dx=${x}&dy=${y}`
+      }
+
+      void (async () => {
+        try {
+          screenshotMap = await this.captureAllScreens()
+
+          if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+            this.mainWindow.hide()
           }
 
-          win.once('ready-to-show', () => win.show())
+          ipcMain.once('color-picker:confirm-pick', onPicked)
+          ipcMain.once('color-picker:cancel-pick', onCancelled)
+          ipcMain.on('color-picker:overlay-ready', onOverlayReady)
 
-          // 异常处理：如果窗口崩溃或无法加载
-          win.webContents.on('did-fail-load', () => {
-            console.error(`ColorPicker Window for display ${display.id} failed to load`)
-            cleanup()
-            resolve({ success: false, error: 'Overlay load failed' })
+          this.colorPickerWindows = displays.map((display) => {
+            const { x, y, width, height } = display.bounds
+            const route = buildOverlayRoute(display.id, x, y)
+
+            const win = new BrowserWindow({
+              x,
+              y,
+              width,
+              height,
+              transparent: true,
+              frame: false,
+              alwaysOnTop: true,
+              skipTaskbar: true,
+              resizable: false,
+              focusable: true,
+              show: false,
+              fullscreenable: true,
+              kiosk: true,
+              webPreferences: {
+                preload: join(__dirname, '../preload/index.js'),
+                sandbox: false
+              }
+            })
+
+            win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+            displayMap.set(win.webContents.id, { win, displayId: display.id })
+
+            if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+              win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
+            } else {
+              win.loadFile(join(__dirname, '../../renderer/index.html'), { hash: route })
+            }
+
+            win.once('ready-to-show', () => {
+              if (!finished) {
+                win.show()
+              }
+            })
+
+            win.webContents.on('did-fail-load', () => {
+              console.error(`ColorPicker Window for display ${display.id} failed to load`)
+              finish({ success: false, error: 'Overlay load failed' })
+            })
+
+            return win
           })
-
-          return win
-        })
-      } catch (error) {
-        console.error('ColorPickerService: pick session error:', error)
-        cleanup()
-        resolve({ success: false, error: (error as Error).message })
-      }
+        } catch (error) {
+          console.error('ColorPickerService: pick session error:', error)
+          finish({ success: false, error: (error as Error).message })
+        }
+      })()
     })
+
+    try {
+      return await this.pickSessionPromise
+    } finally {
+      this.pickSessionPromise = null
+    }
   }
 }
 

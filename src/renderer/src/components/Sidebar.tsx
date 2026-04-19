@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tools } from '@/data/tools'
@@ -13,7 +13,7 @@ interface SidebarProps {
 
 const iconMap: Record<string, any> = {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => {

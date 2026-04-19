@@ -2,6 +2,8 @@ import os from 'os'
 import { execCommand, execPowerShell } from '../utils/processUtils'
 import { IpcResponse } from '../../shared/types'
 import { taskQueueService } from './TaskQueueService'
+import { parsePingOutput } from '../../shared/networkRadar'
+import { logger } from '../utils/logger'
 
 export class NetworkService {
   constructor() { }
@@ -11,17 +13,11 @@ export class NetworkService {
     try {
       // 使用原生的 ping.exe ，仅发送 1 个包，超时时间 1000ms
       const output = await execCommand(`ping -n 1 -w 1000 ${target}`, 3000)
-
-      // 正则匹配返回的延迟，例如 "时间=12ms"、"time=12ms" 或 "<1ms"
-      const timeMatch = output.match(/(?:时间|time)[=<](\d+)(?:ms)?/i)
-
-      // 如果匹配到了时间，且没有 100% 丢包，即认为存活
-      if (timeMatch && !output.includes('100% 丢失') && !output.includes('100% loss')) {
-        const time = parseInt(timeMatch[1], 10)
-        return { success: true, data: { alive: true, time: isNaN(time) ? null : time } }
-      }
-      return { success: true, data: { alive: false, time: null } }
+      const parsed = parsePingOutput(output)
+      logger.info('[NetworkService] ping result', { host, target, parsed, output })
+      return { success: true, data: parsed }
     } catch {
+      logger.warn('[NetworkService] ping threw unexpectedly', { host, target })
       return { success: true, data: { alive: false, time: null } }
     }
   }
@@ -32,6 +28,7 @@ export class NetworkService {
    */
   async pingBatch(hosts: string[]): Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>> {
     try {
+      logger.info('[NetworkService] pingBatch requested', { hosts })
       const results = await Promise.all(
         hosts.map(async (host) => {
           const res = await this.ping(host)
@@ -42,8 +39,10 @@ export class NetworkService {
           }
         })
       )
+      logger.info('[NetworkService] pingBatch completed', { results })
       return { success: true, data: results }
     } catch (e) {
+      logger.error('[NetworkService] pingBatch failed', e)
       return { success: false, error: (e as Error).message }
     }
   }

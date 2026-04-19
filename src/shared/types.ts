@@ -137,6 +137,86 @@ export interface NetworkInterfaceInfo {
   ip: string
 }
 
+export type ProxyProtocol = 'http' | 'socks5' | 'unknown'
+
+export interface LocalProxyConfig {
+  host: string
+  port: number
+  protocol: Exclude<ProxyProtocol, 'unknown'>
+  bypass: string[]
+}
+
+export interface LocalProxyStatus {
+  enabled: boolean
+  server: string
+  host: string
+  port: number | null
+  protocol: ProxyProtocol
+  bypass: string[]
+  autoConfigUrl: string | null
+}
+
+export interface WslDistroInfo {
+  name: string
+  state: string
+  version: number
+  isDefault: boolean
+  isRunning: boolean
+  basePath?: string | null
+  vhdPath?: string | null
+  vhdSizeBytes?: number | null
+  osVersion?: string | null
+  flavor?: string | null
+}
+
+export interface WslVersionInfo {
+  wslVersion: string | null
+  kernelVersion: string | null
+  wslgVersion: string | null
+  msrdcVersion: string | null
+  direct3dVersion: string | null
+  dxcoreVersion: string | null
+  windowsVersion: string | null
+}
+
+export type WslBackupFormat = 'tar' | 'vhd'
+
+export interface WslBackupInfo {
+  id: string
+  distroName: string
+  sourceVersion: number
+  format: WslBackupFormat
+  fileName: string
+  filePath: string
+  sizeBytes: number
+  createdAt: string
+}
+
+export type WslRestoreMode = 'copy' | 'replace'
+
+export interface WslSpaceReclaimResult {
+  distroName: string
+  vhdPath: string
+  beforeBytes: number
+  afterBytes: number
+  reclaimedBytes: number
+  sparseEnabled: boolean
+  trimAttempted: boolean
+  trimOutput: string
+}
+
+export interface WslOverview {
+  available: boolean
+  message: string | null
+  defaultDistro: string | null
+  runningCount: number
+  distros: WslDistroInfo[]
+  rawStatus: string
+  versionInfo: WslVersionInfo
+  backupRoot: string
+  restoreRoot: string
+}
+
 /**
  * 工具定义 (插件系统元数据)
  */
@@ -175,6 +255,7 @@ export interface GlobalStore {
   renamePresets: RenamePreset[]
   webActivatorConfigs: ActivatorConfig[]
   toolUsages: ToolUsageRecord[]
+  windowsManagerFavorites: string[]
   clipboardHistory: ClipboardItem[]
   version: string
 }

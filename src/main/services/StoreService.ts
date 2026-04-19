@@ -5,6 +5,17 @@ import { EventEmitter } from 'events'
 import { GlobalStore } from '../../shared/types'
 import { logger } from '../utils/logger'
 
+const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
+  'control',
+  'taskmgr',
+  'powershell',
+  'services',
+  'devmgmt',
+  'diskmgmt',
+  'appwiz',
+  'sysdm'
+]
+
 export class StoreService extends EventEmitter {
   private store: GlobalStore
   private storePath: string
@@ -33,6 +44,7 @@ export class StoreService extends EventEmitter {
       renamePresets: [],
       webActivatorConfigs: [],
       toolUsages: [],
+      windowsManagerFavorites: [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
       clipboardHistory: [],
       version: app.getVersion()
     }

@@ -1,51 +1,78 @@
 document.addEventListener('DOMContentLoaded', () => {
-    const header = document.querySelector('.header');
-    let lastScroll = 0;
+    const header = document.querySelector('.site-header');
+    const revealItems = document.querySelectorAll('.reveal');
+    const counters = document.querySelectorAll('.count-up');
 
-    window.addEventListener('scroll', () => {
-        const currentScroll = window.pageYOffset;
-        
-        if (currentScroll > 50) {
-            header.style.background = 'rgba(15, 15, 20, 0.95)';
-        } else {
-            header.style.background = 'rgba(15, 15, 20, 0.8)';
-        }
-        
-        lastScroll = currentScroll;
-    });
-
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
-
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.style.opacity = '1';
-                entry.target.style.transform = 'translateY(0)';
+    const revealObserver = new IntersectionObserver((entries) => {
+        entries.forEach((entry) => {
+            if (!entry.isIntersecting) {
+                return;
             }
-        });
-    }, observerOptions);
 
-    const animateElements = document.querySelectorAll('.feature-card, .tool-card');
-    animateElements.forEach((el, index) => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(20px)';
-        el.style.transition = `opacity 0.6s ease ${index * 0.1}s, transform 0.6s ease ${index * 0.1}s`;
-        observer.observe(el);
-    });
+            entry.target.classList.add('is-visible');
 
-    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-        anchor.addEventListener('click', function (e) {
-            e.preventDefault();
-            const target = document.querySelector(this.getAttribute('href'));
-            if (target) {
-                target.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'start'
+            if (entry.target.classList.contains('stat-belt')) {
+                counters.forEach((counter) => {
+                    if (counter.dataset.done === 'true') {
+                        return;
+                    }
+
+                    const target = Number(counter.dataset.target || '0');
+                    const duration = 1200;
+                    const startTime = performance.now();
+
+                    const tick = (time) => {
+                        const progress = Math.min((time - startTime) / duration, 1);
+                        counter.textContent = String(Math.round(target * progress));
+                        if (progress < 1) {
+                            requestAnimationFrame(tick);
+                        } else {
+                            counter.dataset.done = 'true';
+                            counter.textContent = String(target);
+                        }
+                    };
+
+                    requestAnimationFrame(tick);
                 });
             }
+
+            revealObserver.unobserve(entry.target);
+        });
+    }, {
+        threshold: 0.18,
+        rootMargin: '0px 0px -40px 0px'
+    });
+
+    revealItems.forEach((item) => revealObserver.observe(item));
+
+    const syncHeader = () => {
+        if (window.scrollY > 16) {
+            header.classList.add('is-scrolled');
+        } else {
+            header.classList.remove('is-scrolled');
+        }
+    };
+
+    syncHeader();
+    window.addEventListener('scroll', syncHeader);
+
+    document.querySelectorAll('a[href^="#"]').forEach((anchor) => {
+        anchor.addEventListener('click', (event) => {
+            const targetId = anchor.getAttribute('href');
+            if (!targetId || targetId === '#') {
+                return;
+            }
+
+            const target = document.querySelector(targetId);
+            if (!target) {
+                return;
+            }
+
+            event.preventDefault();
+            target.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start'
+            });
         });
     });
 });

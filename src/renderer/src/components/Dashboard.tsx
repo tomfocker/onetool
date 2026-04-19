@@ -3,7 +3,7 @@ import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
-  Inbox, Radar, Search, Sun, Moon
+  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar
+  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare
 }
 
 const toolGradientMap: Record<string, string> = {
@@ -42,7 +42,9 @@ const toolGradientMap: Record<string, string> = {
   'file-dropover': 'from-indigo-400 to-purple-500',
   'translator': 'from-purple-500 to-pink-500',
   'network-radar': 'from-blue-600 to-cyan-600',
-  'windows-manager': 'from-slate-600 to-zinc-800'
+  'windows-manager': 'from-slate-600 to-zinc-800',
+  'local-proxy-manager': 'from-emerald-500 to-teal-600',
+  'wsl-manager': 'from-cyan-500 to-indigo-600'
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({ onNavigate, searchTerm = '', onSearchChange }) => {

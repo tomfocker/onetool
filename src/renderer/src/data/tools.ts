@@ -18,6 +18,22 @@ export const tools: ToolDefinition[] = [
     componentPath: 'NetworkRadarTool'
   },
   {
+    id: 'local-proxy-manager',
+    name: '本地代理',
+    description: '管理 Windows 系统代理与本地代理端口',
+    category: '系统维护',
+    icon: 'ShieldCheck',
+    componentPath: 'LocalProxyManagerTool'
+  },
+  {
+    id: 'wsl-manager',
+    name: 'WSL 管理',
+    description: '查看、切换和控制 WSL 发行版运行状态',
+    category: '系统维护',
+    icon: 'TerminalSquare',
+    componentPath: 'WslManagerTool'
+  },
+  {
     id: 'config-checker',
     name: '配置检测',
     description: '深度硬件信息审计与导出',

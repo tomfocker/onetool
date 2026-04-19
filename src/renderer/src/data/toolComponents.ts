@@ -150,6 +150,26 @@ export const toolComponents: ToolComponent[] = [
     installed: true
   },
   {
+    id: 'local-proxy-manager',
+    name: '本地代理管理',
+    description: '一键切换本地代理端口，查看当前系统代理状态',
+    category: '网络工具',
+    size: 1,
+    version: '1.0.0',
+    icon: 'ShieldCheck',
+    installed: true
+  },
+  {
+    id: 'wsl-manager',
+    name: 'WSL 虚拟机管理',
+    description: '管理 WSL 发行版状态、默认项与终端启动',
+    category: '系统工具',
+    size: 1,
+    version: '1.0.0',
+    icon: 'TerminalSquare',
+    installed: true
+  },
+  {
     id: 'file-dropover',
     name: '文件暂存悬浮球',
     description: '高颜值文件暂存工具，支持拖入拖出文件',
