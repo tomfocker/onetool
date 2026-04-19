@@ -29,9 +29,11 @@ export class SettingsService extends EventEmitter {
     return path.join(userDataPath, 'settings.json')
   }
 
-  private async saveSettings(): Promise<void> {
+  private settingsUpdateQueue: Promise<unknown> = Promise.resolve()
+
+  private async saveSettings(nextSettings: AppSettings): Promise<void> {
     const settingsPath = this.getSettingsPath()
-    await fs.promises.writeFile(settingsPath, JSON.stringify(this.settings, null, 2))
+    await fs.promises.writeFile(settingsPath, JSON.stringify(nextSettings, null, 2))
   }
 
   loadSettings(): void {
@@ -51,19 +53,26 @@ export class SettingsService extends EventEmitter {
   }
 
   async updateSettings(updates: Partial<AppSettings>): Promise<IpcResponse> {
-    const previousSettings = this.settings
-    this.settings = { ...this.settings, ...updates }
+    const updateTask = this.settingsUpdateQueue
+      .catch(() => undefined)
+      .then(async () => {
+        const nextSettings = { ...this.settings, ...updates }
 
-    try {
-      await this.saveSettings()
-      this.emit('changed', this.settings)
-      return { success: true }
-    } catch (error) {
-      this.settings = previousSettings
-      const message = error instanceof Error ? error.message : String(error)
-      console.error('SettingsService: Failed to save settings:', error)
-      return { success: false, error: message }
-    }
+        try {
+          await this.saveSettings(nextSettings)
+          this.settings = nextSettings
+          this.emit('changed', this.settings)
+          return { success: true }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          console.error('SettingsService: Failed to save settings:', error)
+          return { success: false, error: message }
+        }
+      })
+
+    this.settingsUpdateQueue = updateTask.then(() => undefined, () => undefined)
+
+    return updateTask
   }
 }
 

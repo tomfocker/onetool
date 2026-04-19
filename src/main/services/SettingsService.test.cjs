@@ -111,3 +111,54 @@ test('updateSettings returns a failure and rolls back when persistence fails', a
   assert.equal(changed.length, 0)
   assert.equal(service.getSettings().autoCheckForUpdates, true)
 })
+
+test('overlapping updateSettings calls do not let an older failed write restore stale settings', async () => {
+  const writes = []
+  let resolveFirstWrite
+  let rejectFirstWrite
+  let resolveSecondWrite
+  const firstWrite = new Promise((resolve, reject) => {
+    resolveFirstWrite = resolve
+    rejectFirstWrite = reject
+  })
+  const secondWrite = new Promise((resolve) => {
+    resolveSecondWrite = resolve
+  })
+  const { SettingsService } = loadSettingsServiceModule({
+    fsModule: {
+      existsSync: () => false,
+      readFileSync: () => '',
+      promises: {
+        writeFile: async (_filePath, content) => {
+          writes.push(content)
+          if (writes.length === 1) {
+            return firstWrite
+          }
+
+          return secondWrite
+        }
+      }
+    }
+  })
+
+  const service = new SettingsService()
+  const first = service.updateSettings({ autoCheckForUpdates: false })
+  const second = service.updateSettings({ minimizeToTray: false })
+
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(writes.length, 1)
+  rejectFirstWrite(new Error('first failed'))
+
+  const firstResult = await first
+
+  assert.equal(firstResult.success, false)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  assert.equal(writes.length, 2)
+
+  resolveSecondWrite()
+  const secondResult = await second
+
+  assert.equal(secondResult.success, true)
+  assert.equal(service.getSettings().autoCheckForUpdates, true)
+  assert.equal(service.getSettings().minimizeToTray, false)
+})

@@ -92,6 +92,26 @@ export function resolveAppUpdatePendingAction(
   return pendingAction
 }
 
+export function resolveAppUpdateActionResult(
+  result: { success?: boolean; error?: unknown } | null | undefined,
+  previousState?: UpdateState | null
+): {
+  shouldClearPendingAction: boolean
+  errorState: UpdateState | null
+} {
+  if (result?.success === false) {
+    return {
+      shouldClearPendingAction: true,
+      errorState: createAppUpdateErrorState(getErrorMessage(result.error), previousState)
+    }
+  }
+
+  return {
+    shouldClearPendingAction: false,
+    errorState: null
+  }
+}
+
 function getAppUpdateStatusLabel(state: UpdateState | null | undefined, pendingAction: AppUpdateAction | null): string {
   if (pendingAction === 'check' && (!state || state.status === 'idle')) {
     return '正在检查更新...'
@@ -261,7 +281,12 @@ export function useAppUpdate() {
     setPendingAction('download')
 
     try {
-      await getUpdatesBridgeMethod('downloadUpdate')()
+      const result = await getUpdatesBridgeMethod('downloadUpdate')()
+      const completion = resolveAppUpdateActionResult(result, updateState)
+      if (completion.shouldClearPendingAction && completion.errorState) {
+        clearPendingAction()
+        setUpdateState(completion.errorState)
+      }
     } catch (error) {
       clearPendingAction()
       setErrorState(error, updateState)
@@ -277,7 +302,12 @@ export function useAppUpdate() {
     setPendingAction('install')
 
     try {
-      await getUpdatesBridgeMethod('quitAndInstall')()
+      const result = await getUpdatesBridgeMethod('quitAndInstall')()
+      const completion = resolveAppUpdateActionResult(result, updateState)
+      if (completion.shouldClearPendingAction && completion.errorState) {
+        clearPendingAction()
+        setUpdateState(completion.errorState)
+      }
     } catch (error) {
       clearPendingAction()
       setErrorState(error, updateState)
@@ -293,7 +323,12 @@ export function useAppUpdate() {
     setPendingAction('check')
 
     try {
-      await getUpdatesBridgeMethod('checkForUpdates')()
+      const result = await getUpdatesBridgeMethod('checkForUpdates')()
+      const completion = resolveAppUpdateActionResult(result, updateState)
+      if (completion.shouldClearPendingAction && completion.errorState) {
+        clearPendingAction()
+        setUpdateState(completion.errorState)
+      }
     } catch (error) {
       clearPendingAction()
       setErrorState(error, updateState)

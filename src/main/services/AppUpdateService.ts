@@ -34,16 +34,61 @@ type AppUpdateServiceDependencies = {
   app?: AppLike
   autoUpdater?: AutoUpdaterLike
   isDevelopment?: boolean
+  platform?: NodeJS.Platform
   getSettings?: () => Promise<UpdateSettings> | UpdateSettings
+}
+
+export function isSupportedAutoUpdateRuntime(
+  platform: NodeJS.Platform,
+  isPackaged: boolean,
+  isDevelopment: boolean
+): boolean {
+  return platform === 'win32' && isPackaged && !isDevelopment
 }
 
 export function shouldTriggerAutoCheckOnSettingsChange(
   previousAutoCheckEnabled: boolean,
   nextAutoCheckEnabled: boolean,
   isPackaged: boolean,
-  isDevelopment: boolean
+  isDevelopment: boolean,
+  platform: NodeJS.Platform
 ): boolean {
-  return nextAutoCheckEnabled && !previousAutoCheckEnabled && isPackaged && !isDevelopment
+  return nextAutoCheckEnabled && !previousAutoCheckEnabled && isSupportedAutoUpdateRuntime(platform, isPackaged, isDevelopment)
+}
+
+export function registerAutoUpdateSettingsChangeHandler(deps: {
+  settingsService: {
+    getSettings: () => UpdateSettings
+    on: (event: 'changed', listener: (settings: UpdateSettings) => void) => void
+  }
+  appUpdateService: {
+    checkForUpdates: () => Promise<IpcResponse> | IpcResponse | void
+  }
+  runtime: {
+    platform: NodeJS.Platform
+    isPackaged: boolean
+    isDevelopment: boolean
+  }
+}): void {
+  let autoCheckForUpdatesEnabled = Boolean(deps.settingsService.getSettings().autoCheckForUpdates)
+
+  deps.settingsService.on('changed', (newSettings) => {
+    const nextAutoCheckForUpdatesEnabled = Boolean(newSettings.autoCheckForUpdates)
+
+    if (
+      shouldTriggerAutoCheckOnSettingsChange(
+        autoCheckForUpdatesEnabled,
+        nextAutoCheckForUpdatesEnabled,
+        deps.runtime.isPackaged,
+        deps.runtime.isDevelopment,
+        deps.runtime.platform
+      )
+    ) {
+      void deps.appUpdateService.checkForUpdates()
+    }
+
+    autoCheckForUpdatesEnabled = nextAutoCheckForUpdatesEnabled
+  })
 }
 
 function normalizeReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string | null {
@@ -150,6 +195,8 @@ export class AppUpdateService extends EventEmitter {
 
   private readonly isDevelopment: boolean
 
+  private readonly platform: NodeJS.Platform
+
   private initialized = false
 
   private initializationPromise: Promise<IpcResponse> | null = null
@@ -164,7 +211,8 @@ export class AppUpdateService extends EventEmitter {
     this.app = dependencies.app ?? app
     this.autoUpdater = dependencies.autoUpdater ?? (defaultAutoUpdater as unknown as AutoUpdaterLike)
     this.getSettings = dependencies.getSettings ?? (() => ({ autoCheckForUpdates: true }))
-    this.isDevelopment = dependencies.isDevelopment ?? process.env.NODE_ENV !== 'production'
+    this.isDevelopment = dependencies.isDevelopment ?? !this.app.isPackaged
+    this.platform = dependencies.platform ?? process.platform
     this.state = createIdleUpdateState(this.app.getVersion())
 
     this.autoUpdater.autoDownload = false
@@ -254,7 +302,7 @@ export class AppUpdateService extends EventEmitter {
   }
 
   private shouldAutoCheckOnStartup(): boolean {
-    return this.app.isPackaged && !this.isDevelopment
+    return isSupportedAutoUpdateRuntime(this.platform, this.app.isPackaged, this.isDevelopment)
   }
 
   async initialize(): Promise<IpcResponse> {

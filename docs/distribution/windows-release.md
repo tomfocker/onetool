@@ -47,11 +47,12 @@ npm run release:win
 
 草稿 Release 需要在 GitHub 上手动或自动发布为正式 Release 之后，Windows 运行时更新器才会把它当作可见版本。
 
-运行时更新行为由设置控制：
+当前仓库已经集成 Windows 运行时更新客户端，行为由设置控制：
 
 - `autoCheckForUpdates` 开启时，Windows 正式包会在启动阶段自动检查一次更新
 - 设置页提供手动“立即检查更新”入口，适合用户临时复核当前可见版本
 - 如果检查结果是“没有可用更新”，界面会把它当作正常状态而不是错误
+- 非 Windows、未打包环境和开发态不会触发 GitHub Releases 自动检查
 
 ## 可选签名
 
@@ -70,7 +71,6 @@ npm run release:win
 
 这条链路解决的是“持续产出正式工件”与“Windows 运行时只读取已发布 Release”的问题。当前还没有解决：
 
-- 自动更新客户端接入
 - SmartScreen 信任积累
 - 证书采购与轮换
 - 多平台正式发布矩阵

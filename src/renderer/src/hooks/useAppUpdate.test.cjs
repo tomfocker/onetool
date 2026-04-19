@@ -53,6 +53,7 @@ const {
   createAppUpdateBridgeLifecycle,
   deriveAppUpdatePromptState,
   deriveAppUpdateStatusText,
+  resolveAppUpdateActionResult,
   resolveAppUpdatePendingAction
 } = loadUseAppUpdateModule()
 
@@ -175,6 +176,60 @@ test('deriveAppUpdateStatusText shows a compact checking label while a manual ch
   assert.equal(
     deriveAppUpdateStatusText(null, 'check'),
     '当前版本 未知版本 · 正在检查更新...'
+  )
+})
+
+test('resolveAppUpdateActionResult clears pending state and surfaces a resolved check failure response', () => {
+  assert.deepEqual(
+    toPlainObject(resolveAppUpdateActionResult(
+      { success: false, error: 'bridge check failed' },
+      {
+        status: 'idle',
+        currentVersion: '1.0.0',
+        latestVersion: null,
+        releaseNotes: null,
+        progressPercent: null,
+        errorMessage: null
+      }
+    )),
+    {
+      shouldClearPendingAction: true,
+      errorState: {
+        status: 'error',
+        currentVersion: '1.0.0',
+        latestVersion: null,
+        releaseNotes: null,
+        progressPercent: null,
+        errorMessage: 'bridge check failed'
+      }
+    }
+  )
+})
+
+test('resolveAppUpdateActionResult preserves previous metadata for resolved download or install failures', () => {
+  assert.deepEqual(
+    toPlainObject(resolveAppUpdateActionResult(
+      { success: false, error: 'download failed' },
+      {
+        status: 'available',
+        currentVersion: '1.0.0',
+        latestVersion: '1.2.0',
+        releaseNotes: 'Bug fixes',
+        progressPercent: 64,
+        errorMessage: null
+      }
+    )),
+    {
+      shouldClearPendingAction: true,
+      errorState: {
+        status: 'error',
+        currentVersion: '1.0.0',
+        latestVersion: '1.2.0',
+        releaseNotes: 'Bug fixes',
+        progressPercent: 64,
+        errorMessage: 'download failed'
+      }
+    }
   )
 })
 

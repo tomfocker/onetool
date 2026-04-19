@@ -234,6 +234,28 @@ test('checkForUpdates deduplicates overlapping calls and shares one updater requ
   assert.equal(secondResult.success, true)
 })
 
+test('initialize skips auto-check on packaged non-Windows runtimes', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'darwin',
+    isDevelopment: false,
+    getSettings: async () => ({ autoCheckForUpdates: true })
+  })
+
+  const result = await service.initialize()
+
+  assert.equal(result.success, true)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'idle')
+})
+
 test('downloadUpdate refuses before an update is available', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
   const service = new AppUpdateService()
@@ -350,6 +372,42 @@ test('initialize runs auto-check in packaged production when enabled', async () 
   assert.equal(service.getState().status, 'available')
 })
 
+test('default runtime detection treats a packaged Windows app as supported when NODE_ENV is unset', async () => {
+  const originalNodeEnv = process.env.NODE_ENV
+  delete process.env.NODE_ENV
+
+  try {
+    const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+      electronModule: {
+        app: {
+          isPackaged: true,
+          getVersion: () => '1.0.0'
+        }
+      }
+    })
+    autoUpdater.checkForUpdatesCalls = 0
+    autoUpdater.checkForUpdates = async () => {
+      autoUpdater.checkForUpdatesCalls += 1
+      return { updateInfo: null }
+    }
+    const service = new AppUpdateService({
+      platform: 'win32',
+      getSettings: async () => ({ autoCheckForUpdates: true })
+    })
+
+    const result = await service.initialize()
+
+    assert.equal(result.success, true)
+    assert.equal(autoUpdater.checkForUpdatesCalls, 1)
+  } finally {
+    if (originalNodeEnv === undefined) {
+      delete process.env.NODE_ENV
+    } else {
+      process.env.NODE_ENV = originalNodeEnv
+    }
+  }
+})
+
 test('initialize skips auto-check in packaged production when disabled', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
@@ -405,11 +463,66 @@ test('initialize can retry after a startup settings failure', async () => {
 test('shouldTriggerAutoCheckOnSettingsChange only triggers the transition from disabled to enabled in production', async () => {
   const { shouldTriggerAutoCheckOnSettingsChange } = loadAppUpdateServiceModule()
 
-  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false), true)
-  assert.equal(shouldTriggerAutoCheckOnSettingsChange(true, true, true, false), false)
-  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, false, true, false), false)
-  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, false, false), false)
-  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, true), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false, 'win32'), true)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(true, true, true, false, 'win32'), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, false, true, false, 'win32'), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, false, false, 'win32'), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, true, 'win32'), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false, 'darwin'), false)
+})
+
+test('registerAutoUpdateSettingsChangeHandler follows the real settings changed event path and gates checks to the supported runtime', async () => {
+  const { registerAutoUpdateSettingsChangeHandler } = loadAppUpdateServiceModule()
+  let win32Handler = null
+  let darwinHandler = null
+  let win32CheckCalls = 0
+  let darwinCheckCalls = 0
+
+  registerAutoUpdateSettingsChangeHandler({
+    settingsService: {
+      getSettings: () => ({ autoCheckForUpdates: false }),
+      on: (_event, handler) => {
+        win32Handler = handler
+      }
+    },
+    appUpdateService: {
+      checkForUpdates: async () => {
+        win32CheckCalls += 1
+      }
+    },
+    runtime: {
+      platform: 'win32',
+      isPackaged: true,
+      isDevelopment: false
+    }
+  })
+
+  registerAutoUpdateSettingsChangeHandler({
+    settingsService: {
+      getSettings: () => ({ autoCheckForUpdates: false }),
+      on: (_event, handler) => {
+        darwinHandler = handler
+      }
+    },
+    appUpdateService: {
+      checkForUpdates: async () => {
+        darwinCheckCalls += 1
+      }
+    },
+    runtime: {
+      platform: 'darwin',
+      isPackaged: true,
+      isDevelopment: false
+    }
+  })
+
+  win32Handler({ autoCheckForUpdates: false })
+  win32Handler({ autoCheckForUpdates: true })
+  win32Handler({ autoCheckForUpdates: true })
+  darwinHandler({ autoCheckForUpdates: true })
+
+  assert.equal(win32CheckCalls, 1)
+  assert.equal(darwinCheckCalls, 0)
 })
 
 test('initialize only runs one startup auto-check when called concurrently', async () => {

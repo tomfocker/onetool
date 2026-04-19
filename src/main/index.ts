@@ -19,7 +19,7 @@ import { screenRecorderService } from './services/ScreenRecorderService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
 import { screenshotService } from './services/ScreenshotService'
-import { appUpdateService, shouldTriggerAutoCheckOnSettingsChange } from './services/AppUpdateService'
+import { appUpdateService, registerAutoUpdateSettingsChangeHandler } from './services/AppUpdateService'
 import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
@@ -211,24 +211,18 @@ app.whenReady().then(() => {
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
 
-  let autoCheckForUpdatesEnabled = settingsService.getSettings().autoCheckForUpdates
-
   settingsService.on('changed', (newSettings) => {
     windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
+  })
 
-    const nextAutoCheckForUpdatesEnabled = Boolean(newSettings.autoCheckForUpdates)
-    if (
-      shouldTriggerAutoCheckOnSettingsChange(
-        autoCheckForUpdatesEnabled,
-        nextAutoCheckForUpdatesEnabled,
-        app.isPackaged,
-        is.dev
-      )
-    ) {
-      void appUpdateService.checkForUpdates()
+  registerAutoUpdateSettingsChangeHandler({
+    settingsService,
+    appUpdateService,
+    runtime: {
+      platform: process.platform,
+      isPackaged: app.isPackaged,
+      isDevelopment: is.dev
     }
-
-    autoCheckForUpdatesEnabled = nextAutoCheckForUpdatesEnabled
   })
 
   void appUpdateService.initialize()
