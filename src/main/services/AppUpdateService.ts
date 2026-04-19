@@ -433,7 +433,11 @@ export class AppUpdateService extends EventEmitter {
         const result = await this.autoUpdater.checkForUpdates()
 
         if (!result?.updateInfo) {
-          this.setState(createNotAvailableState(this.state.currentVersion))
+          if (shouldPreserveActionableCheckState(preCheckState)) {
+            this.setState(preCheckState)
+          } else {
+            this.setState(createNotAvailableState(this.state.currentVersion))
+          }
         }
 
         return { success: true }

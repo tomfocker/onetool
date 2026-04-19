@@ -309,6 +309,92 @@ test('failed re-check preserves downloaded update metadata', async () => {
   })
 })
 
+test('successful re-check preserves a downloaded update when no new updateInfo is returned', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-not-available')
+    return { updateInfo: null }
+  }
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'downloaded',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: null
+  })
+})
+
+test('successful re-check preserves an in-flight download when no new updateInfo is returned', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  await service.checkForUpdates()
+  autoUpdater.emit('download-progress', { percent: 64.8 })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-not-available')
+    return { updateInfo: null }
+  }
+
+  const result = await service.checkForUpdates()
+  autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'downloaded',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: null
+  })
+})
+
 test('checkForUpdates deduplicates overlapping calls and shares one updater request', async () => {
   let checkCalls = 0
   let releaseCheck
