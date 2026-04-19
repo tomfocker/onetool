@@ -559,7 +559,7 @@ export class AppUpdateService extends EventEmitter {
       } catch (error) {
         const message = getErrorMessage(error)
         const errorStateBase = shouldPreserveActionableCheckState(preCheckState)
-          ? preCheckState
+          ? pickStrongerActionableState(preCheckState, this.state)
           : this.state
         this.setState(createErrorStateFromCurrentState(errorStateBase, message))
         return { success: false, error: message }

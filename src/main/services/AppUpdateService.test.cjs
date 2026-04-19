@@ -309,6 +309,47 @@ test('failed re-check preserves downloaded update metadata', async () => {
   })
 })
 
+test('failed re-check preserves stronger actionable metadata emitted during the check', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  await service.checkForUpdates()
+  autoUpdater.emit('download-progress', { percent: 64.8 })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+    throw new Error('network down')
+  }
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /network down/)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'error',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: 'network down'
+  })
+})
+
 test('successful re-check preserves a downloaded update when no new updateInfo is returned', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
