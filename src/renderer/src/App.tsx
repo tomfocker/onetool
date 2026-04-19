@@ -7,6 +7,7 @@ import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
 import { ScreenshotSelectionOverlay } from '@/tools/SuperScreenshotTool'
+import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
 import { NotificationContainer } from '@/components/NotificationContainer'
@@ -126,6 +127,7 @@ function AppContent(): React.JSX.Element {
         </main>
       </div>
       <NotificationContainer />
+      <AppUpdatePrompt />
     </div>
   )
 }
