@@ -239,11 +239,54 @@ function shouldPreserveActionableCheckState(state: UpdateState): boolean {
   return hasActiveDownload(state) || state.status === 'downloaded'
 }
 
+function shouldPreserveTransientActionableState(state: UpdateState): boolean {
+  return state.status === 'downloading' || state.status === 'downloaded'
+}
+
 function shouldPreserveSameVersionActionableState(state: UpdateState, latestVersion: string): boolean {
   return (
     (state.status === 'downloading' || state.status === 'downloaded') &&
     state.latestVersion === latestVersion
   )
+}
+
+function getActionableStateStrength(state: UpdateState): number {
+  if (state.status === 'downloaded') {
+    return 3
+  }
+
+  if (state.status === 'downloading') {
+    return 2
+  }
+
+  if (state.status === 'available') {
+    return 1
+  }
+
+  return 0
+}
+
+function pickStrongerActionableState(baselineState: UpdateState, currentState: UpdateState): UpdateState {
+  if (!baselineState.latestVersion || baselineState.latestVersion !== currentState.latestVersion) {
+    return baselineState
+  }
+
+  const baselineStrength = getActionableStateStrength(baselineState)
+  const currentStrength = getActionableStateStrength(currentState)
+
+  if (currentStrength > baselineStrength) {
+    return currentState
+  }
+
+  if (
+    currentStrength === baselineStrength &&
+    currentStrength === 2 &&
+    (currentState.progressPercent ?? 0) > (baselineState.progressPercent ?? 0)
+  ) {
+    return currentState
+  }
+
+  return baselineState
 }
 
 function createSameVersionActionableState(state: UpdateState, releaseNotes: string | null): UpdateState {
@@ -283,6 +326,8 @@ export class AppUpdateService extends EventEmitter {
   private checkForUpdatesPromise: Promise<IpcResponse> | null = null
 
   private state: UpdateState
+
+  private activeCheckBaselineState: UpdateState | null = null
 
   private beforeQuitAndInstall: () => void | (() => void) = () => undefined
 
@@ -329,8 +374,27 @@ export class AppUpdateService extends EventEmitter {
     )
   }
 
+  private getPreservedSameVersionState(latestVersion: string): UpdateState | null {
+    if (shouldPreserveSameVersionActionableState(this.state, latestVersion)) {
+      return this.state
+    }
+
+    if (
+      this.activeCheckBaselineState &&
+      shouldPreserveSameVersionActionableState(this.activeCheckBaselineState, latestVersion)
+    ) {
+      return this.activeCheckBaselineState
+    }
+
+    return null
+  }
+
   private bindUpdaterEvents(): void {
     this.autoUpdater.on('checking-for-update', () => {
+      if (this.activeCheckBaselineState) {
+        return
+      }
+
       this.setState(createCheckingState(this.state.currentVersion))
     })
 
@@ -340,10 +404,25 @@ export class AppUpdateService extends EventEmitter {
         return
       }
 
+      const preservedState = this.getPreservedSameVersionState(latestVersion)
+      if (preservedState) {
+        this.setState(
+          createSameVersionActionableState(
+            preservedState,
+            normalizeReleaseNotes(info?.releaseNotes) ?? preservedState.releaseNotes
+          )
+        )
+        return
+      }
+
       this.updateFromAvailable(latestVersion, normalizeReleaseNotes(info?.releaseNotes) ?? this.state.releaseNotes)
     })
 
     this.autoUpdater.on('update-not-available', () => {
+      if (this.activeCheckBaselineState) {
+        return
+      }
+
       this.setState(createNotAvailableState(this.state.currentVersion))
     })
 
@@ -453,16 +532,24 @@ export class AppUpdateService extends EventEmitter {
       const preCheckState = this.getState()
 
       try {
-        this.setState(createCheckingState(this.state.currentVersion))
-        const result = await this.autoUpdater.checkForUpdates()
-        const latestVersion = result?.updateInfo?.version?.trim()
-        const releaseNotes = normalizeReleaseNotes(result?.updateInfo?.releaseNotes) ?? preCheckState.releaseNotes
+        this.activeCheckBaselineState = shouldPreserveTransientActionableState(preCheckState)
+          ? preCheckState
+          : null
 
-        if (latestVersion && shouldPreserveSameVersionActionableState(preCheckState, latestVersion)) {
-          this.setState(createSameVersionActionableState(preCheckState, releaseNotes))
+        if (!this.activeCheckBaselineState) {
+          this.setState(createCheckingState(this.state.currentVersion))
+        }
+
+        const result = await this.autoUpdater.checkForUpdates()
+        const strongestPreservedState = pickStrongerActionableState(preCheckState, this.state)
+        const latestVersion = result?.updateInfo?.version?.trim()
+        const releaseNotes = normalizeReleaseNotes(result?.updateInfo?.releaseNotes) ?? strongestPreservedState.releaseNotes
+
+        if (latestVersion && shouldPreserveSameVersionActionableState(strongestPreservedState, latestVersion)) {
+          this.setState(createSameVersionActionableState(strongestPreservedState, releaseNotes))
         } else if (!result?.updateInfo) {
           if (shouldPreserveActionableCheckState(preCheckState)) {
-            this.setState(preCheckState)
+            this.setState(strongestPreservedState)
           } else {
             this.setState(createNotAvailableState(this.state.currentVersion))
           }
@@ -477,6 +564,7 @@ export class AppUpdateService extends EventEmitter {
         this.setState(createErrorStateFromCurrentState(errorStateBase, message))
         return { success: false, error: message }
       } finally {
+        this.activeCheckBaselineState = null
         this.checkForUpdatesPromise = null
       }
     })()

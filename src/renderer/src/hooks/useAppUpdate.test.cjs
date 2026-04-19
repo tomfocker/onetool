@@ -217,7 +217,8 @@ test('resolveAppUpdateActionResult preserves previous metadata for resolved down
         releaseNotes: 'Bug fixes',
         progressPercent: 64,
         errorMessage: null
-      }
+      },
+      'download'
     )),
     {
       shouldClearPendingAction: true,
@@ -228,6 +229,34 @@ test('resolveAppUpdateActionResult preserves previous metadata for resolved down
         releaseNotes: 'Bug fixes',
         progressPercent: 64,
         errorMessage: 'download failed'
+      }
+    }
+  )
+})
+
+test('resolveAppUpdateActionResult keeps a retryable downloaded state for resolved install failures', () => {
+  assert.deepEqual(
+    toPlainObject(resolveAppUpdateActionResult(
+      { success: false, error: 'install failed' },
+      {
+        status: 'downloaded',
+        currentVersion: '1.0.0',
+        latestVersion: '1.2.0',
+        releaseNotes: 'Bug fixes',
+        progressPercent: 100,
+        errorMessage: null
+      },
+      'install'
+    )),
+    {
+      shouldClearPendingAction: true,
+      errorState: {
+        status: 'downloaded',
+        currentVersion: '1.0.0',
+        latestVersion: '1.2.0',
+        releaseNotes: 'Bug fixes',
+        progressPercent: 100,
+        errorMessage: null
       }
     }
   )
@@ -255,7 +284,8 @@ test('resolveAppUpdateActionResult uses the latest state when a bridge update ar
   assert.deepEqual(
     toPlainObject(resolveAppUpdateActionResult(
       { success: false, error: 'download failed' },
-      () => latestState
+      () => latestState,
+      'download'
     )),
     {
       shouldClearPendingAction: true,

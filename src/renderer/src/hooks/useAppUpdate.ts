@@ -94,7 +94,8 @@ export function resolveAppUpdatePendingAction(
 
 export function resolveAppUpdateActionResult(
   result: { success?: boolean; error?: unknown } | null | undefined,
-  previousState?: UpdateState | null | (() => UpdateState | null | undefined)
+  previousState?: UpdateState | null | (() => UpdateState | null | undefined),
+  action: AppUpdateAction = 'check'
 ): {
   shouldClearPendingAction: boolean
   errorState: UpdateState | null
@@ -104,6 +105,13 @@ export function resolveAppUpdateActionResult(
       typeof previousState === 'function'
         ? previousState()
         : previousState
+
+    if (action === 'install' && resolvedPreviousState?.status === 'downloaded') {
+      return {
+        shouldClearPendingAction: true,
+        errorState: resolvedPreviousState
+      }
+    }
 
     return {
       shouldClearPendingAction: true,
@@ -293,7 +301,7 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('downloadUpdate')()
-      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current, 'download')
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
         applyUpdateState(completion.errorState)
@@ -314,7 +322,7 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('quitAndInstall')()
-      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current, 'install')
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
         applyUpdateState(completion.errorState)
@@ -335,7 +343,7 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('checkForUpdates')()
-      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current, 'check')
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
         applyUpdateState(completion.errorState)

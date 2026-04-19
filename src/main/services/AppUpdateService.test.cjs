@@ -485,6 +485,112 @@ test('same-version update-available during re-check keeps download progress and 
   assert.equal(service.getState().progressPercent, 100)
 })
 
+test('re-check keeps an in-flight download actionable before the updater promise settles', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+  let releaseCheck
+  const deferred = new Promise((resolve) => {
+    releaseCheck = resolve
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  await service.checkForUpdates()
+  autoUpdater.emit('download-progress', { percent: 64.8 })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-not-available')
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+    await deferred
+    return { updateInfo: null }
+  }
+
+  const recheckPromise = service.checkForUpdates()
+
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'downloaded',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: null
+  })
+
+  releaseCheck()
+  const result = await recheckPromise
+
+  assert.equal(result.success, true)
+  assert.equal(service.getState().status, 'downloaded')
+})
+
+test('re-check keeps a downloaded update installable before the updater promise settles', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+  let releaseCheck
+  const deferred = new Promise((resolve) => {
+    releaseCheck = resolve
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    await deferred
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  const recheckPromise = service.checkForUpdates()
+
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'downloaded',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: null
+  })
+
+  releaseCheck()
+  const result = await recheckPromise
+
+  assert.equal(result.success, true)
+  assert.equal(service.getState().status, 'downloaded')
+})
+
 test('checkForUpdates deduplicates overlapping calls and shares one updater request', async () => {
   let checkCalls = 0
   let releaseCheck
