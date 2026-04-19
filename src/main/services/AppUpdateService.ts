@@ -476,6 +476,7 @@ export class AppUpdateService extends EventEmitter {
       return { success: false, error: '没有可安装的更新' }
     }
 
+    const preInstallState = this.getState()
     let rollbackQuitPreparation: (() => void) | undefined
 
     try {
@@ -486,7 +487,7 @@ export class AppUpdateService extends EventEmitter {
     } catch (error) {
       rollbackQuitPreparation?.()
       const message = getErrorMessage(error)
-      this.setState(createErrorStateFromCurrentState(this.state, message))
+      this.setState(preInstallState)
       return { success: false, error: message }
     }
   }

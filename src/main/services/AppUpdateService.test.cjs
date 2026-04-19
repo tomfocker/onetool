@@ -697,7 +697,7 @@ test('downloadUpdate preserves existing metadata when the updater throws', async
   })
 })
 
-test('quitAndInstall preserves existing metadata when installation fails', async () => {
+test('quitAndInstall preserves a retryable downloaded state when installation fails', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
       app: {
@@ -727,18 +727,26 @@ test('quitAndInstall preserves existing metadata when installation fails', async
 
   await service.checkForUpdates()
   await service.downloadUpdate()
-  const result = await service.quitAndInstall()
+  const firstResult = await service.quitAndInstall()
 
-  assert.equal(result.success, false)
-  assert.match(result.error, /install failed/)
+  autoUpdater.quitAndInstall = () => {
+    autoUpdater.quitAndInstallCalls += 1
+  }
+
+  const retryResult = await service.quitAndInstall()
+
+  assert.equal(firstResult.success, false)
+  assert.match(firstResult.error, /install failed/)
   assert.deepEqual(toPlainObject(service.getState()), {
-    status: 'error',
+    status: 'downloaded',
     currentVersion: '1.0.0',
     latestVersion: '1.2.3',
     releaseNotes: 'Release notes',
     progressPercent: 100,
-    errorMessage: 'install failed'
+    errorMessage: null
   })
+  assert.equal(retryResult.success, true)
+  assert.equal(autoUpdater.quitAndInstallCalls, 1)
 })
 
 test('quitAndInstall prepares the app to quit before invoking the updater install flow', async () => {
