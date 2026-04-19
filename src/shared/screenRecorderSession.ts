@@ -89,8 +89,8 @@ export function nudgeRecorderBounds(
   return nextBounds
 }
 
-export function isRecorderSelectionValid(bounds: RecorderBounds): boolean {
-  return bounds.width >= MIN_RECORDER_SIZE && bounds.height >= MIN_RECORDER_SIZE
+export function isRecorderSelectionValid(bounds: RecorderBounds, minSize = MIN_RECORDER_SIZE): boolean {
+  return bounds.width >= minSize && bounds.height >= minSize
 }
 
 export function ensureRecorderOutputPath(outputPath: string, format: 'mp4' | 'gif'): string {

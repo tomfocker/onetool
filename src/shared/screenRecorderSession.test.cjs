@@ -31,8 +31,9 @@ test('nudgeRecorderBounds nudges a single field and respects the display and min
   )
 })
 
-test('isRecorderSelectionValid rejects bounds smaller than the minimum size', () => {
-  assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 63, height: 64 }), false)
+test('isRecorderSelectionValid respects the minimum size override', () => {
+  assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 79, height: 80 }, 80), false)
+  assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 80, height: 80 }, 80), true)
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 64, height: 64 }), true)
 })
 
