@@ -8,6 +8,7 @@ export interface AppSettings {
   screenshotSavePath: string
   autoSaveScreenshot: boolean
   clipboardHotkey: string
+  minimizeToTray: boolean
 
   // 截图翻译大模型 API 配置
   translateApiUrl: string

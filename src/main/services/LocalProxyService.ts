@@ -130,7 +130,10 @@ Set-ItemProperty -Path '${INTERNET_SETTINGS_PATH}' -Name ProxyOverride -Value '$
 ${refreshWinInetScript()}
 Write-Output 'ok'
 `
-      await execPowerShellEncoded(script)
+      const output = await execPowerShellEncoded(script)
+      if (output.trim() !== 'ok') {
+        return { success: false, error: '代理设置应用失败' }
+      }
       return this.getStatus()
     } catch (error) {
       logger.error('[LocalProxyService] setConfig failed', error)
@@ -146,7 +149,10 @@ Set-ItemProperty -Path '${INTERNET_SETTINGS_PATH}' -Name ProxyEnable -Value 0
 ${refreshWinInetScript()}
 Write-Output 'ok'
 `
-      await execPowerShellEncoded(script)
+      const output = await execPowerShellEncoded(script)
+      if (output.trim() !== 'ok') {
+        return { success: false, error: '代理设置应用失败' }
+      }
       return this.getStatus()
     } catch (error) {
       logger.error('[LocalProxyService] disable failed', error)

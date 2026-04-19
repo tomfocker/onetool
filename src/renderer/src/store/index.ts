@@ -90,8 +90,8 @@ if (typeof document !== 'undefined') {
 }
 
 // Global Notification Listener mapping (once)
-if (typeof window !== 'undefined' && window.electron?.ipcRenderer) {
-    window.electron.ipcRenderer.on('app-notification', (data: any) => {
+if (typeof window !== 'undefined' && window.electron?.app) {
+    window.electron.app.onNotification((data: AppNotification) => {
         useGlobalStore.getState().showNotification(data)
     })
 }

@@ -2,18 +2,7 @@ import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { EventEmitter } from 'events'
-
-export interface AppSettings {
-  recorderHotkey: string
-  screenshotHotkey: string
-  floatBallHotkey: string
-  clipboardHotkey: string
-  screenshotSavePath: string
-  autoSaveScreenshot: boolean
-  translateApiUrl: string
-  translateApiKey: string
-  translateModel: string
-}
+import type { AppSettings } from '../../shared/types'
 
 export class SettingsService extends EventEmitter {
   private settings: AppSettings = {
@@ -23,6 +12,7 @@ export class SettingsService extends EventEmitter {
     clipboardHotkey: 'Alt+Shift+C',
     screenshotSavePath: '',
     autoSaveScreenshot: false,
+    minimizeToTray: true,
     translateApiUrl: 'https://api.openai.com/v1',
     translateApiKey: '',
     translateModel: 'gpt-4o'

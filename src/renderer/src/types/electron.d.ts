@@ -15,17 +15,20 @@ import {
   WslBackupInfo,
   WslOverview,
   WslRestoreMode,
-  WslSpaceReclaimResult
+  WslSpaceReclaimResult,
+  AppNotification
 } from '../../../shared/types'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 
 declare global {
   interface Window {
     electron: {
-      ipcRenderer: {
-        on: (channel: string, func: (...args: any[]) => void) => () => void
-        send: (channel: string, ...args: any[]) => void
-        invoke: (channel: string, ...args: any[]) => Promise<any>
+      app: {
+        onOpenTool: (callback: (toolId: string) => void) => () => void
+        onNotification: (callback: (data: AppNotification) => void) => () => void
+      }
+      doctor: {
+        runAudit: () => Promise<IpcResponse<any>>
       }
       webUtils: {
         getPathForFile: (file: File) => string
@@ -35,6 +38,8 @@ declare global {
         stop: () => Promise<IpcResponse>
         updateConfig: (config: { interval?: number; button?: string; shortcut?: string }) => Promise<IpcResponse>
         getStatus: () => Promise<IpcResponse<{ running: boolean; config: { interval: number; button: string; shortcut?: string } }>>
+        onStarted: (callback: () => void) => () => void
+        onStopped: (callback: () => void) => () => void
       }
       autoStart: {
         getStatus: () => Promise<IpcResponse<{ enabled: boolean }>>
@@ -74,6 +79,8 @@ declare global {
         copyImage: (dataUrl: string) => void
         onChange: (callback: (item: ClipboardItem) => void) => () => void
         onHistory: (callback: (history: ClipboardItem[]) => void) => () => void
+        getHotkey: () => Promise<IpcResponse<string>>
+        setHotkey: (hotkey: string) => Promise<IpcResponse>
       }
       colorPicker: {
         pick: () => Promise<IpcResponse<{ color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number } }>>
@@ -115,6 +122,10 @@ declare global {
         copyToClipboard: (dataUrl: string) => Promise<IpcResponse>
         getHotkey: () => Promise<IpcResponse<string>>
         setHotkey: (hotkey: string) => Promise<IpcResponse>
+        openSelection: (restrictBounds?: RecorderBounds | null, enhanced?: boolean) => Promise<IpcResponse>
+        closeSelection: (bounds: RecorderBounds | null) => Promise<IpcResponse>
+        onTrigger: (callback: () => void) => () => void
+        onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
       }
       screenRecorder: {
         setHotkey: (hotkey: string) => Promise<IpcResponse>
@@ -127,6 +138,8 @@ declare global {
         selectOutput: () => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
         prepareSelection: (bounds: RecorderBounds) => Promise<IpcResponse<RecorderSelectionPreview>>
         expandPanel: () => Promise<IpcResponse>
+        openSelection: () => Promise<IpcResponse>
+        closeSelection: (bounds: RecorderBounds | null) => Promise<IpcResponse>
         startRecording: (config: {
           outputPath: string
           format: string
@@ -146,6 +159,7 @@ declare global {
           error?: string
         }) => void) => () => void
         onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => () => void
+        onIndicatorTimeUpdated: (callback: (time: string) => void) => () => void
       }
       screenSaver: {
         start: () => Promise<IpcResponse>
@@ -177,6 +191,8 @@ declare global {
         showWindow: () => void
         setVisible: (visible: boolean) => void
         getState: () => Promise<IpcResponse<{ exists: boolean; visible: boolean }>>
+        setHotkey: (hotkey: string) => Promise<IpcResponse>
+        onVisibilityChanged: (callback: (visible: boolean) => void) => () => void
       }
       translate: {
         translateImage: (base64Image: string) => Promise<IpcResponse<Array<{

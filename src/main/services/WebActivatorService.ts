@@ -33,13 +33,13 @@ export class WebActivatorService {
 
   async getWindowList(): Promise<IpcResponse<{ windows: any[] }>> {
     const allResults: any[] = [];
-    let hasSuccessfulSource = false
+    let successfulSourceCount = 0
     try {
       const winScript = `Get-Process | Where-Object { $_.MainWindowHandle -ne 0 -and $_.MainWindowTitle } | ForEach-Object { @{ id = $_.Id; title = $_.MainWindowTitle; processName = $_.ProcessName; hwnd = $_.MainWindowHandle.ToInt64(); type = 'window' } } | ConvertTo-Json -Compress`;
       const winResult = await execPowerShell(winScript);
-      hasSuccessfulSource = true
-      if (winResult) {
+      if (winResult.trim()) {
         const parsed = JSON.parse(winResult);
+        successfulSourceCount += 1
         allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
       }
     } catch (error) {
@@ -88,11 +88,11 @@ export class WebActivatorService {
         Write-Output "---TAB_JSON_END---"
       `;
       const tabResult = await execPowerShellEncoded(tabScript, 10000);
-      hasSuccessfulSource = true
       const match = tabResult.match(/---TAB_JSON_START---\s*(.*?)\s*---TAB_JSON_END---/s);
       if (match && match[1]) {
         try {
           const parsed = JSON.parse(match[1].trim());
+          successfulSourceCount += 1
           allResults.push(...(Array.isArray(parsed) ? parsed : [parsed]));
         } catch (e) { console.error('WebActivatorService: Tab JSON Parse Error:', e); }
       }
@@ -100,7 +100,7 @@ export class WebActivatorService {
       console.error('WebActivatorService: Tab discovery failed:', error)
     }
 
-    if (!hasSuccessfulSource) {
+    if (successfulSourceCount === 0) {
       return { success: false, error: '无法获取窗口列表' }
     }
 
@@ -290,6 +290,10 @@ export class WebActivatorService {
   }
 
   async checkVisibility(configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>): Promise<IpcResponse<{ results: boolean[] }>> {
+    if (configs.length === 0) {
+      return { success: true, data: { results: [] } }
+    }
+
     const configBase64 = Buffer.from(JSON.stringify(configs)).toString('base64');
     const script = `
       Add-Type @"
@@ -354,7 +358,18 @@ export class WebActivatorService {
     `;
     try {
       const output = await execPowerShellEncoded(script, 8000)
+      if (!output.trim()) {
+        return { success: false, error: '无法检测窗口激活状态' }
+      }
+
       const parts = output.trim().split(',')
+      if (
+        parts.length !== configs.length ||
+        parts.some((part) => part.trim() !== 'true' && part.trim() !== 'false')
+      ) {
+        return { success: false, error: '无法检测窗口激活状态' }
+      }
+
       const results = configs.map((_, i) => parts[i]?.trim() === 'true')
       return { success: true, data: { results } }
     } catch (error) {

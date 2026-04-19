@@ -13,8 +13,16 @@ import { NotificationContainer } from '@/components/NotificationContainer'
 
 // 自动收集 components 和 tools 目录下的所有常规页面和工具组件
 // 使用 eager: false 保持代码分割懒加载策略
-const componentModules = import.meta.glob('./components/*.tsx')
-const toolModules = import.meta.glob('./tools/*.tsx')
+const componentModules = import.meta.glob([
+  './components/ConfigChecker.tsx',
+  './components/SettingsPage.tsx',
+  './components/WebActivator.tsx'
+])
+const toolModules = import.meta.glob([
+  './tools/*.tsx',
+  '!./tools/ScreenRecorderTool.tsx',
+  '!./tools/SuperScreenshotTool.tsx'
+])
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
@@ -71,7 +79,7 @@ function AppContent(): React.JSX.Element {
     window.addEventListener('hashchange', handleHashChange)
 
     // 注册全局系统进程唤出特定工具界面的 IPC 监听
-    const unsubOpenTool = window.electron.ipcRenderer.on('open-tool', (toolId: string) => {
+    const unsubOpenTool = window.electron.app.onOpenTool((toolId: string) => {
       setCurrentPage(toolId)
       setRetryKey(0)
       setSearchQuery('')

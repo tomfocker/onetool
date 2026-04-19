@@ -216,12 +216,11 @@ export function useScreenRecorder() {
     }
 
     setDraftMode('area')
-    const ipcRenderer = (window.electron as typeof window.electron & { ipcRenderer?: { invoke: (channel: string) => Promise<any> } }).ipcRenderer
-    if (!ipcRenderer?.invoke) {
+    if (!window.electron?.screenRecorder?.openSelection) {
       return { success: false, error: '当前环境不支持框选区域' }
     }
 
-    return ipcRenderer.invoke('recorder-selection-open')
+    return window.electron.screenRecorder.openSelection()
   }, [session.status])
 
   const updateSelectionDraftField = useCallback((field: RecorderSelectionField, value: number) => {

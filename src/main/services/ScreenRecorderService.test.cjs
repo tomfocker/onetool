@@ -18,6 +18,28 @@ function loadScreenRecorderServiceModule() {
   }).outputText
 
   const module = { exports: {} }
+  const browserWindowInstances = []
+
+  class BrowserWindowMock {
+    constructor(options) {
+      this.options = options
+      this.loadedUrls = []
+      this.webContents = {
+        send() {}
+      }
+      browserWindowInstances.push(this)
+    }
+
+    loadURL(url) {
+      this.loadedUrls.push(url)
+    }
+
+    setVisibleOnAllWorkspaces() {}
+    setIgnoreMouseEvents() {}
+    isDestroyed() { return false }
+    close() {}
+  }
+
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
       return {
@@ -25,10 +47,13 @@ function loadScreenRecorderServiceModule() {
           isPackaged: false,
           getPath: () => 'C:/tmp'
         },
-        BrowserWindow: function BrowserWindow() {},
+        BrowserWindow: BrowserWindowMock,
         dialog: {},
         desktopCapturer: {},
-        screen: {}
+        screen: {
+          getPrimaryDisplay: () => ({ bounds: { x: 0, y: 0, width: 1920, height: 1080 } }),
+          getAllDisplays: () => [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]
+        }
       }
     }
 
@@ -78,6 +103,19 @@ function loadScreenRecorderServiceModule() {
       }
     }
 
+    if (specifier === '../utils/windowSecurity') {
+      return {
+        createIsolatedPreloadWebPreferences(preload) {
+          return {
+            preload,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+          }
+        }
+      }
+    }
+
     return require(specifier)
   }
 
@@ -94,10 +132,10 @@ function loadScreenRecorderServiceModule() {
     clearTimeout
   }, { filename: filePath })
 
-  return module.exports
+  return { ...module.exports, browserWindowInstances }
 }
 
-const { ScreenRecorderService } = loadScreenRecorderServiceModule()
+const { ScreenRecorderService, browserWindowInstances } = loadScreenRecorderServiceModule()
 
 test('expandPanel refuses to restore the main window while recording is active', () => {
   const recorder = new ScreenRecorderService()
@@ -123,4 +161,34 @@ test('expandPanel refuses to restore the main window while recording is active',
   assert.equal(result.success, false)
   assert.equal(result.error, '录制中无法展开主面板')
   assert.deepEqual(calls, [])
+})
+
+test('indicator and border windows use isolated preload preferences', () => {
+  browserWindowInstances.length = 0
+  const recorder = new ScreenRecorderService()
+
+  recorder.createIndicatorWindow({ x: 10, y: 20, width: 300, height: 200 })
+  recorder.createBorderWindow({ x: 10, y: 20, width: 300, height: 200 })
+
+  assert.equal(browserWindowInstances.length, 2)
+  assert.equal(browserWindowInstances[0].options.webPreferences.contextIsolation, true)
+  assert.equal(browserWindowInstances[0].options.webPreferences.nodeIntegration, false)
+  assert.equal(browserWindowInstances[0].options.webPreferences.sandbox, true)
+  assert.equal(browserWindowInstances[1].options.webPreferences.contextIsolation, true)
+  assert.equal(browserWindowInstances[1].options.webPreferences.nodeIntegration, false)
+  assert.equal(browserWindowInstances[1].options.webPreferences.sandbox, true)
+})
+
+test('indicator HTML uses preload bridge instead of require electron', () => {
+  browserWindowInstances.length = 0
+  const recorder = new ScreenRecorderService()
+
+  recorder.createIndicatorWindow({ x: 10, y: 20, width: 300, height: 200 })
+
+  const htmlDataUrl = browserWindowInstances[0].loadedUrls[0]
+  const html = decodeURIComponent(htmlDataUrl.replace('data:text/html;charset=utf-8,', ''))
+
+  assert.equal(html.includes("require('electron')"), false)
+  assert.equal(html.includes('window.electron.screenRecorder.stopRecording()'), true)
+  assert.equal(html.includes('window.electron.screenRecorder.onIndicatorTimeUpdated('), true)
 })

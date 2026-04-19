@@ -19,6 +19,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
 
   const module = { exports: {} }
   const browserWindowInstances = []
+  const trayInstances = []
 
   class BrowserWindowMock {
     constructor(options) {
@@ -57,7 +58,20 @@ function loadWindowManagerServiceModule(overrides = {}) {
 
   const electronModule = overrides.electronModule || {
     BrowserWindow: BrowserWindowMock,
-    Tray: function Tray() {},
+    Tray: class TrayMock {
+      constructor(icon) {
+        this.icon = icon
+        this.destroyed = false
+        trayInstances.push(this)
+      }
+
+      setToolTip() {}
+      setContextMenu() {}
+      on() {}
+      destroy() {
+        this.destroyed = true
+      }
+    },
     Menu: { buildFromTemplate: () => ({}) },
     nativeImage: { createFromPath: () => ({ resize: () => ({}) }), createEmpty: () => ({}) },
     app: { isPackaged: false },
@@ -80,6 +94,19 @@ function loadWindowManagerServiceModule(overrides = {}) {
       return {}
     }
 
+    if (specifier === '../utils/windowSecurity') {
+      return {
+        createIsolatedPreloadWebPreferences(preload) {
+          return {
+            preload,
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
+          }
+        }
+      }
+    }
+
     return require(specifier)
   }
 
@@ -94,7 +121,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
     Buffer
   }, { filename: filePath })
 
-  return { ...module.exports, browserWindowInstances }
+  return { ...module.exports, browserWindowInstances, trayInstances }
 }
 
 test('createFloatBallWindow creates a focusable float ball window for native drag and drop', () => {
@@ -107,4 +134,19 @@ test('createFloatBallWindow creates a focusable float ball window for native dra
   assert.equal(browserWindowInstances[0].options.focusable, true)
   assert.equal(browserWindowInstances[0].options.transparent, true)
   assert.equal(browserWindowInstances[0].options.skipTaskbar, true)
+  assert.equal(browserWindowInstances[0].options.webPreferences.contextIsolation, true)
+  assert.equal(browserWindowInstances[0].options.webPreferences.nodeIntegration, false)
+  assert.equal(browserWindowInstances[0].options.webPreferences.sandbox, true)
+})
+
+test('setTrayEnabled creates and destroys the tray idempotently', () => {
+  const { WindowManagerService, trayInstances } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.setTrayEnabled(true)
+  service.setTrayEnabled(true)
+  assert.equal(trayInstances.length, 1)
+
+  service.setTrayEnabled(false)
+  assert.equal(trayInstances[0].destroyed, true)
 })

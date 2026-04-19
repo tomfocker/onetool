@@ -7,6 +7,7 @@ import {
   mapCaptureSourcesToDisplays,
   PickedColor
 } from '../../shared/colorPicker'
+import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 export class ColorPickerService {
   private mainWindow: BrowserWindow | null = null
@@ -149,10 +150,7 @@ export class ColorPickerService {
               show: false,
               fullscreenable: true,
               kiosk: true,
-              webPreferences: {
-                preload: join(__dirname, '../preload/index.js'),
-                sandbox: false
-              }
+              webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
             })
 
             win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })

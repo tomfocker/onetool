@@ -5,6 +5,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { IpcResponse } from '../../shared/types'
 import { settingsService } from './SettingsService'
+import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 export class ScreenshotService {
   private selectionWindows: BrowserWindow[] = []
@@ -170,10 +171,7 @@ export class ScreenshotService {
         backgroundColor: '#00000000',
         fullscreenable: true,
         kiosk: true,
-        webPreferences: {
-          preload: join(__dirname, '../preload/index.js'),
-          sandbox: false
-        }
+        webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
       })
 
       win.setIgnoreMouseEvents(false)

@@ -19,6 +19,9 @@ import { screenRecorderService } from './services/ScreenRecorderService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
 import { screenshotService } from './services/ScreenshotService'
+import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
+import { logger } from './utils/logger'
+import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -65,10 +68,7 @@ function createWindow(): void {
     frame: false,
     autoHideMenuBar: true,
     icon: windowIcon,
-    webPreferences: {
-      preload: join(__dirname, '../preload/index.js'),
-      sandbox: false
-    }
+    webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
   })
 
   // Initialize Services with MainWindow
@@ -92,21 +92,39 @@ function createWindow(): void {
   })
 
   mainWindow.on('close', (event) => {
-    if (windowManagerService.getIsQuitting()) {
-      mainWindow = null
-    } else {
+    const minimizeToTray = settingsService.getSettings().minimizeToTray
+
+    if (shouldHideMainWindowOnClose({
+      isQuitting: windowManagerService.getIsQuitting(),
+      minimizeToTray
+    })) {
       event.preventDefault()
       mainWindow?.hide()
     }
   })
 
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
+
+  mainWindow.on('unresponsive', () => {
+    logger.error('Main window became unresponsive')
+  })
+
+  mainWindow.webContents.on('render-process-gone', (_event, details) => {
+    logger.error('Renderer process gone', details)
+  })
+
   // Capture unhandled exceptions
   process.on('uncaughtException', (error) => {
-    console.error('Uncaught Exception:', error)
+    logger.error('Uncaught Exception', error)
   })
 
   process.on('unhandledRejection', (reason, promise) => {
-    console.error('Unhandled Rejection at:', promise, 'reason:', reason)
+    logger.error('Unhandled Rejection', {
+      promise: String(promise),
+      reason: serializeUnhandledReason(reason)
+    })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -187,8 +205,12 @@ app.whenReady().then(() => {
 
   // Global Initializations
   createWindow()
-  // windowManagerService.createTray() // Optional: enable if tray is needed
+  windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
+
+  settingsService.on('changed', (newSettings) => {
+    windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
+  })
 
   autoClickerService.registerShortcuts()
   // clipboardService.startWatcher() // 移除此处的重复调用，改为在 ready-to-show 后启动
@@ -206,6 +228,10 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
+})
+
+app.on('child-process-gone', (_event, details) => {
+  logger.error('Child process gone', details)
 })
 
 app.on('will-quit', () => {

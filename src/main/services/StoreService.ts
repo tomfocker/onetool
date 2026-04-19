@@ -37,6 +37,7 @@ export class StoreService extends EventEmitter {
         autoSaveScreenshot: false,
         floatBallHotkey: 'Alt+Shift+F',
         clipboardHotkey: 'Alt+Shift+V',
+        minimizeToTray: true,
         translateApiUrl: '',
         translateApiKey: '',
         translateModel: ''

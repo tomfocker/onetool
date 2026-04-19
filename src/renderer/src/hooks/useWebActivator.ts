@@ -5,6 +5,23 @@ export { type ActivatorConfig, type WindowInfo, type TargetType }
 
 let hasRegisteredInitialShortcuts = false
 
+export function deriveWindowListFetchState(result: {
+  success: boolean
+  data?: { windows?: WindowInfo[] }
+} | null | undefined): { windows: WindowInfo[]; statusMessage: string } {
+  if (result?.success) {
+    return {
+      windows: Array.isArray(result.data?.windows) ? result.data.windows : [],
+      statusMessage: ''
+    }
+  }
+
+  return {
+    windows: [],
+    statusMessage: '窗口列表获取失败'
+  }
+}
+
 export function useWebActivator() {
   const [configs, setConfigs] = useState<ActivatorConfig[]>(() => {
     const saved = localStorage.getItem('web-activator-v4')
@@ -46,11 +63,18 @@ export function useWebActivator() {
 
   const fetchWindowList = useCallback(async () => {
     if (!window.electron?.webActivator?.getWindowList) return
-    const result = await window.electron.webActivator.getWindowList()
-    if (result.success && result.data?.windows) {
-      setWindowList((result.data.windows as unknown as WindowInfo[]) || [])
+    try {
+      const result = await window.electron.webActivator.getWindowList()
+      const nextState = deriveWindowListFetchState(result as { success: boolean; data?: { windows?: WindowInfo[] } })
+      setWindowList(nextState.windows)
+      if (nextState.statusMessage) {
+        showStatus(nextState.statusMessage)
+      }
+    } catch {
+      setWindowList([])
+      showStatus('窗口列表获取失败')
     }
-  }, [])
+  }, [showStatus])
 
   const toggleTarget = async (config: ActivatorConfig) => {
     if (!window.electron?.webActivator?.toggleWindow) return

@@ -238,12 +238,17 @@ $info | ConvertTo-Json -Compress
 Write-Output "${MONITOR_JSON_END}"
 `
         const rawHardwareResult = await execPowerShellEncoded(hardwareScript)
-        const data = parseMarkedJson<RawHardwarePayload>(
+        const hardwareData = parseMarkedJson<RawHardwarePayload>(
           rawHardwareResult,
           HARDWARE_JSON_START,
           HARDWARE_JSON_END,
           'hardware',
-        ) || {}
+        )
+        if (!hardwareData || Object.keys(hardwareData).length === 0) {
+          return { success: false, error: '无法获取硬件信息' }
+        }
+
+        const data = hardwareData
 
         const rawMonitorResult = await execPowerShellEncoded(monitorScript)
         const monitorData = parseMarkedJson<Pick<RawHardwarePayload, 'mon'>>(

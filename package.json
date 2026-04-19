@@ -4,10 +4,12 @@
   "description": "高颜值本地小工具箱",
   "main": "./out/main/index.js",
   "author": "八骏马",
+  "license": "MIT",
   "homepage": "https://space.bilibili.com/35149135",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
+    "test": "node --test \"src/**/*.test.cjs\"",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",

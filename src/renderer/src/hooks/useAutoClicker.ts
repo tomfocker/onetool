@@ -62,9 +62,9 @@ export function useAutoClicker() {
   }, [checkStatus, registerTimer])
 
   useEffect(() => {
-    if (window.electron?.ipcRenderer) {
-      const unsubStarted = window.electron.ipcRenderer.on('autoclicker-started', () => setIsRunning(true))
-      const unsubStopped = window.electron.ipcRenderer.on('autoclicker-stopped', () => setIsRunning(false))
+    if (window.electron?.autoClicker) {
+      const unsubStarted = window.electron.autoClicker.onStarted(() => setIsRunning(true))
+      const unsubStopped = window.electron.autoClicker.onStopped(() => setIsRunning(false))
       registerIpc(unsubStarted)
       registerIpc(unsubStopped)
     }

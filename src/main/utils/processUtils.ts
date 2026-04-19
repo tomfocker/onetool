@@ -7,17 +7,18 @@ import { selectCommandTextOutput } from './processUtils.helpers'
  * Execute a standard shell command robustly.
  */
 export function execCommand(cmd: string, timeoutMs: number = 30000): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const cp = exec(cmd, { encoding: 'buffer', maxBuffer: 1024 * 1024, timeout: timeoutMs }, (error, stdout, stderr) => {
       const output = selectCommandTextOutput(stdout, stderr)
 
       if (error) {
         if (output) {
           logger.warn('Command execution exited with non-zero status:', cmd, error.message)
+          resolve(output)
         } else {
           logger.error('Command execution failed:', cmd, error.message)
+          reject(error)
         }
-        resolve(output)
       } else {
         resolve(output)
       }

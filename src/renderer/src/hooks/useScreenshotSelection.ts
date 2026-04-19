@@ -39,7 +39,7 @@ export function useScreenshotSelection() {
 
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        (window.electron as any).ipcRenderer.invoke('screenshot-selection-close', null)
+        window.electron.screenshot.closeSelection(null)
       }
     }
     window.addEventListener('keydown', handleEsc)
@@ -51,7 +51,7 @@ export function useScreenshotSelection() {
 
   const onStart = (e: React.MouseEvent) => {
     if (e.button === 2) {
-      (window.electron as any).ipcRenderer.invoke('screenshot-selection-close', null)
+      window.electron.screenshot.closeSelection(null)
       return
     }
 
@@ -113,7 +113,7 @@ export function useScreenshotSelection() {
     }
     setIsDragging(false)
     if (rect.width > 5 && rect.height > 5) {
-      (window.electron as any).ipcRenderer.invoke('screenshot-selection-close', rect)
+      window.electron.screenshot.closeSelection(rect)
     } else {
       setRect(null)
     }

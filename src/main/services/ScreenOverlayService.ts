@@ -2,6 +2,7 @@ import { BrowserWindow, screen, desktopCapturer, ipcMain } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { IpcResponse } from '../../shared/types'
+import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 export class ScreenOverlayService {
   private overlayWindows: Map<number, BrowserWindow> = new Map()
@@ -81,10 +82,7 @@ export class ScreenOverlayService {
           show: false, // 准备好截图后再显示 (可选)
           enableLargerThanScreen: true,
           fullscreen: true,
-          webPreferences: {
-            preload: join(__dirname, '../preload/index.js'),
-            sandbox: false
-          }
+          webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
         })
 
         win.setAlwaysOnTop(true, 'screen-saver')

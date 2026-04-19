@@ -19,6 +19,7 @@ import {
 import { useSettings } from '../hooks/useSettings'
 import { Input } from '../components/ui/input'
 import { Button } from '../components/ui/button'
+import { useGlobalStore } from '@/store'
 
 interface ClipboardItem {
   id: string
@@ -43,6 +44,7 @@ const ClipboardManager: React.FC = () => {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const sortMenuRef = useRef<HTMLDivElement>(null)
   const { settings, updateSettings } = useSettings()
+  const showNotification = useGlobalStore((state) => state.showNotification)
 
   const [isEditingHotkey, setIsEditingHotkey] = useState(false)
   const [tempHotkey, setTempHotkey] = useState('')
@@ -64,15 +66,12 @@ const ClipboardManager: React.FC = () => {
       setIsEditingHotkey(false)
       return
     }
-    const res = await window.electron.ipcRenderer.invoke('clipboard-hotkey-set', tempHotkey)
+    const res = await window.electron.clipboard.setHotkey(tempHotkey)
     if (res.success) {
       updateSettings({ clipboardHotkey: tempHotkey })
       setIsEditingHotkey(false)
     } else {
-      window.electron.ipcRenderer.send('app-notification', {
-        type: 'error',
-        message: res.error || '快捷键设置失败'
-      })
+      showNotification({ type: 'error', message: res.error || '快捷键设置失败' })
     }
   }
 

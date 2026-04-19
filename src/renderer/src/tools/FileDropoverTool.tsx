@@ -104,7 +104,7 @@ export const FileDropoverTool: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    const unsubscribe = window.electron?.ipcRenderer?.on?.('floatball-visibility-changed', (visible: boolean) => {
+    const unsubscribe = window.electron?.floatBall?.onVisibilityChanged?.((visible: boolean) => {
       setIsFloatBallVisible(visible)
     })
     return () => {
@@ -113,10 +113,10 @@ export const FileDropoverTool: React.FC = () => {
   }, [])
 
   const handleSaveHotkey = async () => {
-    if (!window.electron?.ipcRenderer) return
+    if (!window.electron?.floatBall?.setHotkey) return
     setIsSavingHotkey(true)
     try {
-      const res = await window.electron.ipcRenderer.invoke('settings-set-floatball-hotkey', localHotkey)
+      const res = await window.electron.floatBall.setHotkey(localHotkey)
       if (res.success) {
         updateSettings({ floatBallHotkey: localHotkey })
         showToast('快捷键已更新', 'success')

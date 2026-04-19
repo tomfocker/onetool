@@ -19,6 +19,7 @@ import {
 } from '../../shared/screenRecorderSession'
 import { processRegistry } from './ProcessRegistry'
 import { screenshotService } from './ScreenshotService'
+import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 type ScreenRecorderConfig = {
   outputPath: string
@@ -149,10 +150,7 @@ export class ScreenRecorderService {
       alwaysOnTop: true,
       resizable: false,
       skipTaskbar: true,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
-      }
+      webPreferences: createIsolatedPreloadWebPreferences(path.join(__dirname, '../preload/index.js'))
     })
 
     const htmlContent = `
@@ -199,12 +197,11 @@ export class ScreenRecorderService {
           <button class="button danger" id="stop">停止</button>
         </div>
         <script>
-          const { ipcRenderer } = require('electron');
           const timeNode = document.getElementById('time');
           document.getElementById('stop').addEventListener('click', () => {
-            ipcRenderer.invoke('screen-recorder-stop');
+            window.electron.screenRecorder.stopRecording();
           });
-          ipcRenderer.on('update-time', (_event, time) => {
+          window.electron.screenRecorder.onIndicatorTimeUpdated((time) => {
             timeNode.innerText = time;
           });
         </script>
@@ -234,10 +231,7 @@ export class ScreenRecorderService {
       alwaysOnTop: true,
       resizable: false,
       skipTaskbar: true,
-      webPreferences: {
-        nodeIntegration: true,
-        contextIsolation: false
-      }
+      webPreferences: createIsolatedPreloadWebPreferences(path.join(__dirname, '../preload/index.js'))
     })
 
     const htmlContent = `

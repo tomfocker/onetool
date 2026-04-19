@@ -90,7 +90,7 @@ export const SuperScreenshotTool: React.FC = () => {
     if (step !== 'idle') return
     handleReset()
     setStep('capturing-base')
-    await (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', null, enhancedMode)
+    await window.electron.screenshot.openSelection(null, enhancedMode)
   }, [step, handleReset, setStep, enhancedMode])
 
   const handleDownload = async () => {
@@ -108,7 +108,7 @@ export const SuperScreenshotTool: React.FC = () => {
   }
 
   useEffect(() => {
-    const unsubscribeTrigger = (window.electron as any).ipcRenderer?.on('super-screenshot-trigger', () => {
+    const unsubscribeTrigger = window.electron.screenshot.onTrigger(() => {
       handleStartCapture()
     })
 
@@ -159,7 +159,7 @@ export const SuperScreenshotTool: React.FC = () => {
           setStep('capturing-overlay')
           showNotification({ type: 'info', message: '请选取高亮区域', duration: 2000 })
           setTimeout(() => {
-            (window.electron as any).ipcRenderer.invoke('screenshot-selection-open', bounds, true)
+            window.electron.screenshot.openSelection(bounds, true)
           }, 300)
         } else if (step === 'capturing-overlay' && baseImage && firstBounds) {
           const resultDataUrl = await compositeImages(baseImage, dataUrl, bounds, firstBounds, baseOpacity)
@@ -183,10 +183,10 @@ export const SuperScreenshotTool: React.FC = () => {
       }
     }
 
-    const unsubscribeResult = (window.electron as any).ipcRenderer?.on('screenshot-selection-result', handleResult)
+    const unsubscribeResult = window.electron.screenshot.onSelectionResult(handleResult)
     return () => {
-      if (unsubscribeTrigger) unsubscribeTrigger()
-      if (unsubscribeResult) unsubscribeResult()
+      unsubscribeTrigger()
+      unsubscribeResult()
     }
   }, [step, enhancedMode, baseImage, firstBounds, baseOpacity, autoCopy, localAutoSave, savePath, showNotification, handleStartCapture, handleReset, compositeImages, setCapturedImage, setBaseImage, setFirstBounds, setStep])
 

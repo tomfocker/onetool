@@ -244,3 +244,53 @@ test('getSystemConfig keeps base hardware data when monitor probe returns no out
   assert.equal(result.data.motherboard, 'H3C 300B');
   assert.equal(result.data.monitor, '|Display 0|2560x1440');
 });
+
+test('getSystemConfig returns a failure when the hardware probe resolves empty output', async () => {
+  const encodedCalls = [];
+  const { SystemService: TestSystemService } = loadSystemServiceModule({
+    execPowerShellEncoded: async (script) => {
+      encodedCalls.push(script);
+      return '';
+    },
+    electronModule: {
+      app: {},
+      dialog: {},
+      BrowserWindow: function BrowserWindow() {},
+      screen: {
+        getAllDisplays: () => [],
+      },
+    },
+  });
+
+  const service = new TestSystemService();
+  const result = await service.getSystemConfig();
+
+  assert.equal(encodedCalls.length, 1);
+  assert.equal(result.success, false);
+  assert.match(result.error, /无法获取硬件信息/);
+});
+
+test('getSystemConfig returns a failure when the hardware probe output has no JSON markers', async () => {
+  const encodedCalls = [];
+  const { SystemService: TestSystemService } = loadSystemServiceModule({
+    execPowerShellEncoded: async (script) => {
+      encodedCalls.push(script);
+      return 'Access denied';
+    },
+    electronModule: {
+      app: {},
+      dialog: {},
+      BrowserWindow: function BrowserWindow() {},
+      screen: {
+        getAllDisplays: () => [],
+      },
+    },
+  });
+
+  const service = new TestSystemService();
+  const result = await service.getSystemConfig();
+
+  assert.equal(encodedCalls.length, 1);
+  assert.equal(result.success, false);
+  assert.match(result.error, /无法获取硬件信息/);
+});

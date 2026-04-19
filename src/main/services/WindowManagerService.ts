@@ -3,6 +3,7 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import fs from 'fs'
 import { IpcResponse } from '../../shared/types'
+import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 export class WindowManagerService {
   private mainWindow: BrowserWindow | null = null
@@ -48,6 +49,20 @@ export class WindowManagerService {
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
+  }
+
+  setTrayEnabled(enabled: boolean) {
+    if (enabled) {
+      if (!this.tray) {
+        this.createTray()
+      }
+      return
+    }
+
+    if (this.tray) {
+      this.tray.destroy()
+      this.tray = null
+    }
   }
 
   setIsQuitting(quitting: boolean) {
@@ -218,10 +233,7 @@ export class WindowManagerService {
       resizable: false,
       skipTaskbar: true,
       focusable: true,
-      webPreferences: {
-        preload: join(__dirname, '../preload/index.js'),
-        sandbox: false
-      }
+      webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
     })
 
     this.floatBallWindow.setAlwaysOnTop(true, 'screen-saver')
@@ -249,6 +261,10 @@ export class WindowManagerService {
   }
 
   createTray(): void {
+    if (this.tray) {
+      return
+    }
+
     const iconPath = app.isPackaged
       ? join(process.resourcesPath, 'icon.png')
       : join(__dirname, '../../../resources/icon.png')

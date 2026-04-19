@@ -35,14 +35,13 @@ const SettingItem: React.FC<SettingItemProps> = ({ icon, title, description, che
 export const SettingsPage: React.FC = () => {
   const { settings, updateSettings, isLoading } = useSettings()
   const [autoStartEnabled, setAutoStartEnabled] = useState(false)
-  const [minimizeToTray, setMinimizeToTray] = useState(true)
   const [doctorReport, setDoctorReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
 
   const runDoctor = async () => {
     setIsChecking(true)
     try {
-      const res = await (window.electron as any).ipcRenderer.invoke('doctor-run-audit')
+      const res = await window.electron.doctor.runAudit()
       if (res.success) setDoctorReport(res.data)
     } finally {
       setIsChecking(false)
@@ -63,6 +62,13 @@ export const SettingsPage: React.FC = () => {
     if (window.electron?.autoStart) {
       const result = await window.electron.autoStart.set(checked)
       if (result.success) setAutoStartEnabled(checked)
+    }
+  }
+
+  const handleMinimizeToTrayChange = async (checked: boolean) => {
+    const result = await updateSettings({ minimizeToTray: checked })
+    if (!result.success) {
+      console.error('SettingsPage: Failed to update minimizeToTray:', result.error)
     }
   }
 
@@ -94,8 +100,8 @@ export const SettingsPage: React.FC = () => {
             icon={<Minimize2 size={18} className="text-purple-500" />}
             title="最小化到托盘"
             description="点击关闭按钮时隐藏到托盘"
-            checked={minimizeToTray}
-            onCheckedChange={setMinimizeToTray}
+            checked={settings.minimizeToTray}
+            onCheckedChange={handleMinimizeToTrayChange}
           />
         </CardContent>
       </Card>
