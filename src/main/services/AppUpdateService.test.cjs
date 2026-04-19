@@ -196,6 +196,44 @@ test('checkForUpdates records an error state when the updater throws', async () 
   assert.equal(service.getState().status, 'error')
 })
 
+test('checkForUpdates deduplicates overlapping calls and shares one updater request', async () => {
+  let checkCalls = 0
+  let releaseCheck
+  const deferred = new Promise((resolve) => {
+    releaseCheck = resolve
+  })
+  const { AppUpdateService } = loadAppUpdateServiceModule({
+    autoUpdater: {
+      autoDownload: false,
+      on(event, handler) {
+        this.listeners = this.listeners || {}
+        this.listeners[event] = handler
+      },
+      emit(event, ...args) {
+        this.listeners?.[event]?.(...args)
+      },
+      checkForUpdates: async () => {
+        checkCalls += 1
+        await deferred
+        return { updateInfo: null }
+      },
+      downloadUpdate: async () => {},
+      quitAndInstall: async () => {}
+    }
+  })
+  const service = new AppUpdateService()
+
+  const first = service.checkForUpdates()
+  const second = service.checkForUpdates()
+  releaseCheck()
+
+  const [firstResult, secondResult] = await Promise.all([first, second])
+
+  assert.equal(checkCalls, 1)
+  assert.equal(firstResult.success, true)
+  assert.equal(secondResult.success, true)
+})
+
 test('downloadUpdate refuses before an update is available', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
   const service = new AppUpdateService()
@@ -362,6 +400,16 @@ test('initialize can retry after a startup settings failure', async () => {
   assert.match(first.error, /settings unavailable/)
   assert.equal(second.success, true)
   assert.equal(autoUpdater.checkForUpdatesCalls, 1)
+})
+
+test('shouldTriggerAutoCheckOnSettingsChange only triggers the transition from disabled to enabled in production', async () => {
+  const { shouldTriggerAutoCheckOnSettingsChange } = loadAppUpdateServiceModule()
+
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false), true)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(true, true, true, false), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, false, true, false), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, false, false), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, true), false)
 })
 
 test('initialize only runs one startup auto-check when called concurrently', async () => {

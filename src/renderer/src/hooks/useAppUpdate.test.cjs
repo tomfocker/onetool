@@ -171,6 +171,13 @@ test('deriveAppUpdateStatusText treats not-available as a benign latest-version 
   )
 })
 
+test('deriveAppUpdateStatusText shows a compact checking label while a manual check is in flight', () => {
+  assert.equal(
+    deriveAppUpdateStatusText(null, 'check'),
+    '当前版本 未知版本 · 正在检查更新...'
+  )
+})
+
 test('canInvokeAppUpdateAction blocks duplicate in-flight actions but allows a different action', () => {
   assert.equal(canInvokeAppUpdateAction('download', 'download'), false)
   assert.equal(canInvokeAppUpdateAction('download', 'install'), true)

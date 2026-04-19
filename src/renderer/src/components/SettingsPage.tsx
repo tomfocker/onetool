@@ -38,6 +38,7 @@ export const SettingsPage: React.FC = () => {
   const [autoStartEnabled, setAutoStartEnabled] = useState(false)
   const [doctorReport, setDoctorReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const [autoCheckUpdateMessage, setAutoCheckUpdateMessage] = useState<string | null>(null)
   const { updateState, pendingAction, checkForUpdates } = useAppUpdate()
 
   const runDoctor = async () => {
@@ -77,8 +78,13 @@ export const SettingsPage: React.FC = () => {
   const handleAutoCheckForUpdatesChange = async (checked: boolean) => {
     const result = await updateSettings({ autoCheckForUpdates: checked })
     if (!result.success) {
-      console.error('SettingsPage: Failed to update autoCheckForUpdates:', result.error)
+      const message = result.error || '更新设置保存失败，请稍后重试。'
+      setAutoCheckUpdateMessage(message)
+      console.error('SettingsPage: Failed to update autoCheckForUpdates:', message)
+      return
     }
+
+    setAutoCheckUpdateMessage(null)
   }
 
   const handleCheckForUpdates = async () => {
@@ -132,6 +138,9 @@ export const SettingsPage: React.FC = () => {
             checked={settings.autoCheckForUpdates}
             onCheckedChange={handleAutoCheckForUpdatesChange}
           />
+          {autoCheckUpdateMessage ? (
+            <p className="px-1 text-xs text-red-500">{autoCheckUpdateMessage}</p>
+          ) : null}
           <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-muted/25 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium text-foreground">

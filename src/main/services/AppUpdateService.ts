@@ -37,6 +37,15 @@ type AppUpdateServiceDependencies = {
   getSettings?: () => Promise<UpdateSettings> | UpdateSettings
 }
 
+export function shouldTriggerAutoCheckOnSettingsChange(
+  previousAutoCheckEnabled: boolean,
+  nextAutoCheckEnabled: boolean,
+  isPackaged: boolean,
+  isDevelopment: boolean
+): boolean {
+  return nextAutoCheckEnabled && !previousAutoCheckEnabled && isPackaged && !isDevelopment
+}
+
 function normalizeReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string | null {
   if (typeof releaseNotes === 'string') {
     return releaseNotes
@@ -144,6 +153,8 @@ export class AppUpdateService extends EventEmitter {
   private initialized = false
 
   private initializationPromise: Promise<IpcResponse> | null = null
+
+  private checkForUpdatesPromise: Promise<IpcResponse> | null = null
 
   private state: UpdateState
 
@@ -285,20 +296,30 @@ export class AppUpdateService extends EventEmitter {
   }
 
   async checkForUpdates(): Promise<IpcResponse> {
-    try {
-      this.setState(createCheckingState(this.state.currentVersion))
-      const result = await this.autoUpdater.checkForUpdates()
-
-      if (!result?.updateInfo) {
-        this.setState(createNotAvailableState(this.state.currentVersion))
-      }
-
-      return { success: true }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.setState(createErrorState(this.state.currentVersion, message))
-      return { success: false, error: message }
+    if (this.checkForUpdatesPromise) {
+      return this.checkForUpdatesPromise
     }
+
+    this.checkForUpdatesPromise = (async () => {
+      try {
+        this.setState(createCheckingState(this.state.currentVersion))
+        const result = await this.autoUpdater.checkForUpdates()
+
+        if (!result?.updateInfo) {
+          this.setState(createNotAvailableState(this.state.currentVersion))
+        }
+
+        return { success: true }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        this.setState(createErrorState(this.state.currentVersion, message))
+        return { success: false, error: message }
+      } finally {
+        this.checkForUpdatesPromise = null
+      }
+    })()
+
+    return this.checkForUpdatesPromise
   }
 
   async downloadUpdate(): Promise<IpcResponse> {

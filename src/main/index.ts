@@ -19,7 +19,7 @@ import { screenRecorderService } from './services/ScreenRecorderService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
 import { screenshotService } from './services/ScreenshotService'
-import { appUpdateService } from './services/AppUpdateService'
+import { appUpdateService, shouldTriggerAutoCheckOnSettingsChange } from './services/AppUpdateService'
 import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
@@ -218,10 +218,12 @@ app.whenReady().then(() => {
 
     const nextAutoCheckForUpdatesEnabled = Boolean(newSettings.autoCheckForUpdates)
     if (
-      nextAutoCheckForUpdatesEnabled &&
-      !autoCheckForUpdatesEnabled &&
-      app.isPackaged &&
-      process.env.NODE_ENV === 'production'
+      shouldTriggerAutoCheckOnSettingsChange(
+        autoCheckForUpdatesEnabled,
+        nextAutoCheckForUpdatesEnabled,
+        app.isPackaged,
+        process.env.NODE_ENV === 'production'
+      )
     ) {
       void appUpdateService.checkForUpdates()
     }
