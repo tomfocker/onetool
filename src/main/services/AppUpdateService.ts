@@ -19,6 +19,7 @@ type AutoUpdaterLike = {
   downloadUpdate: () => Promise<void>
   quitAndInstall: (...args: any[]) => void
   autoDownload?: boolean
+  autoInstallOnAppQuit?: boolean
 }
 
 type AppLike = {
@@ -241,6 +242,8 @@ export class AppUpdateService extends EventEmitter {
 
   private state: UpdateState
 
+  private beforeQuitAndInstall: () => void = () => undefined
+
   constructor(dependencies: AppUpdateServiceDependencies = {}) {
     super()
 
@@ -252,11 +255,16 @@ export class AppUpdateService extends EventEmitter {
     this.state = createIdleUpdateState(this.app.getVersion())
 
     this.autoUpdater.autoDownload = false
+    this.autoUpdater.autoInstallOnAppQuit = false
     this.bindUpdaterEvents()
   }
 
   getState(): UpdateState {
     return { ...this.state }
+  }
+
+  setBeforeQuitAndInstall(handler: (() => void) | null | undefined): void {
+    this.beforeQuitAndInstall = handler ?? (() => undefined)
   }
 
   private setState(nextState: UpdateState): void {
@@ -440,6 +448,7 @@ export class AppUpdateService extends EventEmitter {
     }
 
     try {
+      this.beforeQuitAndInstall()
       this.autoUpdater.quitAndInstall()
       return { success: true }
     } catch (error) {

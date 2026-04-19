@@ -133,6 +133,13 @@ test('startup auto-check is skipped while the app is unpackaged', async () => {
   assert.equal(autoUpdater.checkForUpdatesCalls, 0)
 })
 
+test('AppUpdateService disables auto-install-on-app-quit in updater setup', () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
+  new AppUpdateService()
+
+  assert.equal(autoUpdater.autoInstallOnAppQuit, false)
+})
+
 test('checkForUpdates emits checking then available when an update is found', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
@@ -596,6 +603,47 @@ test('quitAndInstall preserves existing metadata when installation fails', async
     progressPercent: 100,
     errorMessage: 'install failed'
   })
+})
+
+test('quitAndInstall prepares the app to quit before invoking the updater install flow', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+  const steps = []
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  autoUpdater.quitAndInstall = () => {
+    steps.push('install')
+  }
+
+  service.setBeforeQuitAndInstall(() => {
+    steps.push('prepare')
+  })
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+  const result = await service.quitAndInstall()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(steps, ['prepare', 'install'])
 })
 
 test('stray download-progress and update-downloaded events do not move the service from idle', () => {

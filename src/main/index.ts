@@ -210,6 +210,9 @@ app.whenReady().then(() => {
   createWindow()
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
+  appUpdateService.setBeforeQuitAndInstall(() => {
+    windowManagerService.setIsQuitting(true)
+  })
 
   settingsService.on('changed', (newSettings) => {
     windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
