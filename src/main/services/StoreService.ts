@@ -16,6 +16,20 @@ const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
   'sysdm'
 ]
 
+const DEFAULT_SETTINGS = {
+  recorderHotkey: 'Alt+Shift+R',
+  screenshotHotkey: 'Alt+Shift+S',
+  screenshotSavePath: '',
+  autoSaveScreenshot: false,
+  autoCheckForUpdates: true,
+  floatBallHotkey: 'Alt+Shift+F',
+  clipboardHotkey: 'Alt+Shift+V',
+  minimizeToTray: true,
+  translateApiUrl: '',
+  translateApiKey: '',
+  translateModel: ''
+}
+
 export class StoreService extends EventEmitter {
   private store: GlobalStore
   private storePath: string
@@ -30,19 +44,7 @@ export class StoreService extends EventEmitter {
 
   private getInitialData(): GlobalStore {
     return {
-      settings: {
-        recorderHotkey: 'Alt+Shift+R',
-        screenshotHotkey: 'Alt+Shift+S',
-        screenshotSavePath: '',
-        autoSaveScreenshot: false,
-        autoCheckForUpdates: true,
-        floatBallHotkey: 'Alt+Shift+F',
-        clipboardHotkey: 'Alt+Shift+V',
-        minimizeToTray: true,
-        translateApiUrl: '',
-        translateApiKey: '',
-        translateModel: ''
-      },
+      settings: { ...DEFAULT_SETTINGS },
       renamePresets: [],
       webActivatorConfigs: [],
       toolUsages: [],
@@ -58,7 +60,11 @@ export class StoreService extends EventEmitter {
         const data = fs.readFileSync(this.storePath, 'utf8')
         const parsed = JSON.parse(data)
         // 合并数据，确保 Schema 升级时的兼容性
-        this.store = { ...this.getInitialData(), ...parsed }
+        this.store = {
+          ...this.getInitialData(),
+          ...parsed,
+          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) }
+        }
         logger.info('StoreService: Data loaded successfully.')
       } else {
         this.save()
