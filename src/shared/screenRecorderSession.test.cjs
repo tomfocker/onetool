@@ -5,6 +5,7 @@ const {
   beginRecorderSelectionSession,
   cancelRecorderSelectionSession,
   clampRecorderBounds,
+  getRecorderSelectionValidationError,
   nudgeRecorderBounds,
   isRecorderSelectionValid,
   ensureRecorderOutputPath,
@@ -39,6 +40,25 @@ test('isRecorderSelectionValid respects the minimum size override', () => {
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 79, height: 80 }, 80), false)
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 80, height: 80 }, 80), true)
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 64, height: 64 }), true)
+})
+
+test('getRecorderSelectionValidationError reports minimum-size violations clearly', () => {
+  assert.equal(
+    getRecorderSelectionValidationError({ x: 0, y: 0, width: 63, height: 80 }),
+    '宽度不能小于 64px'
+  )
+  assert.equal(
+    getRecorderSelectionValidationError({ x: 0, y: 0, width: 80, height: 63 }),
+    '高度不能小于 64px'
+  )
+  assert.equal(
+    getRecorderSelectionValidationError({ x: 0, y: 0, width: 63, height: 63 }),
+    '宽度和高度不能小于 64px'
+  )
+  assert.equal(
+    getRecorderSelectionValidationError({ x: 0, y: 0, width: 64, height: 64 }),
+    null
+  )
 })
 
 test('ensureRecorderOutputPath rewrites mismatched extensions and preserves matching ones', () => {

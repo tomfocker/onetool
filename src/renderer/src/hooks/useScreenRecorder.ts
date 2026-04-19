@@ -1,10 +1,19 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { RecorderSessionUpdate } from '../../../shared/ipc-schemas'
-import { ensureRecorderOutputPath } from '../../../shared/screenRecorderSession'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type {
+  RecorderBounds,
+  RecorderSelectionPreview,
+  RecorderSessionUpdate
+} from '../../../shared/ipc-schemas'
+import {
+  ensureRecorderOutputPath,
+  getRecorderSelectionValidationError,
+  nudgeRecorderBounds
+} from '../../../shared/screenRecorderSession'
 
 type RecorderFormat = 'mp4' | 'gif'
 type RecorderQuality = 'low' | 'medium' | 'high'
 type RecorderMode = 'full' | 'area'
+type RecorderSelectionField = keyof RecorderBounds
 type ScreenSource = { id: string; name: string; display_id: string; thumbnail: string }
 type RecorderSessionDraft = {
   draftMode: RecorderMode
@@ -19,6 +28,18 @@ const INITIAL_SESSION: RecorderSessionUpdate = {
   selectionBounds: null,
   selectionPreviewDataUrl: null,
   selectedDisplayId: null
+}
+
+function cloneBounds(bounds: RecorderBounds | null): RecorderBounds | null {
+  return bounds ? { ...bounds } : null
+}
+
+function getBoundsSignature(bounds: RecorderBounds | null): string {
+  if (!bounds) {
+    return 'none'
+  }
+
+  return `${bounds.x}:${bounds.y}:${bounds.width}:${bounds.height}`
 }
 
 export function applyRecorderSessionSnapshot(
@@ -40,9 +61,13 @@ export function useScreenRecorder() {
   const [selectedScreen, setSelectedScreen] = useState<ScreenSource | null>(null)
   const [screenList, setScreenList] = useState<ScreenSource[]>([])
   const [session, setSession] = useState<RecorderSessionUpdate>(INITIAL_SESSION)
+  const [selectionDraft, setSelectionDraft] = useState<RecorderBounds | null>(null)
+  const [selectionDisplayBounds, setSelectionDisplayBounds] = useState<RecorderBounds | null>(null)
+  const [isPreparingSelection, setIsPreparingSelection] = useState(false)
   const [recorderHotkey, setRecorderHotkey] = useState('Alt+Shift+R')
   const [isSavingHotkey, setIsSavingHotkey] = useState(false)
   const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
+  const hydratedSelectionSignatureRef = useRef<string | null>(null)
 
   const applyAuthoritativeSession = useCallback((nextSession: RecorderSessionUpdate) => {
     setSession(nextSession)
@@ -98,7 +123,64 @@ export function useScreenRecorder() {
     })
   }, [session.selectedDisplayId])
 
+  const prepareSelection = useCallback(async (nextBounds: RecorderBounds) => {
+    if (!window.electron?.screenRecorder?.prepareSelection) {
+      return { success: false, error: '当前环境不支持区域预览' }
+    }
+
+    setIsPreparingSelection(true)
+
+    try {
+      const response = await window.electron.screenRecorder.prepareSelection(nextBounds)
+      if (response.success && response.data) {
+        const preparedPreview = response.data as RecorderSelectionPreview
+        setSelectionDraft(cloneBounds(preparedPreview.bounds))
+        setSelectionDisplayBounds(cloneBounds(preparedPreview.displayBounds))
+        hydratedSelectionSignatureRef.current = getBoundsSignature(preparedPreview.bounds)
+      }
+
+      return response
+    } finally {
+      setIsPreparingSelection(false)
+    }
+  }, [])
+
+  const loadCurrentSession = useCallback(async () => {
+    if (!window.electron?.screenRecorder?.getSession) {
+      return session
+    }
+
+    const response = await window.electron.screenRecorder.getSession()
+    if (response.success && response.data) {
+      applyAuthoritativeSession(response.data)
+      return response.data
+    }
+
+    return session
+  }, [applyAuthoritativeSession, session])
+
+  const ensureSelectionDisplayContext = useCallback(async () => {
+    if (selectionDisplayBounds) {
+      return selectionDisplayBounds
+    }
+
+    if (!session.selectionBounds) {
+      return null
+    }
+
+    const response = await prepareSelection(session.selectionBounds)
+    if (response.success && response.data) {
+      return response.data.displayBounds
+    }
+
+    return null
+  }, [prepareSelection, selectionDisplayBounds, session.selectionBounds])
+
   const handleModeChange = useCallback(async (mode: RecorderMode) => {
+    if (session.status === 'recording' || session.status === 'finishing') {
+      return
+    }
+
     setDraftMode(mode)
 
     if (mode === 'full') {
@@ -115,7 +197,66 @@ export function useScreenRecorder() {
         return screenList.find((screen) => screen.display_id === session.selectedDisplayId) ?? current
       })
     }
-  }, [loadScreens, screenList, session.selectedDisplayId])
+  }, [loadScreens, screenList, session.selectedDisplayId, session.status])
+
+  const startAreaSelection = useCallback(async () => {
+    if (session.status === 'recording' || session.status === 'finishing') {
+      return { success: false, error: '录制进行中，无法重新框选区域' }
+    }
+
+    setDraftMode('area')
+    const ipcRenderer = (window.electron as typeof window.electron & { ipcRenderer?: { invoke: (channel: string) => Promise<any> } }).ipcRenderer
+    if (!ipcRenderer?.invoke) {
+      return { success: false, error: '当前环境不支持框选区域' }
+    }
+
+    return ipcRenderer.invoke('recorder-selection-open')
+  }, [session.status])
+
+  const updateSelectionDraftField = useCallback((field: RecorderSelectionField, value: number) => {
+    if (!Number.isFinite(value)) {
+      return
+    }
+
+    setSelectionDraft((currentDraft) => {
+      if (!currentDraft) {
+        return currentDraft
+      }
+
+      return {
+        ...currentDraft,
+        [field]: Math.round(value)
+      }
+    })
+  }, [])
+
+  const commitSelectionDraft = useCallback(async () => {
+    if (!selectionDraft) {
+      return { success: false, error: '请先框选录制区域' }
+    }
+
+    const validationError = getRecorderSelectionValidationError(selectionDraft)
+    if (validationError) {
+      return { success: false, error: validationError }
+    }
+
+    return prepareSelection(selectionDraft)
+  }, [prepareSelection, selectionDraft])
+
+  const nudgeSelectionField = useCallback(async (field: RecorderSelectionField, delta: number) => {
+    const baseBounds = selectionDraft ?? session.selectionBounds
+    if (!baseBounds) {
+      return { success: false, error: '请先框选录制区域' }
+    }
+
+    const displayBounds = await ensureSelectionDisplayContext()
+    if (!displayBounds) {
+      return { success: false, error: '无法读取选区所在屏幕' }
+    }
+
+    const nextBounds = nudgeRecorderBounds(baseBounds, field, delta, displayBounds)
+    return prepareSelection(nextBounds)
+  }, [ensureSelectionDisplayContext, prepareSelection, selectionDraft, session.selectionBounds])
 
   const startRecording = useCallback(async () => {
     if (!outputPath) {
@@ -125,6 +266,26 @@ export function useScreenRecorder() {
     const finalOutputPath = ensureRecorderOutputPath(outputPath, format)
     if (finalOutputPath !== outputPath) {
       setOutputPath(finalOutputPath)
+    }
+
+    let activeSession = session
+    const areaDraftChanged =
+      draftMode === 'area' && getBoundsSignature(selectionDraft) !== getBoundsSignature(session.selectionBounds)
+
+    if (draftMode === 'area' && selectionDraft) {
+      const validationError = getRecorderSelectionValidationError(selectionDraft)
+      if (validationError) {
+        return { success: false, error: validationError }
+      }
+
+      if (areaDraftChanged) {
+        const prepareResult = await prepareSelection(selectionDraft)
+        if (!prepareResult.success) {
+          return { success: false, error: prepareResult.error || '无法更新选区预览' }
+        }
+
+        activeSession = await loadCurrentSession()
+      }
     }
 
     const config: {
@@ -142,33 +303,44 @@ export function useScreenRecorder() {
     }
 
     if (draftMode === 'area') {
-      if (!session.selectionBounds) {
-        return { success: false, error: '请先选择录制区域' }
+      if (!activeSession.selectionBounds) {
+        return { success: false, error: '请先框选录制区域' }
       }
 
-      config.bounds = session.selectionBounds
+      config.bounds = activeSession.selectionBounds
 
-      if (session.selectedDisplayId) {
-        config.displayId = session.selectedDisplayId
+      if (activeSession.selectedDisplayId) {
+        config.displayId = activeSession.selectedDisplayId
       }
     } else if (selectedScreen) {
       config.displayId = selectedScreen.display_id
     }
 
     return window.electron.screenRecorder.startRecording(config)
-  }, [draftMode, format, fps, outputPath, quality, selectedScreen, session.selectedDisplayId, session.selectionBounds])
+  }, [
+    draftMode,
+    format,
+    fps,
+    loadCurrentSession,
+    outputPath,
+    prepareSelection,
+    quality,
+    selectedScreen,
+    selectionDraft,
+    session
+  ])
 
   const stopRecording = useCallback(async () => {
     return window.electron.screenRecorder.stopRecording()
   }, [])
 
   const setSelectionRect = useCallback((nextBounds: RecorderSessionUpdate['selectionBounds']) => {
-    if (!nextBounds || !window.electron?.screenRecorder?.prepareSelection) {
-      return
+    if (!nextBounds) {
+      return Promise.resolve({ success: false, error: '请先框选录制区域' })
     }
 
-    void window.electron.screenRecorder.prepareSelection(nextBounds)
-  }, [])
+    return prepareSelection(nextBounds)
+  }, [prepareSelection])
 
   useEffect(() => {
     const init = async () => {
@@ -196,7 +368,7 @@ export function useScreenRecorder() {
       await loadScreens()
     }
 
-    init()
+    void init()
   }, [applyAuthoritativeSession, loadScreens])
 
   useEffect(() => {
@@ -214,11 +386,11 @@ export function useScreenRecorder() {
   }, [applyAuthoritativeSession])
 
   useEffect(() => {
-    if (draftMode === 'full' && screenList.length === 0) {
+    if (draftMode !== 'full') {
       return
     }
 
-    if (draftMode !== 'full') {
+    if (screenList.length === 0) {
       return
     }
 
@@ -241,10 +413,47 @@ export function useScreenRecorder() {
     })
   }, [draftMode, screenList, session.selectedDisplayId])
 
-  const isRecording = session.status === 'recording' || session.status === 'finishing'
+  useEffect(() => {
+    if (!session.selectionBounds) {
+      setSelectionDraft(null)
+      setSelectionDisplayBounds(null)
+      hydratedSelectionSignatureRef.current = null
+      return
+    }
+
+    setSelectionDraft(cloneBounds(session.selectionBounds))
+  }, [session.selectionBounds])
+
+  useEffect(() => {
+    if (session.mode !== 'area' || !session.selectionBounds) {
+      return
+    }
+
+    const selectionSignature = getBoundsSignature(session.selectionBounds)
+    if (selectionDisplayBounds || hydratedSelectionSignatureRef.current === selectionSignature) {
+      return
+    }
+
+    hydratedSelectionSignatureRef.current = selectionSignature
+    void prepareSelection(session.selectionBounds)
+  }, [prepareSelection, selectionDisplayBounds, session.mode, session.selectionBounds])
+
+  const controlsLocked = session.status === 'recording' || session.status === 'finishing'
+  const isRecording = controlsLocked
   const recordingMode = draftMode
   const selectionRect = recordingMode === 'area' ? session.selectionBounds : null
+  const selectionPreviewDataUrl = recordingMode === 'area' ? session.selectionPreviewDataUrl : null
   const recordingTime = session.recordingTime
+  const selectionValidationError = selectionDraft
+    ? getRecorderSelectionValidationError(selectionDraft)
+    : null
+  const selectionDirty =
+    recordingMode === 'area' &&
+    getBoundsSignature(selectionDraft) !== getBoundsSignature(session.selectionBounds)
+  const canStartRecording =
+    !controlsLocked &&
+    Boolean(outputPath) &&
+    (recordingMode === 'full' || Boolean(session.selectionBounds && !selectionValidationError))
 
   return {
     outputPath, setOutputPath,
@@ -262,6 +471,18 @@ export function useScreenRecorder() {
     isSavingHotkey, setIsSavingHotkey,
     isRecordingHotkey, setIsRecordingHotkey,
     startRecording,
-    stopRecording
+    stopRecording,
+    sessionStatus: session.status,
+    controlsLocked,
+    canStartRecording,
+    isPreparingSelection,
+    selectionDraft,
+    selectionDirty,
+    selectionPreviewDataUrl,
+    selectionValidationError,
+    updateSelectionDraftField,
+    commitSelectionDraft,
+    nudgeSelectionField,
+    startAreaSelection
   }
 }

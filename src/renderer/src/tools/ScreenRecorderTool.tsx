@@ -1,6 +1,7 @@
-import React, { useEffect, useCallback, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import { useScreenRecorder } from '../hooks/useScreenRecorder'
 import { useRecorderSelection } from '../hooks/useRecorderSelection'
+import { RECORDER_MIN_SELECTION_SIZE } from '../../../shared/screenRecorderSession'
 
 const styles = `
   @keyframes fade-in {
@@ -14,43 +15,49 @@ const styles = `
   }
 
   @keyframes pulse-glow {
-    0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
-    50% { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6); }
+    0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.22); }
+    50% { box-shadow: 0 0 36px rgba(239, 68, 68, 0.38); }
   }
 
   @keyframes recording-dot {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+    50% { opacity: 0.35; }
   }
 
   .animate-fade-in {
-    animation: fade-in 0.3s ease-out forwards;
+    animation: fade-in 0.24s ease-out forwards;
   }
 
   .animate-fade-in-up {
-    animation: fade-in-up 0.4s ease-out forwards;
+    animation: fade-in-up 0.28s ease-out forwards;
   }
 
   .animate-pulse-glow {
-    animation: pulse-glow 2s ease-in-out infinite;
+    animation: pulse-glow 1.8s ease-in-out infinite;
   }
 
   .animate-recording-dot {
     animation: recording-dot 1s ease-in-out infinite;
   }
-
-  .format-button-active {
-    background: linear-gradient(135deg, #6d2eb8 0%, #8848d6 100%);
-    border-color: #8848d6;
-  }
 `
 
-export const ScreenRecorderTool: React.FC = () => {
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+type ToastState = { message: string; type: 'success' | 'error' }
+type SelectionField = 'x' | 'y' | 'width' | 'height'
 
-  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+const selectionFieldLabels: Record<SelectionField, string> = {
+  x: 'X',
+  y: 'Y',
+  width: '宽',
+  height: '高'
+}
+
+export const ScreenRecorderTool: React.FC = () => {
+  const [toast, setToast] = useState<ToastState | null>(null)
+  const [localHotkey, setLocalHotkey] = useState('Alt+Shift+R')
+
+  const showToast = useCallback((message: string, type: ToastState['type'] = 'success') => {
     setToast({ message, type })
-    setTimeout(() => setToast(null), 3000)
+    window.setTimeout(() => setToast(null), 3000)
   }, [])
 
   const {
@@ -68,8 +75,24 @@ export const ScreenRecorderTool: React.FC = () => {
     isSavingHotkey, setIsSavingHotkey,
     isRecordingHotkey, setIsRecordingHotkey,
     startRecording,
-    stopRecording
+    stopRecording,
+    sessionStatus,
+    controlsLocked,
+    canStartRecording,
+    isPreparingSelection,
+    selectionDraft,
+    selectionDirty,
+    selectionPreviewDataUrl,
+    selectionValidationError,
+    updateSelectionDraftField,
+    commitSelectionDraft,
+    nudgeSelectionField,
+    startAreaSelection
   } = useScreenRecorder()
+
+  useEffect(() => {
+    setLocalHotkey(recorderHotkey)
+  }, [recorderHotkey])
 
   useEffect(() => {
     const styleSheet = document.createElement('style')
@@ -80,14 +103,65 @@ export const ScreenRecorderTool: React.FC = () => {
     }
   }, [])
 
-  useEffect(() => {
-    if (!window.electron?.screenRecorder) return
+  const handleHotkeyKeyDown = useCallback((event: KeyboardEvent) => {
+    if (!isRecordingHotkey) {
+      return
+    }
 
-    const unsubscribeSelection = (window.electron as any).ipcRenderer?.on('recorder-selection-result', (bounds: any) => {
-      if (bounds && typeof bounds.width === 'number') {
-        setSelectionRect(bounds)
-        showToast('录制区域已设定', 'success')
+    event.preventDefault()
+    event.stopPropagation()
+
+    const modifiers: string[] = []
+    if (event.ctrlKey || event.metaKey) modifiers.push('CommandOrControl')
+    if (event.altKey) modifiers.push('Alt')
+    if (event.shiftKey) modifiers.push('Shift')
+
+    if (['Control', 'Alt', 'Shift', 'Meta'].includes(event.key)) {
+      return
+    }
+
+    let key = event.key.toUpperCase()
+    if (key === ' ') key = 'Space'
+    if (key === 'ESCAPE') key = 'Esc'
+
+    const nextHotkey = modifiers.length > 0 ? `${modifiers.join('+')}+${key}` : key
+    setLocalHotkey(nextHotkey)
+    setIsRecordingHotkey(false)
+  }, [isRecordingHotkey, setIsRecordingHotkey])
+
+  useEffect(() => {
+    if (isRecordingHotkey) {
+      window.addEventListener('keydown', handleHotkeyKeyDown)
+    } else {
+      window.removeEventListener('keydown', handleHotkeyKeyDown)
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleHotkeyKeyDown)
+    }
+  }, [handleHotkeyKeyDown, isRecordingHotkey])
+
+  useEffect(() => {
+    if (!window.electron?.screenRecorder) {
+      return
+    }
+
+    const unsubscribeSelection = (window.electron as typeof window.electron & {
+      ipcRenderer?: {
+        on: (channel: string, listener: (_event: unknown, payload: unknown) => void) => () => void
       }
+    }).ipcRenderer?.on('recorder-selection-result', async (_event: unknown, bounds: any) => {
+      if (!bounds || typeof bounds.width !== 'number') {
+        return
+      }
+
+      const result = await setSelectionRect(bounds)
+      if (result.success) {
+        showToast('录制区域已更新', 'success')
+        return
+      }
+
+      showToast(result.error || '更新录制区域失败', 'error')
     })
 
     const unsubscribeStopped = window.electron.screenRecorder.onStopped((data) => {
@@ -99,13 +173,20 @@ export const ScreenRecorderTool: React.FC = () => {
     })
 
     const unsubscribeHotkey = window.electron.screenRecorder.onToggleHotkey?.(() => {
-      if (isRecording) {
-        stopRecording()
-      } else {
-        startRecording().then(res => {
-          if (!res.success) showToast(res.error || '启动失败', 'error')
-        })
+      if (sessionStatus === 'recording') {
+        void stopRecording()
+        return
       }
+
+      if (sessionStatus === 'finishing') {
+        return
+      }
+
+      void startRecording().then((result) => {
+        if (!result.success) {
+          showToast(result.error || '启动失败', 'error')
+        }
+      })
     })
 
     return () => {
@@ -113,7 +194,7 @@ export const ScreenRecorderTool: React.FC = () => {
       unsubscribeStopped()
       if (unsubscribeHotkey) unsubscribeHotkey()
     }
-  }, [isRecording, startRecording, stopRecording, setSelectionRect, showToast])
+  }, [sessionStatus, setSelectionRect, showToast, startRecording, stopRecording])
 
   const handleSelectOutput = async () => {
     try {
@@ -127,12 +208,19 @@ export const ScreenRecorderTool: React.FC = () => {
   }
 
   const handleSaveHotkey = async () => {
-    if (!window.electron?.screenRecorder?.setHotkey) return
+    if (!window.electron?.screenRecorder?.setHotkey) {
+      return
+    }
+
     setIsSavingHotkey(true)
     try {
-      const result = await window.electron.screenRecorder.setHotkey(recorderHotkey)
-      if (result.success) showToast('热键设置已更新', 'success')
-      else showToast(`热键设置失败: ${result.error}`, 'error')
+      const result = await window.electron.screenRecorder.setHotkey(localHotkey)
+      if (result.success) {
+        setRecorderHotkey(localHotkey)
+        showToast('录制热键已更新', 'success')
+      } else {
+        showToast(`热键设置失败: ${result.error}`, 'error')
+      }
     } catch (error) {
       showToast(`设置出错: ${(error as Error).message}`, 'error')
     } finally {
@@ -140,82 +228,151 @@ export const ScreenRecorderTool: React.FC = () => {
     }
   }
 
+  const handleSelectionFieldCommit = async () => {
+    if (!selectionDirty || selectionValidationError) {
+      return
+    }
+
+    const result = await commitSelectionDraft()
+    if (!result.success) {
+      showToast(result.error || '更新录制区域失败', 'error')
+    }
+  }
+
+  const handleSelectionFieldChange = (field: SelectionField, rawValue: string) => {
+    if (rawValue.trim() === '') {
+      return
+    }
+
+    updateSelectionDraftField(field, Number(rawValue))
+  }
+
+  const handleSelectionNudge = async (field: SelectionField, delta: number) => {
+    const result = await nudgeSelectionField(field, delta)
+    if (!result.success) {
+      showToast(result.error || '微调录制区域失败', 'error')
+    }
+  }
+
+  const handleStartAreaSelection = async () => {
+    const result = await startAreaSelection()
+    if (!result?.success) {
+      showToast(result?.error || '无法打开框选区域', 'error')
+    }
+  }
+
   const handleToggleRecording = async () => {
-    if (isRecording) {
-      const res = await stopRecording()
-      if (!res.success) showToast(res.error || '停止失败', 'error')
-    } else {
-      const res = await startRecording()
-      if (!res.success) showToast(res.error || '启动失败', 'error')
+    if (sessionStatus === 'recording') {
+      const result = await stopRecording()
+      if (!result.success) {
+        showToast(result.error || '停止失败', 'error')
+      }
+      return
+    }
+
+    const result = await startRecording()
+    if (!result.success) {
+      showToast(result.error || '启动失败', 'error')
     }
   }
 
   const formatOptions = [
-    { value: 'mp4', label: 'MP4', desc: '高质量视频' },
-    { value: 'gif', label: 'GIF', desc: '动画格式' }
-  ]
+    { value: 'mp4', label: 'MP4', desc: '高兼容视频' },
+    { value: 'gif', label: 'GIF', desc: '短动画导出' }
+  ] as const
 
   const qualityOptions = [
-    { value: 'low', label: '低质量', desc: '文件更小' },
-    { value: 'medium', label: '中等质量', desc: '平衡选择' },
-    { value: 'high', label: '高质量', desc: '更好的画质' }
-  ]
+    { value: 'low', label: '低', desc: '更小文件' },
+    { value: 'medium', label: '中', desc: '均衡设置' },
+    { value: 'high', label: '高', desc: '更清晰画质' }
+  ] as const
+
+  const statusCopy = {
+    idle: '准备新的录制任务',
+    'selecting-area': '正在等待框选录制区域',
+    'ready-to-record': recordingMode === 'area' ? '区域预览已就绪，可以开始录制' : '录制参数已确认，可以开始录制',
+    recording: '正在录制中，主页面现在作为录制控制台',
+    finishing: '正在结束录制，请稍候保存完成'
+  }[sessionStatus]
+
+  const recordButtonDisabled = sessionStatus === 'recording'
+    ? false
+    : sessionStatus === 'finishing' || isPreparingSelection || !canStartRecording
+  const currentTargetLabel = recordingMode === 'full'
+    ? selectedScreen?.name || '未选择屏幕'
+    : selectionRect
+      ? `区域 ${selectionRect.width} × ${selectionRect.height}`
+      : '尚未框选区域'
+  const areaReadinessCopy = selectionRect
+    ? selectionValidationError || '区域预览已同步，可直接开始。'
+    : '请先框选录制区域。'
 
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-96 h-96 bg-red-500/5 dark:bg-red-500/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-0 left-0 w-80 h-80 bg-red-500/6 rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute bottom-0 right-0 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
 
-      <div className="max-w-4xl mx-auto px-6 py-8 relative z-10">
+      <div className="max-w-5xl mx-auto px-6 py-8 relative z-10">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-red-400 to-purple-500 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">
             屏幕录制
           </h1>
-          <p className="text-muted-foreground">录制屏幕为 MP4、GIF 或 WebM 格式</p>
+          <p className="text-muted-foreground">录制屏幕内容并导出为 MP4 或 GIF</p>
         </div>
 
-        <div className="space-y-6 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-          <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <span>🎯</span> 录制模式
-            </h2>
-            <div className="grid grid-cols-2 gap-3 mb-6">
-              {(['full', 'area'] as const).map((mode) => (
+        <div className="space-y-6 animate-fade-in-up">
+          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-red-400 mb-1">1. 录制目标</p>
+                <h2 className="text-xl font-semibold">先确定录制范围</h2>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">当前目标</p>
+                <p className="text-sm font-medium">{currentTargetLabel}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {([
+                { value: 'full', label: '全屏录制', desc: '录制整个屏幕' },
+                { value: 'area', label: '区域录制', desc: '先框选，再精调区域' }
+              ] as const).map((modeOption) => (
                 <button
-                  key={mode}
-                  onClick={() => handleModeChange(mode)}
-                  className={`p-4 rounded-xl border-2 transition-all duration-300 flex flex-col items-center gap-2 ${recordingMode === mode
-                    ? 'border-red-500 bg-red-500/5 text-red-500 shadow-lg shadow-red-500/10'
-                    : 'border-white/10 hover:border-white/30 bg-white/5'
-                    }`}
+                  key={modeOption.value}
+                  onClick={() => handleModeChange(modeOption.value)}
+                  disabled={controlsLocked}
+                  className={`rounded-xl border px-4 py-4 text-left transition-all ${recordingMode === modeOption.value
+                    ? 'border-red-500 bg-red-500/8 shadow-lg shadow-red-500/10'
+                    : 'border-white/10 bg-white/5 hover:border-white/30'
+                  } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                 >
-                  <span className="text-2xl">
-                    {mode === 'full' ? '🖥️' : '📐'}
-                  </span>
-                  <span className="font-medium">
-                    {mode === 'full' ? '全屏录制' : '区域录制'}
-                  </span>
+                  <p className="text-base font-semibold">{modeOption.label}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{modeOption.desc}</p>
                 </button>
               ))}
             </div>
 
-            {recordingMode === 'full' && screenList.length > 0 && (
-              <div className="space-y-3 animate-fade-in mb-6">
-                <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span>🖥️</span> 请选择要录制的屏幕
-                </p>
+            {recordingMode === 'full' && (
+              <div className="space-y-3 animate-fade-in">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm text-muted-foreground">选择要录制的屏幕</p>
+                  {selectedScreen && <p className="text-xs text-muted-foreground">已选: {selectedScreen.name}</p>}
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                   {screenList.map((screen) => (
                     <button
                       key={screen.id}
                       onClick={() => setSelectedScreen(screen)}
-                      className={`group relative rounded-lg overflow-hidden border-2 transition-all ${selectedScreen?.id === screen.id ? 'border-red-500 shadow-md' : 'border-transparent hover:border-white/20'
-                        }`}
+                      disabled={controlsLocked}
+                      className={`group rounded-xl overflow-hidden border transition-all ${selectedScreen?.id === screen.id
+                        ? 'border-red-500 shadow-md shadow-red-500/10'
+                        : 'border-white/10 hover:border-white/30'
+                      } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                     >
                       <img src={screen.thumbnail} alt={screen.name} className="w-full aspect-video object-cover" />
-                      <div className={`absolute inset-0 bg-black/60 flex items-end p-2 transition-opacity ${selectedScreen?.id === screen.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-                        }`}>
-                        <p className="text-[10px] text-white truncate w-full">{screen.name}</p>
+                      <div className="px-3 py-2 bg-black/30 text-left">
+                        <p className="text-xs font-medium truncate">{screen.name}</p>
                       </div>
                     </button>
                   ))}
@@ -223,202 +380,385 @@ export const ScreenRecorderTool: React.FC = () => {
               </div>
             )}
 
-
-
             {recordingMode === 'area' && (
-              <div className="animate-fade-in flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/10">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">区域录制</p>
-                  <p className="text-xs text-muted-foreground italic">
-                    {selectionRect ? `已选区域: ${selectionRect.width}x${selectionRect.height}` : '点击按钮后在屏幕上拖拽选择一个矩形区域'}
-                  </p>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col gap-4 animate-fade-in">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-medium">面板驱动区域录制</p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      先点击“框选区域”，再在下方确认预览和坐标。
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleStartAreaSelection}
+                    disabled={controlsLocked}
+                    className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                  >
+                    {selectionRect ? '重选区域' : '框选区域'}
+                  </button>
                 </div>
-                <button
-                  onClick={() => (window.electron as any).ipcRenderer.invoke('recorder-selection-open')}
-                  className="px-4 py-2 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 transition-all text-sm font-medium"
-                >
-                  {selectionRect ? '重新选择区域' : '选择区域'}
-                </button>
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span className="px-2 py-1 rounded-full bg-white/8 border border-white/10">
+                    最小尺寸 {RECORDER_MIN_SELECTION_SIZE} × {RECORDER_MIN_SELECTION_SIZE}
+                  </span>
+                  <span className="px-2 py-1 rounded-full bg-white/8 border border-white/10">
+                    {sessionStatus === 'selecting-area' ? '等待框选中' : isPreparingSelection ? '正在刷新预览' : '支持 1px 微调'}
+                  </span>
+                </div>
               </div>
             )}
-          </div>
+          </section>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>⚙️</span> 输出设置
-              </h2>
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">保存位置</label>
+          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
+            <div>
+              <p className="text-sm font-semibold text-red-400 mb-1">2. 录制确认</p>
+              <h2 className="text-xl font-semibold">确认输出和区域细节</h2>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-6">
+              <div className="space-y-5">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">保存位置</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={outputPath}
+                        readOnly
+                        className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none"
+                        placeholder="未选择保存位置"
+                      />
+                      <button
+                        onClick={handleSelectOutput}
+                        disabled={controlsLocked}
+                        className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                      >
+                        选择
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">格式</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {formatOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => setFormat(option.value)}
+                            disabled={controlsLocked}
+                            className={`rounded-lg border px-3 py-2 text-left transition-all ${format === option.value
+                              ? 'border-red-500 bg-red-500/8'
+                              : 'border-white/10 bg-white/5 hover:border-white/30'
+                            } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <p className="text-sm font-semibold">{option.label}</p>
+                            <p className="text-[11px] text-muted-foreground mt-1">{option.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">帧率</label>
+                      <select
+                        value={fps}
+                        onChange={(event) => setFps(parseInt(event.target.value, 10))}
+                        disabled={controlsLocked}
+                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-60"
+                      >
+                        {[15, 24, 30, 60].map((value) => (
+                          <option key={value} value={value}>{value} FPS</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">质量</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {qualityOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            onClick={() => setQuality(option.value)}
+                            disabled={controlsLocked}
+                            className={`rounded-lg border px-2 py-2 text-center transition-all ${quality === option.value
+                              ? 'border-red-500 bg-red-500/8'
+                              : 'border-white/10 bg-white/5 hover:border-white/30'
+                            } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                          >
+                            <p className="text-sm font-semibold">{option.label}</p>
+                            <p className="text-[10px] text-muted-foreground mt-1">{option.desc}</p>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {recordingMode === 'area' ? (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4 animate-fade-in">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm font-semibold">区域预览</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          调整坐标后会重新生成预览，录制始终保持在当前屏幕内。
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleStartAreaSelection}
+                        disabled={controlsLocked}
+                        className="px-3 py-2 rounded-lg border border-white/15 bg-white/8 text-sm hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                      >
+                        重选区域
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4">
+                      <div className="rounded-xl border border-white/10 bg-black/25 overflow-hidden min-h-[220px] flex items-center justify-center">
+                        {selectionPreviewDataUrl ? (
+                          <div className="relative w-full">
+                            <img
+                              src={selectionPreviewDataUrl}
+                              alt="录制区域预览"
+                              className="w-full max-h-[280px] object-cover"
+                            />
+                            {selectionRect && (
+                              <div className="absolute right-3 bottom-3 px-3 py-1.5 rounded-full bg-black/75 text-white text-xs font-medium">
+                                {selectionRect.x}, {selectionRect.y} · {selectionRect.width} × {selectionRect.height}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="px-6 text-center space-y-2">
+                            <p className="text-sm font-medium">
+                              {sessionStatus === 'selecting-area' ? '等待框选区域…' : '先点击“框选区域”生成预览'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              预览会显示最新的区域截图，方便确认边界是否正确。
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        {(['x', 'y', 'width', 'height'] as SelectionField[]).map((field) => (
+                          <div key={field} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                                {selectionFieldLabels[field]}
+                              </label>
+                              <span className="text-[11px] text-muted-foreground">单位 px</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => void handleSelectionNudge(field, -1)}
+                                disabled={controlsLocked || isPreparingSelection || !selectionDraft}
+                                className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                              >
+                                -1
+                              </button>
+                              <input
+                                type="number"
+                                value={selectionDraft ? selectionDraft[field] : ''}
+                                onChange={(event) => handleSelectionFieldChange(field, event.target.value)}
+                                onBlur={() => void handleSelectionFieldCommit()}
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    void handleSelectionFieldCommit()
+                                  }
+                                }}
+                                disabled={controlsLocked || !selectionDraft}
+                                className="flex-1 bg-transparent border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-60"
+                              />
+                              <button
+                                onClick={() => void handleSelectionNudge(field, 1)}
+                                disabled={controlsLocked || isPreparingSelection || !selectionDraft}
+                                className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
+                              >
+                                +1
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+
+                        <div className={`rounded-xl border px-3 py-3 text-sm ${selectionValidationError
+                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                          : 'border-white/10 bg-white/5 text-muted-foreground'
+                        }`}>
+                          {selectionValidationError
+                            ? selectionValidationError
+                            : selectionDirty
+                              ? '已修改坐标，失焦或按 Enter 后会刷新预览。'
+                              : `当前选区已满足最小尺寸 ${RECORDER_MIN_SELECTION_SIZE}px。`}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3 animate-fade-in">
+                    <p className="text-sm font-semibold">全屏确认</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-xs text-muted-foreground mb-1">录制目标</p>
+                        <p className="text-sm font-medium">{selectedScreen?.name || '未选择屏幕'}</p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-xs text-muted-foreground mb-1">输出格式</p>
+                        <p className="text-sm font-medium">{format.toUpperCase()} · {fps} FPS</p>
+                      </div>
+                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <p className="text-xs text-muted-foreground mb-1">画质策略</p>
+                        <p className="text-sm font-medium">
+                          {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}
+                        </p>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      全屏模式会按当前确认的屏幕输出 MP4 或 GIF，录制开始后可直接在下方停止。
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-5">
+                <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-semibold">热键设置</p>
+                      <p className="text-xs text-muted-foreground mt-1">保留全局开始/停止录制热键</p>
+                    </div>
+                    <span className="text-[10px] bg-red-500/15 text-red-300 px-2 py-1 rounded-full border border-red-500/20 uppercase tracking-wider">
+                      全局生效
+                    </span>
+                  </div>
+
                   <div className="flex gap-2">
                     <input
                       type="text"
-                      value={outputPath}
+                      value={isRecordingHotkey ? '正在录入...' : localHotkey.replace('CommandOrControl+', 'Ctrl+')}
                       readOnly
-                      className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                      placeholder="未选择保存位置"
+                      onClick={() => setIsRecordingHotkey(true)}
+                      className={`flex-1 bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey
+                        ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-400'
+                        : 'border-white/10 hover:border-white/30'
+                      }`}
                     />
-                    <button
-                      onClick={handleSelectOutput}
-                      className="px-3 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-all"
-                    >
-                      📁
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">格式</label>
-                    <div className="flex bg-white/5 p-1 rounded-lg border border-white/10">
-                      {formatOptions.map((opt) => (
-                        <button
-                          key={opt.value}
-                          onClick={() => setFormat(opt.value as any)}
-                          className={`flex-1 py-1.5 rounded-md text-xs font-medium transition-all ${format === opt.value ? 'bg-red-500 text-white shadow-sm' : 'hover:bg-white/5'
-                            }`}
-                        >
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">帧率 (FPS)</label>
-                    <select
-                      value={fps}
-                      onChange={(e) => setFps(parseInt(e.target.value))}
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none appearance-none"
-                    >
-                      {[15, 24, 30, 60].map(f => (
-                        <option key={f} value={f}>{f} FPS</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">录制画质</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {qualityOptions.map((opt) => (
-                      <button
-                        key={opt.value}
-                        onClick={() => setQuality(opt.value as any)}
-                        className={`py-2 rounded-lg text-xs font-medium border-2 transition-all ${quality === opt.value ? 'border-red-500 bg-red-500/5 text-red-500' : 'border-white/5 bg-white/5 hover:border-white/20'
-                          }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-card rounded-xl p-6 border border-white/20 dark:border-white/10 shadow-soft">
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>⌨️</span> 热键设置
-              </h2>
-              <div className="space-y-6">
-                <div className="p-4 rounded-xl bg-gradient-to-br from-white/5 to-white/[0.02] border border-white/10 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">开始/停止录制</span>
-                    <span className="text-[10px] bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">全局生效</span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={isRecordingHotkey ? '正在录入...' : recorderHotkey.replace('CommandOrControl+', 'Ctrl+')}
-                        readOnly
-                        onClick={() => setIsRecordingHotkey(true)}
-                        className={`w-full bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-500 scale-[1.02]' : 'border-white/10 hover:border-white/30'
-                          }`}
-                      />
-                      {!isRecordingHotkey && (
-                        <div className="absolute top-1/2 -translate-y-1/2 right-3 text-white/20">
-                          🖱️
-                        </div>
-                      )}
-                    </div>
                     <button
                       onClick={handleSaveHotkey}
                       disabled={isSavingHotkey || isRecordingHotkey}
-                      className="px-4 bg-red-500 hover:bg-red-600 disabled:opacity-50 disabled:hover:bg-red-500 rounded-xl font-bold text-white transition-all shadow-lg shadow-red-500/30"
+                      className="px-4 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold transition-all"
                     >
-                      {isSavingHotkey ? '...' : '保存'}
+                      {isSavingHotkey ? '保存中' : '保存'}
                     </button>
                   </div>
 
-                  <p className="text-[10px] text-muted-foreground text-center italic">
-                    {isRecordingHotkey ? '请在键盘上按下组合键' : '点击输入框可重新设置快捷键'}
+                  <p className="text-[11px] text-muted-foreground">
+                    {isRecordingHotkey ? '按下新的组合键完成录入。' : '点击输入框后，按下新的组合键。'}
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                  <div className="w-10 h-10 rounded-full bg-red-500/20 flex items-center justify-center text-xl">
-                    💡
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-bold text-red-400 mb-0.5">温馨提示</p>
-                    <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      录制过程中如果遇到卡顿，建议尝试降低 FPS 或切换到 MP4 格式。
-                    </p>
-                  </div>
+                <div className="rounded-xl border border-orange-500/20 bg-orange-500/8 p-4 space-y-2">
+                  <p className="text-sm font-semibold text-orange-200">录制建议</p>
+                  <ul className="text-xs text-muted-foreground space-y-2">
+                    <li>MP4 适合长时间录制，兼容性最好。</li>
+                    <li>GIF 适合短片段演示，体积通常更大。</li>
+                    <li>如果画面卡顿，优先降低 FPS 或质量等级。</li>
+                  </ul>
                 </div>
               </div>
             </div>
-          </div>
+          </section>
 
-          <div className="pt-4">
-            <button
-              onClick={handleToggleRecording}
-              className={`w-full py-6 rounded-2xl font-bold text-xl transition-all duration-500 flex items-center justify-center gap-4 group ${isRecording
-                ? 'bg-red-500 text-white animate-pulse-glow shadow-2xl shadow-red-500/40'
-                : 'bg-white hover:bg-gray-100 text-black shadow-xl hover:shadow-2xl'
-                }`}
-            >
-              {isRecording ? (
-                <>
-                  <div className="w-4 h-4 bg-white rounded-sm animate-recording-dot" />
-                  <span>停止录制 ({recordingTime})</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-4 h-4 bg-red-500 rounded-full group-hover:scale-125 transition-transform" />
-                  <span>开始录制</span>
-                </>
-              )}
-            </button>
-          </div>
+          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-red-400 mb-1">3. 录制中控制</p>
+                <h2 className="text-xl font-semibold">开始后在这里控制录制</h2>
+              </div>
+              <div className={`px-3 py-1.5 rounded-full text-xs font-medium border ${sessionStatus === 'recording'
+                ? 'border-red-500/30 bg-red-500/10 text-red-300'
+                : sessionStatus === 'finishing'
+                  ? 'border-orange-500/30 bg-orange-500/10 text-orange-200'
+                  : 'border-white/10 bg-white/5 text-muted-foreground'
+              }`}>
+                {statusCopy}
+              </div>
+            </div>
 
-          <div className="bg-purple-500/5 border border-purple-500/10 rounded-xl p-4">
-            <h3 className="text-sm font-semibold text-purple-400 mb-2 flex items-center gap-2">
-              <span>📘</span> 录制建议
-            </h3>
-            <ul className="text-xs text-muted-foreground space-y-2">
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400">•</span>
-                <span>GIF 格式适合短时间录制，文件体积会比较大</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400">•</span>
-                <span>MP4 格式是最常用的视频格式，兼容性最好</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-400">•</span>
-                <span>WebM 格式是开源格式，文件体积更小</span>
-              </li>
-            </ul>
-          </div>
+            <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-4">
+              <div className={`rounded-2xl border p-5 ${isRecording
+                ? 'border-red-500/25 bg-red-500/10 animate-pulse-glow'
+                : 'border-white/10 bg-white/5'
+              }`}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className={`w-3.5 h-3.5 rounded-full ${sessionStatus === 'recording' ? 'bg-red-400 animate-recording-dot' : sessionStatus === 'finishing' ? 'bg-orange-300 animate-recording-dot' : 'bg-white/40'}`} />
+                  <div>
+                    <p className="text-sm font-semibold">
+                      {sessionStatus === 'recording' ? '录制进行中' : sessionStatus === 'finishing' ? '正在收尾保存' : '等待开始'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">{statusCopy}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-5 text-center">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">录制计时</p>
+                  <p className="text-3xl font-semibold tracking-[0.15em]">{recordingTime}</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">当前模式</p>
+                    <p className="text-sm font-medium">{recordingMode === 'full' ? '全屏录制' : '区域录制'}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <p className="text-xs text-muted-foreground mb-1">输出文件</p>
+                    <p className="text-sm font-medium truncate">{outputPath || '未选择保存位置'}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                  <p className="text-sm font-semibold mb-2">开始前检查</p>
+                  <ul className="text-xs text-muted-foreground space-y-2">
+                    <li>目标: {currentTargetLabel}</li>
+                    <li>格式: {format.toUpperCase()} · {fps} FPS · {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}</li>
+                    <li>{recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}</li>
+                  </ul>
+                </div>
+
+                <button
+                  onClick={handleToggleRecording}
+                  disabled={recordButtonDisabled}
+                  className={`w-full py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center gap-3 ${sessionStatus === 'recording'
+                    ? 'bg-red-500 hover:bg-red-600 text-white'
+                    : sessionStatus === 'finishing'
+                      ? 'bg-orange-500/70 text-white cursor-wait'
+                      : 'bg-white hover:bg-gray-100 text-black disabled:opacity-60 disabled:cursor-not-allowed'
+                  }`}
+                >
+                  {sessionStatus === 'recording' ? (
+                    <>
+                      <span className="w-3 h-3 bg-white rounded-sm animate-recording-dot" />
+                      停止录制
+                    </>
+                  ) : sessionStatus === 'finishing' ? (
+                    '正在结束录制…'
+                  ) : (
+                    <>
+                      <span className="w-3 h-3 bg-red-500 rounded-full" />
+                      开始录制
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </section>
         </div>
       </div>
 
       {toast && (
-        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg animate-slide-in-right z-50 ${toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'
-          }`}>
+        <div className={`fixed bottom-6 right-6 px-4 py-3 rounded-xl shadow-lg z-50 ${toast.type === 'success' ? 'bg-green-500/90' : 'bg-red-500/90'}`}>
           <div className="flex items-center gap-2 text-white">
             {toast.type === 'success' ? (
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -451,7 +791,7 @@ export const RecorderSelectionOverlay: React.FC = () => {
       onMouseDown={onStart}
       onMouseMove={onMove}
       onMouseUp={onEnd}
-      onContextMenu={(e) => e.preventDefault()}
+      onContextMenu={(event) => event.preventDefault()}
     >
       <div className="fixed top-10 left-1/2 -translate-x-1/2 bg-black/80 text-white px-6 py-3 rounded-2xl text-sm font-medium border border-white/20 shadow-2xl pointer-events-none z-[100] animate-fade-in whitespace-nowrap">
         请在当前屏幕拖拽选择录制区域 (Esc 或 右键取消)

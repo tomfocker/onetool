@@ -41,6 +41,7 @@ export interface RecorderStartSessionInput {
 }
 
 const MIN_RECORDER_SIZE = 64
+export const RECORDER_MIN_SELECTION_SIZE = MIN_RECORDER_SIZE
 
 function clamp(value: number, min: number, max: number): number {
   if (max < min) {
@@ -108,6 +109,28 @@ export function nudgeRecorderBounds(
 
 export function isRecorderSelectionValid(bounds: RecorderBounds, minSize = MIN_RECORDER_SIZE): boolean {
   return bounds.width >= minSize && bounds.height >= minSize
+}
+
+export function getRecorderSelectionValidationError(
+  bounds: RecorderBounds,
+  minSize = MIN_RECORDER_SIZE
+): string | null {
+  const widthTooSmall = bounds.width < minSize
+  const heightTooSmall = bounds.height < minSize
+
+  if (widthTooSmall && heightTooSmall) {
+    return `宽度和高度不能小于 ${minSize}px`
+  }
+
+  if (widthTooSmall) {
+    return `宽度不能小于 ${minSize}px`
+  }
+
+  if (heightTooSmall) {
+    return `高度不能小于 ${minSize}px`
+  }
+
+  return null
 }
 
 export function ensureRecorderOutputPath(outputPath: string, format: 'mp4' | 'gif'): string {
