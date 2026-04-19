@@ -27,9 +27,9 @@ export const FileDropover: React.FC = () => {
 
   const floatBallRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
-  const startPosRef = useRef({ x: 0, y: 0 })
+  const startPosRef = useRef({ offsetX: 0, offsetY: 0 })
   const animationFrameRef = useRef<number | null>(null)
-  const pendingDeltaRef = useRef<{ dx: number; dy: number } | null>(null)
+  const pendingTargetRef = useRef<{ targetX: number; targetY: number } | null>(null)
 
   useEffect(() => {
     const electron = window.electron as any
@@ -63,17 +63,17 @@ export const FileDropover: React.FC = () => {
   }, [isExpanded])
 
   const moveWindow = useCallback(() => {
-    if (pendingDeltaRef.current) {
+    if (pendingTargetRef.current) {
       const electron = window.electron as any
       if (electron?.floatBall) {
-        electron.floatBall.move(pendingDeltaRef.current.dx, pendingDeltaRef.current.dy)
+        electron.floatBall.setPosition(pendingTargetRef.current.targetX, pendingTargetRef.current.targetY)
       }
-      pendingDeltaRef.current = null
+      pendingTargetRef.current = null
     }
     animationFrameRef.current = null
   }, [])
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handlePointerDown = (e: React.PointerEvent) => {
     if ((e.target as HTMLElement).closest('.no-drag')) {
       return
     }
@@ -81,36 +81,37 @@ export const FileDropover: React.FC = () => {
     e.preventDefault()
     e.stopPropagation()
     isDraggingRef.current = true
-    startPosRef.current = { x: e.screenX, y: e.screenY }
+
+    // Capture the pointer
+    e.currentTarget.setPointerCapture(e.pointerId)
+
+    // Calculate the mouse offset from the top-left of the window
+    startPosRef.current = { offsetX: e.clientX, offsetY: e.clientY }
   }
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDraggingRef.current) return
 
-    const dx = e.screenX - startPosRef.current.x
-    const dy = e.screenY - startPosRef.current.y
+    // Calculate absolute window position
+    const targetX = e.screenX - startPosRef.current.offsetX
+    const targetY = e.screenY - startPosRef.current.offsetY
 
-    startPosRef.current = { x: e.screenX, y: e.screenY }
-
-    if (pendingDeltaRef.current) {
-      pendingDeltaRef.current.dx += dx
-      pendingDeltaRef.current.dy += dy
-    } else {
-      pendingDeltaRef.current = { dx, dy }
-    }
+    pendingTargetRef.current = { targetX, targetY }
 
     if (!animationFrameRef.current) {
       animationFrameRef.current = requestAnimationFrame(moveWindow)
     }
   }
 
-  const handleMouseUp = () => {
+  const handlePointerUp = (e: React.PointerEvent) => {
     isDraggingRef.current = false
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch (err) { }
   }
 
   const handleMouseLeave = () => {
-    isDraggingRef.current = false
-    if (isExpanded) {
+    if (!isDraggingRef.current && isExpanded) {
       setIsExpanded(false)
     }
   }
@@ -214,9 +215,10 @@ export const FileDropover: React.FC = () => {
     <div
       ref={floatBallRef}
       className={`w-full h-full relative select-none transition-all duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] ${isVisible ? 'opacity-100 scale-100' : 'opacity-0 scale-[0.01] pointer-events-none'}`}
-      onMouseDown={handleMouseDown}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUp}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
       onMouseLeave={handleMouseLeave}
     >
       {/* 悬浮球形态 */}

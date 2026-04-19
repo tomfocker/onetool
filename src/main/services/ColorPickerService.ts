@@ -145,92 +145,114 @@ Write-Output "$($pos.X),$($pos.Y),$($pixel.R),$($pixel.G),$($pixel.B)"
   async pick(): Promise<IpcResponse<{ color?: any }>> {
     const displays = screen.getAllDisplays()
 
-    // 【修复1】先截图，再隐藏主窗口
-    // desktopCapturer 需要有可见窗口才能正常工作
-    const screenshotMap = await this.captureAllScreens()
+    return new Promise(async (resolve) => {
+      let cleanupCalled = false
+      const onOverlayReady = (event: Electron.IpcMainEvent) => {
+        const webContentsId = event.sender.id
+        const entry = displayMap.get(webContentsId)
+        if (!entry) return
 
-    if (this.mainWindow) this.mainWindow.hide()
-
-    // 记录每个 display 对应的 overlay 窗口，用于 ready 信号匹配
-    const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
-
-    this.colorPickerWindows = displays.map(display => {
-      const { x, y, width, height } = display.bounds
-      const win = new BrowserWindow({
-        x, y, width, height,
-        transparent: true,
-        frame: false,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        focusable: true,
-        show: false,
-        fullscreenable: true,
-        kiosk: true, // 强制覆盖任务栏
-        webPreferences: {
-          preload: join(__dirname, '../preload/index.js'),
-          sandbox: false
+        const dataUrl = screenshotMap.get(entry.displayId)
+        if (dataUrl) {
+          entry.win.webContents.send('color-picker:screenshot', dataUrl)
+        } else {
+          const fallback = screenshotMap.values().next().value
+          if (fallback) entry.win.webContents.send('color-picker:screenshot', fallback)
         }
-      })
-
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-
-      displayMap.set(win.webContents.id, { win, displayId: display.id })
-
-      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-        win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/color-picker-overlay?display=${display.id}`)
-      } else {
-        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}#/color-picker-overlay?display=${display.id}`)
       }
 
-      win.once('ready-to-show', () => win.show())
-      return win
-    })
-
-    // 【修复2】监听 overlay 渲染进程发来的 ready 信号，再发送截图
-    // 彻底消除竞态条件（did-finish-load 早于 React useEffect 注册监听器）
-    const onOverlayReady = (event: Electron.IpcMainEvent) => {
-      const webContentsId = event.sender.id
-      const entry = displayMap.get(webContentsId)
-      if (!entry) return
-
-      const dataUrl = screenshotMap.get(entry.displayId)
-      if (dataUrl) {
-        entry.win.webContents.send('color-picker:screenshot', dataUrl)
-      } else {
-        // 没有对应截图时，尝试用第一张截图兜底
-        const fallback = screenshotMap.values().next().value
-        if (fallback) entry.win.webContents.send('color-picker:screenshot', fallback)
-      }
-    }
-    ipcMain.on('color-picker:overlay-ready', onOverlayReady)
-
-    return new Promise((resolve) => {
       const onPicked = (_event, data) => {
         cleanup()
         if (this.mainWindow) this.mainWindow.webContents.send('color-picker:selected', data)
         resolve({ success: true, data: { color: data } })
       }
+
       const onCancelled = () => {
         cleanup()
         resolve({ success: false, error: 'Cancelled' })
       }
 
       const cleanup = () => {
+        if (cleanupCalled) return
+        cleanupCalled = true
+
         ipcMain.removeListener('color-picker:confirm-pick', onPicked)
         ipcMain.removeListener('color-picker:cancel-pick', onCancelled)
         ipcMain.removeListener('color-picker:overlay-ready', onOverlayReady)
-        this.colorPickerWindows.forEach(win => { if (!win.isDestroyed()) win.close() })
+
+        this.colorPickerWindows.forEach(win => {
+          if (!win.isDestroyed()) win.close()
+        })
         this.colorPickerWindows = []
         displayMap.clear()
+
         if (this.mainWindow) {
           this.mainWindow.show()
           this.mainWindow.focus()
         }
       }
 
-      ipcMain.once('color-picker:confirm-pick', onPicked)
-      ipcMain.once('color-picker:cancel-pick', onCancelled)
+      // 记录每个 display 对应的 overlay 窗口，用于 ready 信号匹配
+      const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
+      let screenshotMap = new Map<number, string>()
+
+      try {
+        // 【修复1】先截图，再隐藏主窗口
+        screenshotMap = await this.captureAllScreens()
+
+        if (this.mainWindow) this.mainWindow.hide()
+
+        ipcMain.on('color-picker:overlay-ready', onOverlayReady)
+        ipcMain.once('color-picker:confirm-pick', onPicked)
+        ipcMain.once('color-picker:cancel-pick', onCancelled)
+
+        this.colorPickerWindows = displays.map(display => {
+          const { x, y, width, height } = display.bounds
+          const win = new BrowserWindow({
+            x, y, width, height,
+            transparent: true,
+            frame: false,
+            alwaysOnTop: true,
+            skipTaskbar: true,
+            resizable: false,
+            focusable: true,
+            show: false,
+            fullscreenable: true,
+            kiosk: true,
+            webPreferences: {
+              preload: join(__dirname, '../preload/index.js'),
+              sandbox: false
+            }
+          })
+
+          win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+          displayMap.set(win.webContents.id, { win, displayId: display.id })
+
+          if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+            win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/color-picker-overlay?display=${display.id}`)
+          } else {
+            // 【修复2】使用 loadFile + hash，避免拼接 file:// 的潜在路径问题
+            win.loadFile(join(__dirname, '../../renderer/index.html'), {
+              hash: `/color-picker-overlay?display=${display.id}`
+            })
+          }
+
+          win.once('ready-to-show', () => win.show())
+
+          // 异常处理：如果窗口崩溃或无法加载
+          win.webContents.on('did-fail-load', () => {
+            console.error(`ColorPicker Window for display ${display.id} failed to load`)
+            cleanup()
+            resolve({ success: false, error: 'Overlay load failed' })
+          })
+
+          return win
+        })
+      } catch (error) {
+        console.error('ColorPickerService: pick session error:', error)
+        cleanup()
+        resolve({ success: false, error: (error as Error).message })
+      }
     })
   }
 }

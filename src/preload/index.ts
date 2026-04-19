@@ -290,6 +290,9 @@ const floatBallAPI = {
   move: (x: number, y: number) => {
     ipcRenderer.send('floatball-move', { x, y })
   },
+  setPosition: (x: number, y: number) => {
+    ipcRenderer.send('floatball-set-position', { x, y })
+  },
   resize: (width: number, height: number) => {
     ipcRenderer.send('floatball-resize', { width, height })
   },

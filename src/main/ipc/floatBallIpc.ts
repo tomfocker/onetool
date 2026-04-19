@@ -12,6 +12,13 @@ export function registerFloatBallIpc() {
         }
     })
 
+    ipcMain.on('floatball-set-position', (event, { x, y }) => {
+        const floatBall = windowManagerService.getFloatBallWindow()
+        if (floatBall) {
+            floatBall.setPosition(Math.round(x), Math.round(y))
+        }
+    })
+
     ipcMain.on('floatball-resize', (event, { width, height }) => {
         const floatBall = windowManagerService.getFloatBallWindow()
         if (floatBall) {

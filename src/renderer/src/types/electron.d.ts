@@ -156,6 +156,7 @@ declare global {
       }
       floatBall: {
         move: (x: number, y: number) => void
+        setPosition: (x: number, y: number) => void
         resize: (width: number, height: number) => void
         startDrag: (filePath: string) => void
       }
