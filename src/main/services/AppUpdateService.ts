@@ -240,7 +240,7 @@ function shouldPreserveActionableCheckState(state: UpdateState): boolean {
 }
 
 function shouldPreserveTransientActionableState(state: UpdateState): boolean {
-  return state.status === 'downloading' || state.status === 'downloaded'
+  return state.status === 'available' || state.status === 'downloading' || state.status === 'downloaded'
 }
 
 function shouldPreserveSameVersionActionableState(state: UpdateState, latestVersion: string): boolean {

@@ -591,6 +591,55 @@ test('re-check keeps a downloaded update installable before the updater promise 
   assert.equal(service.getState().status, 'downloaded')
 })
 
+test('re-check keeps an available update actionable before the updater promise settles', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+  let releaseCheck
+  const deferred = new Promise((resolve) => {
+    releaseCheck = resolve
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  await service.checkForUpdates()
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-not-available')
+    await deferred
+    return { updateInfo: null }
+  }
+
+  const recheckPromise = service.checkForUpdates()
+
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'available',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: null,
+    errorMessage: null
+  })
+
+  releaseCheck()
+  const result = await recheckPromise
+
+  assert.equal(result.success, true)
+  assert.equal(service.getState().status, 'available')
+})
+
 test('checkForUpdates deduplicates overlapping calls and shares one updater request', async () => {
   let checkCalls = 0
   let releaseCheck
