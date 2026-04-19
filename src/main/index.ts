@@ -19,6 +19,7 @@ import { screenRecorderService } from './services/ScreenRecorderService'
 import { windowManagerService } from './services/WindowManagerService'
 import { processRegistry } from './services/ProcessRegistry'
 import { screenshotService } from './services/ScreenshotService'
+import { appUpdateService } from './services/AppUpdateService'
 import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
@@ -44,6 +45,7 @@ import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
+import { registerUpdateIpc } from './ipc/updateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 import { registerWslIpc } from './ipc/wslIpc'
 
@@ -179,6 +181,7 @@ app.whenReady().then(() => {
   registerSystemIpc(() => mainWindow)
   registerScreenshotIpc()
   registerFloatBallIpc()
+  registerUpdateIpc(() => mainWindow)
   registerWebActivatorIpc()
   registerWslIpc()
 
@@ -208,9 +211,25 @@ app.whenReady().then(() => {
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
 
+  let autoCheckForUpdatesEnabled = settingsService.getSettings().autoCheckForUpdates
+
   settingsService.on('changed', (newSettings) => {
     windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
+
+    const nextAutoCheckForUpdatesEnabled = Boolean(newSettings.autoCheckForUpdates)
+    if (
+      nextAutoCheckForUpdatesEnabled &&
+      !autoCheckForUpdatesEnabled &&
+      app.isPackaged &&
+      process.env.NODE_ENV === 'production'
+    ) {
+      void appUpdateService.checkForUpdates()
+    }
+
+    autoCheckForUpdatesEnabled = nextAutoCheckForUpdatesEnabled
   })
+
+  void appUpdateService.initialize()
 
   autoClickerService.registerShortcuts()
   // clipboardService.startWatcher() // 移除此处的重复调用，改为在 ready-to-show 后启动

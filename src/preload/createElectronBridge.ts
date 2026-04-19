@@ -7,6 +7,7 @@ import {
   WebActivatorToggleSchema,
   WebActivatorShortcutSchema
 } from '../shared/ipc-schemas'
+import type { UpdateState } from '../shared/appUpdate'
 import { LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
@@ -273,9 +274,18 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     runAudit: () => ipcRenderer.invoke('doctor-run-audit')
   }
 
+  const updatesAPI = {
+    getState: () => ipcRenderer.invoke('updates-get-state'),
+    checkForUpdates: () => ipcRenderer.invoke('updates-check'),
+    downloadUpdate: () => ipcRenderer.invoke('updates-download'),
+    quitAndInstall: () => ipcRenderer.invoke('updates-quit-and-install'),
+    onStateChanged: (callback: (state: UpdateState) => void) => onChannel('updates-state-changed', callback)
+  }
+
   return {
     app: appAPI,
     doctor: doctorAPI,
+    updates: updatesAPI,
     webUtils: webUtilsAPI,
     rename: renameAPI,
     capswriter: capswriterAPI,

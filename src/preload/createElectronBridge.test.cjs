@@ -129,3 +129,34 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['settings-set-floatball-hotkey', 'Alt+Shift+F']
   ])
 })
+
+test('createElectronBridge exposes explicit updates APIs and unsubscribes cleanly', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let state = null
+  const unsubscribe = bridge.updates.onStateChanged((nextState) => {
+    state = nextState
+  })
+
+  await bridge.updates.getState()
+  await bridge.updates.checkForUpdates()
+  await bridge.updates.downloadUpdate()
+  await bridge.updates.quitAndInstall()
+
+  mocks.listeners.get('updates-state-changed')({}, { status: 'available', currentVersion: '1.0.0' })
+
+  assert.equal(state.status, 'available')
+  assert.deepEqual(mocks.invokeCalls, [
+    ['updates-get-state'],
+    ['updates-check'],
+    ['updates-download'],
+    ['updates-quit-and-install']
+  ])
+
+  unsubscribe()
+
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'updates-state-changed')
+})

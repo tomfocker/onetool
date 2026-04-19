@@ -18,6 +18,7 @@ import {
   WslSpaceReclaimResult,
   AppNotification
 } from '../../../shared/types'
+import type { UpdateState } from '../../../shared/appUpdate'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 
 declare global {
@@ -29,6 +30,13 @@ declare global {
       }
       doctor: {
         runAudit: () => Promise<IpcResponse<any>>
+      }
+      updates: {
+        getState: () => Promise<IpcResponse<UpdateState>>
+        checkForUpdates: () => Promise<IpcResponse>
+        downloadUpdate: () => Promise<IpcResponse>
+        quitAndInstall: () => Promise<IpcResponse>
+        onStateChanged: (callback: (state: UpdateState) => void) => () => void
       }
       webUtils: {
         getPathForFile: (file: File) => string
