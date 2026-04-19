@@ -239,6 +239,30 @@ function shouldPreserveActionableCheckState(state: UpdateState): boolean {
   return hasActiveDownload(state) || state.status === 'downloaded'
 }
 
+function shouldPreserveSameVersionActionableState(state: UpdateState, latestVersion: string): boolean {
+  return (
+    (state.status === 'downloading' || state.status === 'downloaded') &&
+    state.latestVersion === latestVersion
+  )
+}
+
+function createSameVersionActionableState(state: UpdateState, releaseNotes: string | null): UpdateState {
+  if (state.status === 'downloaded') {
+    return createDownloadedState({
+      currentVersion: state.currentVersion,
+      latestVersion: state.latestVersion as string,
+      releaseNotes
+    })
+  }
+
+  return createDownloadingState({
+    currentVersion: state.currentVersion,
+    latestVersion: state.latestVersion as string,
+    releaseNotes,
+    progressPercent: state.progressPercent ?? 0
+  })
+}
+
 export class AppUpdateService extends EventEmitter {
   private readonly app: AppLike
 
@@ -431,8 +455,12 @@ export class AppUpdateService extends EventEmitter {
       try {
         this.setState(createCheckingState(this.state.currentVersion))
         const result = await this.autoUpdater.checkForUpdates()
+        const latestVersion = result?.updateInfo?.version?.trim()
+        const releaseNotes = normalizeReleaseNotes(result?.updateInfo?.releaseNotes) ?? preCheckState.releaseNotes
 
-        if (!result?.updateInfo) {
+        if (latestVersion && shouldPreserveSameVersionActionableState(preCheckState, latestVersion)) {
+          this.setState(createSameVersionActionableState(preCheckState, releaseNotes))
+        } else if (!result?.updateInfo) {
           if (shouldPreserveActionableCheckState(preCheckState)) {
             this.setState(preCheckState)
           } else {
