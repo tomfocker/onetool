@@ -29,6 +29,7 @@ export interface IpcResponse<T = any> {
  */
 export interface SystemConfig {
   cpu: string
+  deviceModel: string
   motherboard: string
   memory: string
   gpu: string

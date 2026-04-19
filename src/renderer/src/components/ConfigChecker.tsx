@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Cpu,
   Monitor,
@@ -10,60 +10,21 @@ import {
   Fingerprint,
   MonitorSmartphone,
   Copy,
-  HardDrive
+  HardDrive,
+  type LucideIcon
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
+import { translateHardwareLabel } from '../../../shared/hardwareIdentity'
+import type { SystemConfig } from '../../../shared/types'
 
-// 品牌字典
-const dictionary: Record<string, string> = {
-  'Samsung': '三星 (Samsung)',
-  'Intel': '英特尔 (Intel)',
-  'NVIDIA': '英伟达 (NVIDIA)',
-  'AMD': 'AMD',
-  'Gigabyte': '技嘉 (GIGABYTE)',
-  'ASUSTeK': '华硕 (ASUS)',
-  'ASUS': '华硕 (ASUS)',
-  'Micro-Star': '微星 (MSI)',
-  'Kingston': '金士顿 (Kingston)',
-  'Micron': '美光 (Micron)',
-  'Hynix': '海力士 (SK hynix)',
-  'Corsair': '美商海盗船 (Corsair)',
-  'Western Digital': '西部数据 (WD)',
-  'Seagate': '希捷 (Seagate)',
-  'Crucial': '英睿达 (Crucial)',
-  'AOC': '冠捷 (AOC)',
-  'TPV': '冠捷 (AOC)',
-  'Dell': '戴尔 (DELL)',
-  'HP': '惠普 (HP)',
-  'Lenovo': '联想 (Lenovo)',
-  'Acer': '宏碁 (Acer)',
-  'LG': 'LG',
-  'BenQ': '明基 (BenQ)',
-  'Philips': '飞利浦 (Philips)',
-  'ViewSonic': '优派 (ViewSonic)',
-  'Microsoft': '微软',
-  'SSD': '固态硬盘',
-  'HDD': '机械硬盘',
-  'NVMe': '高速存储',
-  'SATA': '串口存储'
-}
+type ConfigCardId = 'cpu' | 'deviceModel' | 'motherboard' | 'gpu' | 'memory' | 'monitor' | 'disk'
 
-const t = (str: string): string => {
-  if (!str || str === 'Unknown') return ''
-  let res = str.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim()
-  Object.keys(dictionary).forEach(key => {
-    const regex = new RegExp(`(^|\\s|\\()${key}`, 'gi')
-    if (res.match(regex)) {
-      res = res.replace(regex, (match) => {
-        if (match.startsWith('(')) return '(' + dictionary[key]
-        if (match.startsWith(' ')) return ' ' + dictionary[key]
-        return dictionary[key]
-      })
-    }
-  })
-  return res
+const formatHardwareLabel = (value: string | null | undefined): string => {
+  if (!value || value === 'Unknown') return ''
+  const text = value.replace(/[\u0000-\u001F\u007F-\u009F]/g, '').trim()
+  return translateHardwareLabel(text)
 }
 
 const formatRAM = (val: string) => {
@@ -71,7 +32,7 @@ const formatRAM = (val: string) => {
   const [size, count, speed, manuRaw] = val.split('|')
   const countStr = count ? `× ${count} 条` : ''
   const speedStr = speed && speed !== '0' ? `${speed} MHz` : ''
-  const manu = t(manuRaw) || manuRaw
+  const manu = formatHardwareLabel(manuRaw) || manuRaw
   const parts = [size, countStr, speedStr, (manu && manu !== 'Unknown') ? manu : ''].filter(Boolean)
   return parts.join('  ·  ')
 }
@@ -81,29 +42,44 @@ const formatMonitor = (val: string) => {
   const parts = val.split('|')
   if (parts.length === 3) {
     const [id, name, resolution] = parts
-    let brand = dictionary[id.toUpperCase()] || (id !== 'Unknown' ? id : '')
-    let model = t(name) || name
-    let displayName = brand && model.toLowerCase().includes(brand.toLowerCase().split(' ')[0].toLowerCase())
+    const brand = formatHardwareLabel(id) || (id !== 'Unknown' ? id : '')
+    const model = formatHardwareLabel(name) || name
+    const displayName = brand && model.toLowerCase().includes(brand.toLowerCase().split(' ')[0].toLowerCase())
       ? model
       : `${brand} ${model}`.trim()
     // 过滤 0x0 或以 0 开头的无效分辨率
     const validRes = resolution && !/^0[x×]/.test(resolution) ? resolution : ''
     return { name: displayName || '显示设备', res: validRes }
   }
-  return { name: t(val) || val, res: '' }
+  return { name: formatHardwareLabel(val) || val, res: '' }
 }
 
-interface SystemConfig {
-  cpu: string; motherboard: string; memory: string; gpu: string; monitor: string; disk: string; os: string;
-}
+const CACHE_KEY = 'config-cache-v17'
 
-const itemConfig = [
+const itemConfig: Array<{
+  id: ConfigCardId
+  label: string
+  icon: LucideIcon
+  gradient: string
+  accent: string
+}> = [
   { id: 'cpu', label: '处理器', icon: Cpu, gradient: 'from-blue-500 to-indigo-500', accent: 'blue' },
+  { id: 'deviceModel', label: '设备型号', icon: Fingerprint, gradient: 'from-sky-500 to-cyan-600', accent: 'sky' },
   { id: 'motherboard', label: '主板', icon: CircuitBoard, gradient: 'from-violet-500 to-purple-600', accent: 'violet' },
   { id: 'gpu', label: '显卡', icon: MonitorSmartphone, gradient: 'from-cyan-500 to-blue-600', accent: 'cyan' },
   { id: 'memory', label: '内存', icon: MemoryStick, gradient: 'from-emerald-500 to-teal-600', accent: 'emerald' },
   { id: 'monitor', label: '显示器', icon: Monitor, gradient: 'from-amber-500 to-orange-500', accent: 'amber' },
   { id: 'disk', label: '存储', icon: HardDrive, gradient: 'from-rose-500 to-pink-600', accent: 'rose' },
+]
+
+const exportOrder: ConfigCardId[] = [
+  'deviceModel',
+  'cpu',
+  'motherboard',
+  'gpu',
+  'memory',
+  'monitor',
+  'disk',
 ]
 
 export const ConfigChecker: React.FC = () => {
@@ -123,7 +99,7 @@ export const ConfigChecker: React.FC = () => {
       const result = await window.electron.systemConfig.getSystemConfig()
       if (result.success && result.data) {
         setConfig(result.data)
-        localStorage.setItem('config-cache-v16', JSON.stringify(result.data))
+        localStorage.setItem(CACHE_KEY, JSON.stringify(result.data))
       } else {
         setError(result.error || '获取配置失败')
       }
@@ -136,7 +112,7 @@ export const ConfigChecker: React.FC = () => {
   }
 
   useEffect(() => {
-    const cached = localStorage.getItem('config-cache-v16')
+    const cached = localStorage.getItem(CACHE_KEY)
     if (cached) {
       try { setConfig(JSON.parse(cached)) } catch { fetchConfig() }
     } else {
@@ -144,7 +120,7 @@ export const ConfigChecker: React.FC = () => {
     }
   }, [])
 
-  const renderLines = (id: string, value: string | undefined): React.ReactNode => {
+  const renderLines = (id: ConfigCardId, value: string | undefined): React.ReactNode => {
     if (!value || loading) {
       return <span className="text-sm text-muted-foreground italic opacity-40">审计进行中...</span>
     }
@@ -175,7 +151,7 @@ export const ConfigChecker: React.FC = () => {
     }
 
     if (lines.length === 1) {
-      return <span className="text-sm font-semibold tracking-tight">{t(lines[0]) || lines[0]}</span>
+      return <span className="text-sm font-semibold tracking-tight">{formatHardwareLabel(lines[0]) || lines[0]}</span>
     }
 
     return (
@@ -183,17 +159,46 @@ export const ConfigChecker: React.FC = () => {
         {lines.map((line, i) => (
           <div key={i} className="flex items-start gap-2">
             <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-1.5 shrink-0" />
-            <span className="text-sm font-semibold leading-snug">{t(line) || line}</span>
+            <span className="text-sm font-semibold leading-snug">{formatHardwareLabel(line) || line}</span>
           </div>
         ))}
       </div>
     )
   }
 
+  const formatExportValue = (id: ConfigCardId, value: string | undefined): string => {
+    if (!value || value === 'Unknown') return ''
+
+    if (id === 'memory') {
+      return formatRAM(value.split('\n').filter(l => l.trim())[0] || value)
+    }
+
+    if (id === 'monitor') {
+      return value
+        .split('\n')
+        .filter(l => l.trim())
+        .map((line) => {
+          const { name, res } = formatMonitor(line)
+          return res ? `${name} (${res})` : name
+        })
+        .join('； ')
+    }
+
+    const lines = value.split('\n').filter(l => l.trim())
+    if (lines.length === 1) {
+      return formatHardwareLabel(lines[0]) || lines[0]
+    }
+
+    return lines
+      .map(line => formatHardwareLabel(line) || line)
+      .join('； ')
+  }
+
   const handleCopy = () => {
-    const report = '[系统硬件快照]\n' + itemConfig.map(item => {
-      const val = (config as any)?.[item.id] || ''
-      return `${item.label}: ${t(val) || val}`
+    const report = '[系统硬件快照]\n' + exportOrder.map((id) => {
+      const item = itemConfig.find(entry => entry.id === id)!
+      const val = config?.[item.id] || ''
+      return `${item.label}: ${formatExportValue(item.id, val)}`
     }).join('\n')
     navigator.clipboard.writeText(report)
     setCopied(true)
@@ -202,7 +207,7 @@ export const ConfigChecker: React.FC = () => {
 
   return (
     <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
-      {/* 页头 */}
+      {/* 页面头 */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div className="space-y-2">
           <div className="flex items-center gap-4">
@@ -250,7 +255,7 @@ export const ConfigChecker: React.FC = () => {
       {/* 硬件卡片网格 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
         {itemConfig.map((item) => {
-          const value = (config as any)?.[item.id]
+          const value = config?.[item.id]
           const hasData = !loading && value && value !== ''
           return (
             <Card
