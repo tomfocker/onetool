@@ -3,7 +3,113 @@ import { spawn } from 'child_process'
 import { execPowerShell } from '../utils/processUtils'
 import { logger } from '../utils/logger'
 import { IpcResponse, SystemConfig } from '../../shared/types'
+import {
+  normalizeCompositeHardwareName,
+  normalizeMonitorEntry,
+  pickBestDeviceModel
+} from '../../shared/hardwareIdentity'
 import { taskQueueService } from './TaskQueueService'
+
+type ElectronDisplay = {
+  bounds: { width: number; height: number }
+  scaleFactor: number
+}
+
+type RawHardwarePayload = {
+  cpu?: string
+  cspVendor?: string
+  cspName?: string
+  cspVersion?: string
+  csManufacturer?: string
+  csModel?: string
+  mbManufacturer?: string
+  mbProduct?: string
+  ram?: string
+  gpu?: string
+  disk?: string
+  mon?: string
+  os?: string
+}
+
+function getElectronDisplayResolution(display: ElectronDisplay | undefined): string {
+  if (!display) {
+    return ''
+  }
+
+  return `${Math.round(display.bounds.width * display.scaleFactor)}x${Math.round(display.bounds.height * display.scaleFactor)}`
+}
+
+function isValidMonitorResolution(value: string | null | undefined): boolean {
+  return /^[1-9]\d*x[1-9]\d*$/i.test(String(value || '').trim())
+}
+
+function normalizeMonitorValue(rawMonitorText: string | undefined, electronDisplays: ElectronDisplay[]): string {
+  const rawLines = rawMonitorText
+    ? rawMonitorText.split(/\r?\n/).filter((line: string) => line.includes('|'))
+    : []
+  const canUseIndexedResolutionFallback = rawLines.length === 1 && electronDisplays.length === 1
+
+  if (rawLines.length > 0) {
+    return rawLines.map((line: string, idx: number) => {
+      const parts = line.split('|')
+      const resolution = isValidMonitorResolution(parts[2])
+        ? parts[2]
+        : canUseIndexedResolutionFallback
+          ? getElectronDisplayResolution(electronDisplays[idx])
+          : ''
+
+      return normalizeMonitorEntry({
+        manufacturer: parts[0] || '',
+        name: parts[1] || '',
+        resolution,
+      })
+    }).join('\n')
+  }
+
+  return electronDisplays.map((display, idx) => normalizeMonitorEntry({
+    manufacturer: 'Unknown',
+    name: `Display ${idx}`,
+    resolution: getElectronDisplayResolution(display),
+  })).join('\n')
+}
+
+export function buildSystemConfigFromHardwarePayload(
+  data: RawHardwarePayload,
+  electronDisplays: ElectronDisplay[],
+): SystemConfig {
+  const normalizedMotherboard = normalizeCompositeHardwareName(
+    data.mbManufacturer,
+    data.mbProduct,
+  )
+  const deviceModel = pickBestDeviceModel(
+    [
+      {
+        source: 'Win32_ComputerSystemProduct',
+        manufacturer: data.cspVendor,
+        model: data.cspName,
+        version: data.cspVersion,
+      },
+      {
+        source: 'Win32_ComputerSystem',
+        manufacturer: data.csManufacturer,
+        model: data.csModel,
+      },
+    ],
+    normalizedMotherboard || undefined,
+  )
+
+  return {
+    cpu: data.cpu || 'Unknown Processor',
+    deviceModel,
+    motherboard: normalizedMotherboard || 'Unknown Motherboard',
+    memory: data.ram || '',
+    gpu: data.gpu || 'Unknown GPU',
+    monitor: normalizeMonitorValue(data.mon, electronDisplays),
+    disk: data.disk || 'Unknown Storage',
+    os: data.os || 'Windows',
+    installTime: 1770000000000,
+  }
+}
 
 export class SystemService {
   constructor() { }
@@ -18,10 +124,10 @@ $ProgressPreference = 'SilentlyContinue'
 # CPU
 $cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
 
-# Motherboard
+# Whole-device identity
+$csProduct = Get-CimInstance Win32_ComputerSystemProduct | Select-Object -First 1
+$cs = Get-CimInstance Win32_ComputerSystem | Select-Object -First 1
 $mb_raw = Get-CimInstance Win32_BaseBoard | Select-Object -First 1
-$mb = "$($mb_raw.Manufacturer) $($mb_raw.Product)".Trim()
-if (!$mb -or $mb -eq " ") { $mb = "Unknown Motherboard" }
 
 # Memory
 $mem_objs = Get-CimInstance Win32_PhysicalMemory
@@ -77,7 +183,21 @@ $mon_str = $mon_list -join [char]10
 # OS
 $os = (Get-CimInstance Win32_OperatingSystem | Select-Object -First 1).Caption
 
-$info = @{ cpu=$cpu; mb=$mb; ram=$ram; gpu=$gpu_str; disk=$disk_str; mon=$mon_str; os=$os }
+$info = @{
+    cpu=$cpu
+    cspVendor=$csProduct.Vendor
+    cspName=$csProduct.Name
+    cspVersion=$csProduct.Version
+    csManufacturer=$cs.Manufacturer
+    csModel=$cs.Model
+    mbManufacturer=$mb_raw.Manufacturer
+    mbProduct=$mb_raw.Product
+    ram=$ram
+    gpu=$gpu_str
+    disk=$disk_str
+    mon=$mon_str
+    os=$os
+}
 Write-Output "---HW_JSON_START---"
 $info | ConvertTo-Json -Compress
 Write-Output "---HW_JSON_END---"
@@ -95,46 +215,15 @@ Write-Output "---HW_JSON_END---"
           console.error('SystemService: No JSON markers found in output. Raw output:', rawResult.slice(0, 500))
         }
 
-        let monitorValue = ''
+        let electronDisplays: ElectronDisplay[] = []
         try {
           const { screen } = require('electron')
-          const electronDisplays = screen.getAllDisplays()
-          const monLines: string[] = data.mon
-            ? data.mon.split(/\r?\n/).filter((l: string) => l.includes('|'))
-            : []
-
-          if (monLines.length > 0) {
-            // 如果 WMI 返回的行里分辨率为空，用 Electron screen API 按索引补充
-            monitorValue = monLines.map((line: string, idx: number) => {
-              const parts = line.split('|')
-              if (parts.length === 3 && (!parts[2] || parts[2] === '0x0' || /^0x/.test(parts[2])) && electronDisplays[idx]) {
-                const d = electronDisplays[idx]
-                parts[2] = `${Math.round(d.bounds.width * d.scaleFactor)}x${Math.round(d.bounds.height * d.scaleFactor)}`
-              }
-              return parts.join('|')
-            }).join('\n')
-          } else {
-            // WMI 完全没有 monitor 数据，用 Electron 回退
-            monitorValue = electronDisplays.map((d: any, i: number) =>
-              `Unknown|Display ${i}|${Math.round(d.bounds.width * d.scaleFactor)}x${Math.round(d.bounds.height * d.scaleFactor)}`
-            ).join('\n')
-          }
-        } catch (e) {
-          monitorValue = data.mon || 'Unknown'
-        }
+          electronDisplays = screen.getAllDisplays() as ElectronDisplay[]
+        } catch (e) {}
 
         return {
           success: true,
-          data: {
-            cpu: data.cpu || 'Unknown Processor',
-            motherboard: data.mb || 'Unknown Motherboard',
-            memory: data.ram || '',
-            gpu: data.gpu || 'Unknown GPU',
-            monitor: monitorValue,
-            disk: data.disk || 'Unknown Storage',
-            os: data.os || 'Windows',
-            installTime: 1770000000000 // 这里暂时硬编码一个基准值，实际生产应从持久化存储获取
-          }
+          data: buildSystemConfigFromHardwarePayload(data, electronDisplays)
         }
       } catch (error) {
         return { success: false, error: (error as Error).message }
