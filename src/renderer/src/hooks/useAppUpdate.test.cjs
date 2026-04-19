@@ -24,6 +24,7 @@ function loadUseAppUpdateModule() {
         useCallback: (fn) => fn,
         useEffect: () => undefined,
         useMemo: (factory) => factory(),
+        useRef: (value) => ({ current: value }),
         useState: () => {
           throw new Error('React hooks should not run in this unit test')
         }
@@ -46,7 +47,11 @@ function loadUseAppUpdateModule() {
   return module.exports
 }
 
-const { deriveAppUpdatePromptState } = loadUseAppUpdateModule()
+const {
+  canInvokeAppUpdateAction,
+  createAppUpdateErrorState,
+  deriveAppUpdatePromptState
+} = loadUseAppUpdateModule()
 
 function toPlainObject(value) {
   return JSON.parse(JSON.stringify(value))
@@ -67,8 +72,7 @@ test('deriveAppUpdatePromptState maps available updates to a confirm-download pr
       title: '发现新版本',
       message: '当前版本 1.0.0，可下载 1.2.0。',
       progressPercent: null,
-      primaryActionLabel: '下载更新',
-      secondaryActionLabel: '稍后再说'
+      primaryActionLabel: '下载更新'
     }
   )
 })
@@ -88,8 +92,7 @@ test('deriveAppUpdatePromptState maps downloading updates to a progress prompt',
       title: '正在下载更新',
       message: '版本 1.2.0 正在下载。',
       progressPercent: 42,
-      primaryActionLabel: null,
-      secondaryActionLabel: null
+      primaryActionLabel: null
     }
   )
 })
@@ -109,8 +112,40 @@ test('deriveAppUpdatePromptState maps downloaded updates to a restart prompt', (
       title: '更新已准备就绪',
       message: '版本 1.2.0 已下载完成。',
       progressPercent: 100,
-      primaryActionLabel: '重新启动并安装',
-      secondaryActionLabel: '稍后重启'
+      primaryActionLabel: '重新启动并安装'
     }
   )
+})
+
+test('createAppUpdateErrorState turns a failed initial bridge fetch into a visible error update state', () => {
+  assert.deepEqual(
+    toPlainObject(createAppUpdateErrorState('updates bridge unavailable')),
+    {
+      status: 'error',
+      currentVersion: '',
+      latestVersion: null,
+      releaseNotes: null,
+      progressPercent: null,
+      errorMessage: 'updates bridge unavailable'
+    }
+  )
+})
+
+test('deriveAppUpdatePromptState maps error updates to a visible retry prompt', () => {
+  assert.deepEqual(
+    toPlainObject(deriveAppUpdatePromptState(createAppUpdateErrorState('updates bridge unavailable'))),
+    {
+      kind: 'error',
+      title: '更新失败',
+      message: 'updates bridge unavailable',
+      progressPercent: null,
+      primaryActionLabel: '重新检查更新'
+    }
+  )
+})
+
+test('canInvokeAppUpdateAction blocks duplicate in-flight actions but allows a different action', () => {
+  assert.equal(canInvokeAppUpdateAction('download', 'download'), false)
+  assert.equal(canInvokeAppUpdateAction('download', 'install'), true)
+  assert.equal(canInvokeAppUpdateAction(null, 'download'), true)
 })

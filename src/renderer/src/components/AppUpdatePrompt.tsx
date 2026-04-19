@@ -1,22 +1,64 @@
 import React from 'react'
-import { Download, RotateCw, Loader2 } from 'lucide-react'
+import { AlertTriangle, Download, Loader2, RotateCw } from 'lucide-react'
 import { useAppUpdate } from '@/hooks/useAppUpdate'
 
 export const AppUpdatePrompt: React.FC = () => {
-  const { promptState, downloadUpdate, quitAndInstall } = useAppUpdate()
+  const { promptState, pendingAction, checkForUpdates, downloadUpdate, quitAndInstall } = useAppUpdate()
 
   if (!promptState) {
     return null
   }
 
+  const primaryActionLabel = promptState.kind === 'error'
+    ? promptState.primaryActionLabel
+    : promptState.kind === 'restart' && pendingAction === 'install'
+      ? '正在安装...'
+      : promptState.kind === 'confirm-download' && pendingAction === 'download'
+        ? '正在下载...'
+        : promptState.primaryActionLabel
+
+  const primaryActionDisabled =
+    (promptState.kind === 'confirm-download' && pendingAction === 'download') ||
+    (promptState.kind === 'restart' && pendingAction === 'install')
+
+  const handlePrimaryAction = () => {
+    if (promptState.kind === 'confirm-download') {
+      void downloadUpdate()
+      return
+    }
+
+    if (promptState.kind === 'restart') {
+      void quitAndInstall()
+      return
+    }
+
+    if (promptState.kind === 'error') {
+      void checkForUpdates()
+    }
+  }
+
+  const isError = promptState.kind === 'error'
+
   return (
     <div className="fixed bottom-6 right-6 z-[9998] w-[min(92vw,20rem)] pointer-events-none">
-      <div className="pointer-events-auto rounded-2xl border border-slate-200/80 bg-white/95 text-slate-900 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.4)] backdrop-blur-xl overflow-hidden">
+      <div
+        className={[
+          'pointer-events-auto rounded-2xl border backdrop-blur-xl overflow-hidden shadow-[0_18px_40px_-24px_rgba(15,23,42,0.4)]',
+          isError
+            ? 'border-red-200/80 bg-red-50/95 text-red-950'
+            : 'border-slate-200/80 bg-white/95 text-slate-900'
+        ].join(' ')}
+      >
         <div className="px-4 pt-4 pb-3">
           <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-white">
+            <div className={[
+              'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white',
+              isError ? 'bg-red-600' : 'bg-slate-900'
+            ].join(' ')}>
               {promptState.kind === 'progress' ? (
                 <Loader2 size={18} className="animate-spin" strokeWidth={2.25} />
+              ) : promptState.kind === 'error' ? (
+                <AlertTriangle size={18} strokeWidth={2.25} />
               ) : promptState.kind === 'restart' ? (
                 <RotateCw size={18} strokeWidth={2.25} />
               ) : (
@@ -24,8 +66,14 @@ export const AppUpdatePrompt: React.FC = () => {
               )}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-semibold tracking-tight text-slate-900">{promptState.title}</div>
-              <div className="mt-1 text-xs leading-relaxed text-slate-600">{promptState.message}</div>
+              <div className={[
+                'text-sm font-semibold tracking-tight',
+                isError ? 'text-red-950' : 'text-slate-900'
+              ].join(' ')}>{promptState.title}</div>
+              <div className={[
+                'mt-1 text-xs leading-relaxed',
+                isError ? 'text-red-700' : 'text-slate-600'
+              ].join(' ')}>{promptState.message}</div>
             </div>
           </div>
 
@@ -45,12 +93,14 @@ export const AppUpdatePrompt: React.FC = () => {
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
-                onClick={() => {
-                  void (promptState.kind === 'restart' ? quitAndInstall() : downloadUpdate())
-                }}
-                className="inline-flex flex-1 items-center justify-center rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white transition-transform duration-150 hover:-translate-y-px active:translate-y-0.5"
+                disabled={primaryActionDisabled}
+                onClick={handlePrimaryAction}
+                className={[
+                  'inline-flex flex-1 items-center justify-center rounded-xl px-3 py-2 text-sm font-medium text-white transition-transform duration-150 active:translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-70',
+                  isError ? 'bg-red-600 hover:-translate-y-px' : 'bg-slate-900 hover:-translate-y-px'
+                ].join(' ')}
               >
-                {promptState.primaryActionLabel}
+                {primaryActionLabel}
               </button>
             </div>
           )}
