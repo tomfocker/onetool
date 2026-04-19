@@ -182,7 +182,7 @@ test('resolveRecorderStartSession uses the prepared area draft instead of caller
   })
 })
 
-test('beginRecorderSelectionSession clears stale area drafts and ignores active recording states', () => {
+test('beginRecorderSelectionSession preserves an existing prepared area while opening reselection', () => {
   assert.deepEqual(
     beginRecorderSelectionSession(
       toRecorderSessionUpdate({
@@ -200,12 +200,14 @@ test('beginRecorderSelectionSession clears stale area drafts and ignores active 
       mode: 'area',
       outputPath: 'C:/tmp/capture.mp4',
       recordingTime: '00:00:00',
-      selectionBounds: null,
-      selectionPreviewDataUrl: null,
-      selectedDisplayId: null
+      selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+      selectionPreviewDataUrl: 'data:image/png;base64,preview',
+      selectedDisplayId: 'display-1'
     }
   )
+})
 
+test('beginRecorderSelectionSession still ignores active recording states', () => {
   assert.equal(
     beginRecorderSelectionSession(
       toRecorderSessionUpdate({
@@ -222,7 +224,7 @@ test('beginRecorderSelectionSession clears stale area drafts and ignores active 
   )
 })
 
-test('cancelRecorderSelectionSession clears stale area drafts after a canceled reselection', () => {
+test('cancelRecorderSelectionSession restores the previous prepared area after a canceled reselection', () => {
   assert.deepEqual(
     cancelRecorderSelectionSession(
       toRecorderSessionUpdate({
@@ -236,13 +238,13 @@ test('cancelRecorderSelectionSession clears stale area drafts after a canceled r
       })
     ),
     {
-      status: 'idle',
-      mode: 'full',
+      status: 'ready-to-record',
+      mode: 'area',
       outputPath: 'C:/tmp/capture.mp4',
       recordingTime: '00:00:00',
-      selectionBounds: null,
-      selectionPreviewDataUrl: null,
-      selectedDisplayId: null
+      selectionBounds: { x: 3, y: 4, width: 320, height: 180 },
+      selectionPreviewDataUrl: 'data:image/png;base64,preview',
+      selectedDisplayId: 'display-2'
     }
   )
 })

@@ -72,6 +72,15 @@ function getOutputExtension(format: 'mp4' | 'gif'): string {
   return '.mp4'
 }
 
+function hasPreparedRecorderSelection(current: RecorderSessionUpdate): boolean {
+  return Boolean(
+    current.mode === 'area' &&
+    current.selectionBounds &&
+    current.selectionPreviewDataUrl &&
+    current.selectedDisplayId
+  )
+}
+
 export function clampRecorderBounds(
   bounds: RecorderBounds,
   availableBounds: RecorderBounds,
@@ -220,20 +229,34 @@ export function beginRecorderSelectionSession(
     return null
   }
 
+  const preservePreparedSelection = hasPreparedRecorderSelection(current)
+
   return toRecorderSessionUpdate({
     status: 'selecting-area',
     mode: 'area',
     outputPath: current.outputPath,
     recordingTime: '00:00:00',
-    selectionBounds: null,
-    selectionPreviewDataUrl: null,
-    selectedDisplayId: null
+    selectionBounds: preservePreparedSelection ? current.selectionBounds : null,
+    selectionPreviewDataUrl: preservePreparedSelection ? current.selectionPreviewDataUrl : null,
+    selectedDisplayId: preservePreparedSelection ? current.selectedDisplayId : null
   })
 }
 
 export function cancelRecorderSelectionSession(
   current: RecorderSessionUpdate
 ): RecorderSessionUpdate {
+  if (hasPreparedRecorderSelection(current)) {
+    return toRecorderSessionUpdate({
+      status: 'ready-to-record',
+      mode: 'area',
+      outputPath: current.outputPath,
+      recordingTime: '00:00:00',
+      selectionBounds: current.selectionBounds,
+      selectionPreviewDataUrl: current.selectionPreviewDataUrl,
+      selectedDisplayId: current.selectedDisplayId
+    })
+  }
+
   return toRecorderSessionUpdate({
     status: 'idle',
     mode: 'full',
