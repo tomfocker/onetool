@@ -6,13 +6,12 @@ import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
 import { IpcResponse } from '../../shared/types'
 import {
+  createRecorderSessionUpdate,
   clampRecorderBounds,
   ensureRecorderOutputPath,
-  toRecorderSelectionPreviewUpdate,
   toRecorderSessionUpdate,
   type RecorderBounds,
   type RecorderSessionMode,
-  type RecorderSessionStatus,
   type RecorderSessionUpdate
 } from '../../shared/screenRecorderSession'
 import { processRegistry } from './ProcessRegistry'
@@ -33,17 +32,16 @@ type SelectionPreviewResult = {
   previewDataUrl: string
 }
 
-type RecorderSessionState = {
-  status: RecorderSessionStatus
-  mode: RecorderSessionMode
-  outputPath?: string
-  recordingTime: string
-  selectionBounds?: RecorderBounds
-  selectionPreviewDataUrl?: string
-  selectedDisplayId?: string | null
-}
-
 const INITIAL_RECORDING_TIME = '00:00:00'
+const INITIAL_SESSION: RecorderSessionUpdate = {
+  status: 'idle',
+  mode: 'full',
+  outputPath: '',
+  recordingTime: INITIAL_RECORDING_TIME,
+  selectionBounds: null,
+  selectionPreviewDataUrl: null,
+  selectedDisplayId: null
+}
 
 export class ScreenRecorderService {
   private recorderProcess: ChildProcess | null = null
@@ -51,12 +49,7 @@ export class ScreenRecorderService {
   private mainWindow: BrowserWindow | null = null
   private indicatorWindow: BrowserWindow | null = null
   private borderWindow: BrowserWindow | null = null
-  private session: RecorderSessionState = {
-    status: 'idle',
-    mode: 'full',
-    recordingTime: INITIAL_RECORDING_TIME,
-    selectedDisplayId: null
-  }
+  private session: RecorderSessionUpdate = { ...INITIAL_SESSION }
 
   constructor() { }
 
@@ -74,18 +67,16 @@ export class ScreenRecorderService {
     }
   }
 
-  private updateSession(update: RecorderSessionUpdate) {
-    this.session = {
-      ...this.session,
-      ...update,
-      selectionBounds: typeof update.selectionBounds === 'undefined'
-        ? this.session.selectionBounds
-        : update.selectionBounds ? { ...update.selectionBounds } : undefined
+  private updateSession(
+    patch: Partial<Omit<RecorderSessionUpdate, 'selectionBounds'>> & {
+      selectionBounds?: RecorderBounds | null
     }
+  ) {
+    this.session = createRecorderSessionUpdate(this.session, patch)
     this.emitSessionUpdate()
   }
 
-  private setSessionStatus(status: RecorderSessionStatus, recordingTime?: string) {
+  private setSessionStatus(status: RecorderSessionUpdate['status'], recordingTime?: string) {
     this.updateSession({
       status,
       recordingTime: recordingTime ?? this.session.recordingTime
@@ -521,8 +512,11 @@ export class ScreenRecorderService {
       }
 
       this.updateSession(
-        toRecorderSelectionPreviewUpdate({
+        toRecorderSessionUpdate({
+          status: 'ready-to-record',
+          mode: 'area',
           outputPath: this.session.outputPath,
+          recordingTime: INITIAL_RECORDING_TIME,
           selectionBounds: clampedBounds,
           selectionPreviewDataUrl: previewResult.data,
           selectedDisplayId: targetDisplay.id.toString()
@@ -571,7 +565,9 @@ export class ScreenRecorderService {
 
       const mode: RecorderSessionMode = config.bounds ? 'area' : 'full'
       const normalizedOutputPath = ensureRecorderOutputPath(config.outputPath, config.format === 'gif' ? 'gif' : 'mp4')
-      const sessionUpdate: RecorderSessionUpdate = {
+      const sessionUpdate: Partial<Omit<RecorderSessionUpdate, 'selectionBounds'>> & {
+        selectionBounds?: RecorderBounds | null
+      } = {
         status: 'recording',
         mode,
         outputPath: normalizedOutputPath,
@@ -583,6 +579,10 @@ export class ScreenRecorderService {
 
       if (config.bounds) {
         sessionUpdate.selectionBounds = config.bounds
+        sessionUpdate.selectionPreviewDataUrl = this.session.selectionPreviewDataUrl
+      } else {
+        sessionUpdate.selectionBounds = null
+        sessionUpdate.selectionPreviewDataUrl = null
       }
 
       this.updateSession(sessionUpdate)

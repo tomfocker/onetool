@@ -9,8 +9,8 @@ export const ScreenRecorderConfigSchema = z.object({
     bounds: z.object({
         x: z.number(),
         y: z.number(),
-        width: z.number(),
-        height: z.number()
+        width: z.number().positive(),
+        height: z.number().positive()
     }).optional(),
     windowTitle: z.string().optional(),
     displayId: z.string().optional()
@@ -21,8 +21,8 @@ export type ScreenRecorderConfig = z.infer<typeof ScreenRecorderConfigSchema>;
 export const RecorderBoundsSchema = z.object({
     x: z.number(),
     y: z.number(),
-    width: z.number(),
-    height: z.number()
+    width: z.number().positive(),
+    height: z.number().positive()
 });
 
 export const RecorderSelectionPreviewSchema = z.object({
@@ -32,13 +32,13 @@ export const RecorderSelectionPreviewSchema = z.object({
 });
 
 export const RecorderSessionUpdateSchema = z.object({
-    status: z.enum(['idle', 'selecting-area', 'ready-to-record', 'recording', 'finishing']).optional(),
-    mode: z.enum(['full', 'area']).optional(),
-    outputPath: z.string().min(1).optional(),
-    recordingTime: z.string().optional(),
-    selectionBounds: RecorderBoundsSchema.optional(),
-    selectionPreviewDataUrl: z.string().min(1).optional(),
-    selectedDisplayId: z.string().nullable().optional()
+    status: z.enum(['idle', 'selecting-area', 'ready-to-record', 'recording', 'finishing']),
+    mode: z.enum(['full', 'area']),
+    outputPath: z.string(),
+    recordingTime: z.string(),
+    selectionBounds: RecorderBoundsSchema.nullable(),
+    selectionPreviewDataUrl: z.string().nullable(),
+    selectedDisplayId: z.string().nullable()
 });
 
 export type RecorderBounds = z.infer<typeof RecorderBoundsSchema>;

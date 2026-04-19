@@ -6,8 +6,7 @@ const {
   nudgeRecorderBounds,
   isRecorderSelectionValid,
   ensureRecorderOutputPath,
-  toRecorderSessionUpdate,
-  toRecorderSelectionPreviewUpdate
+  toRecorderSessionUpdate
 } = require('./screenRecorderSession.ts')
 
 test('clampRecorderBounds respects the configurable minimum size', () => {
@@ -44,7 +43,7 @@ test('ensureRecorderOutputPath rewrites mismatched extensions and preserves matc
   assert.equal(ensureRecorderOutputPath('C:/tmp/capture.mp4', 'mp4'), 'C:/tmp/capture.mp4')
 })
 
-test('toRecorderSessionUpdate returns only the required session fields', () => {
+test('toRecorderSessionUpdate returns the full authoritative snapshot', () => {
   assert.deepEqual(
     toRecorderSessionUpdate({
       status: 'selecting-area',
@@ -67,10 +66,13 @@ test('toRecorderSessionUpdate returns only the required session fields', () => {
   )
 })
 
-test('toRecorderSelectionPreviewUpdate creates a ready-to-record snapshot for a prepared area', () => {
+test('toRecorderSessionUpdate creates the agreed selection-preview session snapshot', () => {
   const selectionBounds = { x: 25, y: 40, width: 320, height: 180 }
-  const update = toRecorderSelectionPreviewUpdate({
+  const update = toRecorderSessionUpdate({
+    status: 'ready-to-record',
+    mode: 'area',
     outputPath: 'C:/tmp/capture.mp4',
+    recordingTime: '00:00:00',
     selectionBounds,
     selectionPreviewDataUrl: 'data:image/png;base64,preview',
     selectedDisplayId: '7'
@@ -87,4 +89,22 @@ test('toRecorderSelectionPreviewUpdate creates a ready-to-record snapshot for a 
     selectionPreviewDataUrl: 'data:image/png;base64,preview',
     selectedDisplayId: '7'
   })
+})
+
+test('toRecorderSessionUpdate fills empty snapshot fields explicitly', () => {
+  assert.deepEqual(
+    toRecorderSessionUpdate({
+      status: 'idle',
+      mode: 'full'
+    }),
+    {
+      status: 'idle',
+      mode: 'full',
+      outputPath: '',
+      recordingTime: '00:00:00',
+      selectionBounds: null,
+      selectionPreviewDataUrl: null,
+      selectedDisplayId: null
+    }
+  )
 })

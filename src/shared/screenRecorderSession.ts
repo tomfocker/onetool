@@ -15,30 +15,23 @@ export interface RecorderBounds {
 }
 
 export interface RecorderSessionUpdate {
-  status?: RecorderSessionStatus
-  mode?: RecorderSessionMode
-  outputPath?: string
-  recordingTime?: string
-  selectionBounds?: RecorderBounds
-  selectionPreviewDataUrl?: string
-  selectedDisplayId?: string | null
+  status: RecorderSessionStatus
+  mode: RecorderSessionMode
+  outputPath: string
+  recordingTime: string
+  selectionBounds: RecorderBounds | null
+  selectionPreviewDataUrl: string | null
+  selectedDisplayId: string | null
 }
 
 export interface RecorderSessionUpdateInput {
-  status?: RecorderSessionStatus
-  mode?: RecorderSessionMode
+  status: RecorderSessionStatus
+  mode: RecorderSessionMode
   outputPath?: string
   recordingTime?: string
-  selectionBounds?: RecorderBounds
-  selectionPreviewDataUrl?: string
+  selectionBounds?: RecorderBounds | null
+  selectionPreviewDataUrl?: string | null
   selectedDisplayId?: string | null
-}
-
-export interface RecorderSelectionPreviewInput {
-  outputPath?: string
-  selectionBounds: RecorderBounds
-  selectionPreviewDataUrl: string
-  selectedDisplayId: string | null
 }
 
 const MIN_RECORDER_SIZE = 64
@@ -130,49 +123,36 @@ export function ensureRecorderOutputPath(outputPath: string, format: 'mp4' | 'gi
 }
 
 export function toRecorderSessionUpdate(update: RecorderSessionUpdateInput): RecorderSessionUpdate {
-  const nextUpdate: RecorderSessionUpdate = {}
-
-  if (typeof update.status !== 'undefined') {
-    nextUpdate.status = update.status
+  return {
+    status: update.status,
+    mode: update.mode,
+    outputPath: update.outputPath ?? '',
+    recordingTime: update.recordingTime ?? '00:00:00',
+    selectionBounds: update.selectionBounds ? { ...update.selectionBounds } : null,
+    selectionPreviewDataUrl: update.selectionPreviewDataUrl ?? null,
+    selectedDisplayId: update.selectedDisplayId ?? null
   }
-
-  if (typeof update.mode !== 'undefined') {
-    nextUpdate.mode = update.mode
-  }
-
-  if (typeof update.outputPath !== 'undefined') {
-    nextUpdate.outputPath = update.outputPath
-  }
-
-  if (typeof update.recordingTime !== 'undefined') {
-    nextUpdate.recordingTime = update.recordingTime
-  }
-
-  if (typeof update.selectionBounds !== 'undefined') {
-    nextUpdate.selectionBounds = { ...update.selectionBounds }
-  }
-
-  if (typeof update.selectionPreviewDataUrl !== 'undefined') {
-    nextUpdate.selectionPreviewDataUrl = update.selectionPreviewDataUrl
-  }
-
-  if (typeof update.selectedDisplayId !== 'undefined') {
-    nextUpdate.selectedDisplayId = update.selectedDisplayId
-  }
-
-  return nextUpdate
 }
 
-export function toRecorderSelectionPreviewUpdate(
-  input: RecorderSelectionPreviewInput
+export function createRecorderSessionUpdate(
+  current: RecorderSessionUpdate,
+  patch: Partial<Omit<RecorderSessionUpdate, 'selectionBounds'>> & {
+    selectionBounds?: RecorderBounds | null
+  }
 ): RecorderSessionUpdate {
   return toRecorderSessionUpdate({
-    status: 'ready-to-record',
-    mode: 'area',
-    outputPath: input.outputPath,
-    recordingTime: '00:00:00',
-    selectionBounds: input.selectionBounds,
-    selectionPreviewDataUrl: input.selectionPreviewDataUrl,
-    selectedDisplayId: input.selectedDisplayId
+    status: patch.status ?? current.status,
+    mode: patch.mode ?? current.mode,
+    outputPath: patch.outputPath ?? current.outputPath,
+    recordingTime: patch.recordingTime ?? current.recordingTime,
+    selectionBounds: typeof patch.selectionBounds === 'undefined' ? current.selectionBounds : patch.selectionBounds,
+    selectionPreviewDataUrl:
+      typeof patch.selectionPreviewDataUrl === 'undefined'
+        ? current.selectionPreviewDataUrl
+        : patch.selectionPreviewDataUrl,
+    selectedDisplayId:
+      typeof patch.selectedDisplayId === 'undefined'
+        ? current.selectedDisplayId
+        : patch.selectedDisplayId
   })
 }
