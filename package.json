@@ -6,6 +6,10 @@
   "author": "八骏马",
   "license": "MIT",
   "homepage": "https://space.bilibili.com/35149135",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tomfocker/onetool.git"
+  },
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint . --ext .js,.jsx,.cjs,.mjs,.ts,.tsx,.cts,.mts --fix",
@@ -19,6 +23,7 @@
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
+    "release:win": "npm run build && electron-builder --win nsis portable --publish never",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux"
   },
@@ -77,6 +82,7 @@
     "productName": "onetool",
     "copyright": "Copyright © 2025 八骏马",
     "asar": true,
+    "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "out/**/*",
       "!release/**/*",
@@ -101,8 +107,7 @@
     ],
     "win": {
       "target": "nsis",
-      "icon": "resources/icon.png",
-      "sign": null
+      "icon": "resources/icon.png"
     },
     "nsis": {
       "oneClick": false,

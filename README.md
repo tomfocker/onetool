@@ -77,6 +77,19 @@ npm run build:mac
 npm run build:linux
 ```
 
+### Windows 正式发布
+
+```bash
+npm run release:win
+```
+
+仓库同时提供：
+
+- `CI` 工作流：持续验证测试和构建
+- `Release` 工作流：手动触发 Windows 发布打包，或在推送 `v*` 标签时创建草稿 Release
+
+Windows 发布链路说明见 [docs/distribution/windows-release.md](docs/distribution/windows-release.md)。
+
 ## 📂 项目结构
 
 ```
