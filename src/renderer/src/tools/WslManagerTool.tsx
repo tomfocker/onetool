@@ -27,6 +27,7 @@ import type {
   WslOverview,
   WslSpaceReclaimResult
 } from '../../../shared/types'
+import { getWslOverviewPhase } from '../../../shared/toolState'
 
 function formatBytes(value?: number | null): string {
   if (value === null || value === undefined || Number.isNaN(value)) {
@@ -68,6 +69,8 @@ export default function WslManagerTool() {
   const [overview, setOverview] = useState<WslOverview | null>(null)
   const [backups, setBackups] = useState<WslBackupInfo[]>([])
   const [loading, setLoading] = useState(false)
+  const [hasLoadedOverview, setHasLoadedOverview] = useState(false)
+  const [overviewError, setOverviewError] = useState<string | null>(null)
   const [actionKey, setActionKey] = useState<string | null>(null)
   const [backupDistro, setBackupDistro] = useState('')
   const [backupFormat, setBackupFormat] = useState<WslBackupFormat>('tar')
@@ -83,13 +86,17 @@ export default function WslManagerTool() {
     const result = await window.electron.wsl.getOverview()
     if (result.success && result.data) {
       setOverview(result.data)
+      setOverviewError(null)
     } else if (!silent) {
+      setOverviewError(result.error || '当前无法读取 WSL 环境。')
       showNotification({
         type: 'error',
         title: 'WSL 状态读取失败',
         message: result.error || '当前无法读取 WSL 环境。'
       })
     }
+
+    setHasLoadedOverview(true)
 
     if (!silent) {
       setLoading(false)
@@ -322,6 +329,7 @@ export default function WslManagerTool() {
     runningCount: overview?.runningCount || 0,
     defaultDistro: overview?.defaultDistro || '未设置'
   }), [overview])
+  const overviewPhase = getWslOverviewPhase(overview, hasLoadedOverview)
 
   const statusItems = useMemo(() => {
     if (!overview) {
@@ -462,12 +470,14 @@ export default function WslManagerTool() {
             variant="outline"
             className={cn(
               'px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em]',
-              overview?.available
+              overviewPhase === 'ready'
                 ? 'border-cyan-500/20 bg-cyan-500/10 text-cyan-600'
-                : 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500'
+                : overviewPhase === 'loading'
+                  ? 'border-amber-500/20 bg-amber-500/10 text-amber-600'
+                  : 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500'
             )}
           >
-            {overview?.available ? 'WSL Ready' : 'WSL Missing'}
+            {overviewPhase === 'ready' ? 'WSL Ready' : overviewPhase === 'loading' ? 'WSL Loading' : 'WSL Missing'}
           </Badge>
           <Button variant="outline" className="rounded-2xl" onClick={() => void fetchOverview()}>
             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
@@ -475,7 +485,7 @@ export default function WslManagerTool() {
           </Button>
           <Button
             className="rounded-2xl bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20"
-            disabled={!overview?.available || summary.runningCount === 0}
+            disabled={overviewPhase !== 'ready' || summary.runningCount === 0}
             onClick={() =>
               void runOverviewAction(
                 'wsl-shutdown-all',
@@ -495,7 +505,7 @@ export default function WslManagerTool() {
         <Card className="border-none overflow-hidden">
           <CardHeader className="pb-3">
             <CardDescription>发行版数量</CardDescription>
-            <CardTitle className="text-xl font-black">{summary.distroCount}</CardTitle>
+            <CardTitle className="text-xl font-black">{overviewPhase === 'loading' ? '读取中' : summary.distroCount}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-xs font-bold text-muted-foreground">
             当前系统可见的 WSL 发行版总数。
@@ -504,7 +514,7 @@ export default function WslManagerTool() {
         <Card className="border-none overflow-hidden">
           <CardHeader className="pb-3">
             <CardDescription>运行中的实例</CardDescription>
-            <CardTitle className="text-xl font-black">{summary.runningCount}</CardTitle>
+            <CardTitle className="text-xl font-black">{overviewPhase === 'loading' ? '读取中' : summary.runningCount}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-xs font-bold text-muted-foreground">
             用于判断当前是否有 Linux 环境正在占用资源。
@@ -513,7 +523,7 @@ export default function WslManagerTool() {
         <Card className="border-none overflow-hidden">
           <CardHeader className="pb-3">
             <CardDescription>默认发行版</CardDescription>
-            <CardTitle className="text-xl font-black truncate">{summary.defaultDistro}</CardTitle>
+            <CardTitle className="text-xl font-black truncate">{overviewPhase === 'loading' ? '读取中' : summary.defaultDistro}</CardTitle>
           </CardHeader>
           <CardContent className="pt-0 text-xs font-bold text-muted-foreground">
             直接执行 <code>wsl</code> 时默认进入的发行版。
@@ -521,7 +531,31 @@ export default function WslManagerTool() {
         </Card>
       </div>
 
-      {!overview?.available ? (
+      {overviewPhase === 'loading' ? (
+        <Card className="border-none overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-xl font-black">正在读取 WSL 状态</CardTitle>
+            <CardDescription>正在向系统查询发行版、默认实例和宿主版本信息。</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 text-sm text-muted-foreground">
+            <div className="rounded-3xl border border-zinc-200/80 bg-white px-5 py-4 shadow-sm">
+              这一步只在首屏加载或手动刷新时出现，不会把“尚未返回结果”误报成 “WSL Missing”。
+            </div>
+          </CardContent>
+        </Card>
+      ) : overviewError && !overview ? (
+        <Card className="border-none overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-xl font-black">WSL 状态读取失败</CardTitle>
+            <CardDescription>{overviewError}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-3xl border border-zinc-200/80 bg-white px-5 py-4 font-mono text-sm text-zinc-900 shadow-sm">
+              先点一次“刷新状态”，如果仍失败，再检查本机 `wsl --status` 的输出。
+            </div>
+          </CardContent>
+        </Card>
+      ) : !overview?.available ? (
         <Card className="border-none overflow-hidden">
           <CardHeader>
             <CardTitle className="text-xl font-black">当前未检测到可用 WSL</CardTitle>

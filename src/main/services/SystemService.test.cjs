@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 
-function loadSystemServiceModule() {
+function loadSystemServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'SystemService.ts');
   const source = fs.readFileSync(filePath, 'utf8');
   const transpiled = ts.transpileModule(source, {
@@ -18,17 +18,20 @@ function loadSystemServiceModule() {
   }).outputText;
 
   const module = { exports: {} };
+  const execPowerShell = overrides.execPowerShell || (async () => '');
+  const execPowerShellEncoded = overrides.execPowerShellEncoded || (async () => '');
+  const electronModule = overrides.electronModule || {
+    app: {},
+    dialog: {},
+    BrowserWindow: function BrowserWindow() {},
+  };
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
-      return {
-        app: {},
-        dialog: {},
-        BrowserWindow: function BrowserWindow() {},
-      };
+      return electronModule;
     }
 
     if (specifier === '../utils/processUtils') {
-      return { execPowerShell: async () => '' };
+      return { execPowerShell, execPowerShellEncoded };
     }
 
     if (specifier === '../utils/logger') {
@@ -63,7 +66,7 @@ function loadSystemServiceModule() {
   return module.exports;
 }
 
-const { buildSystemConfigFromHardwarePayload } = loadSystemServiceModule();
+const { buildSystemConfigFromHardwarePayload, SystemService } = loadSystemServiceModule();
 
 test('buildSystemConfigFromHardwarePayload maps raw CIM keys into deviceModel and motherboard', () => {
   const config = buildSystemConfigFromHardwarePayload(
@@ -186,4 +189,58 @@ test('buildSystemConfigFromHardwarePayload uses normalized motherboard fallback 
 
   assert.equal(config.deviceModel, 'ASUS ROG STRIX B650E-F GAMING WIFI');
   assert.equal(config.motherboard, 'ASUS ROG STRIX B650E-F GAMING WIFI');
+});
+
+test('getSystemConfig keeps base hardware data when monitor probe returns no output', async () => {
+  const stdinCalls = [];
+  const encodedCalls = [];
+  const baseHardwareJson = JSON.stringify({
+    cpu: 'Intel(R) Core(TM) i7-14700K',
+    cspVendor: 'H3C',
+    cspName: 'H3CDesk X700t G2',
+    cspVersion: 'Default string',
+    csManufacturer: 'H3C',
+    csModel: 'H3CDesk X700t G2',
+    mbManufacturer: 'H3C',
+    mbProduct: '300B',
+    ram: '64GB|2|5600|Xi\'an UnilC Semiconductors Co Ltd',
+    gpu: 'NVIDIA GeForce RTX 4070 SUPER',
+    disk: 'Phison 1TB PCIE SSD (954GB)',
+    os: 'Microsoft Windows 11 专业版',
+  });
+  const { SystemService: TestSystemService } = loadSystemServiceModule({
+    execPowerShell: async (script) => {
+      stdinCalls.push(script);
+      return '';
+    },
+    execPowerShellEncoded: async (script) => {
+      encodedCalls.push(script);
+      if (encodedCalls.length === 1) {
+        return `---HW_JSON_START---\n${baseHardwareJson}\n---HW_JSON_END---`;
+      }
+
+      return '';
+    },
+    electronModule: {
+      app: {},
+      dialog: {},
+      BrowserWindow: function BrowserWindow() {},
+      screen: {
+        getAllDisplays: () => [
+          { bounds: { width: 2560, height: 1440 }, scaleFactor: 1 },
+        ],
+      },
+    },
+  });
+
+  const service = new TestSystemService();
+  const result = await service.getSystemConfig();
+
+  assert.equal(result.success, true);
+  assert.equal(stdinCalls.length, 0);
+  assert.equal(encodedCalls.length, 2);
+  assert.equal(result.data.cpu, 'Intel(R) Core(TM) i7-14700K');
+  assert.equal(result.data.deviceModel, 'H3C H3CDesk X700t G2');
+  assert.equal(result.data.motherboard, 'H3C 300B');
+  assert.equal(result.data.monitor, '|Display 0|2560x1440');
 });

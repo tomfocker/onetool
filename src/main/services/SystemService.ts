@@ -1,6 +1,6 @@
 import { app, dialog, BrowserWindow } from 'electron'
 import { spawn } from 'child_process'
-import { execPowerShell } from '../utils/processUtils'
+import { execPowerShellEncoded } from '../utils/processUtils'
 import { logger } from '../utils/logger'
 import { IpcResponse, SystemConfig } from '../../shared/types'
 import {
@@ -29,6 +29,34 @@ type RawHardwarePayload = {
   disk?: string
   mon?: string
   os?: string
+}
+
+const HARDWARE_JSON_START = '---HW_JSON_START---'
+const HARDWARE_JSON_END = '---HW_JSON_END---'
+const MONITOR_JSON_START = '---MON_JSON_START---'
+const MONITOR_JSON_END = '---MON_JSON_END---'
+
+function parseMarkedJson<T>(
+  rawResult: string,
+  startMarker: string,
+  endMarker: string,
+  contextLabel: string,
+): T | null {
+  const match = rawResult.match(new RegExp(`${startMarker}(.*?)${endMarker}`, 's'))
+  if (match && match[1]) {
+    try {
+      return JSON.parse(match[1].trim()) as T
+    } catch (error) {
+      console.error(`SystemService: ${contextLabel} JSON Parse Error:`, error, '\nRaw:', rawResult.slice(0, 500))
+      return null
+    }
+  }
+
+  if (rawResult.trim()) {
+    console.error(`SystemService: No ${contextLabel} JSON markers found in output. Raw output:`, rawResult.slice(0, 500))
+  }
+
+  return null
 }
 
 function getElectronDisplayResolution(display: ElectronDisplay | undefined): string {
@@ -117,7 +145,7 @@ export class SystemService {
   async getSystemConfig(): Promise<IpcResponse<SystemConfig>> {
     return taskQueueService.enqueue('HardwareAudit', async () => {
       try {
-        const hwScript = `
+        const hardwareScript = `
 $ErrorActionPreference = 'SilentlyContinue'
 $ProgressPreference = 'SilentlyContinue'
 
@@ -147,11 +175,35 @@ $gpu_str = ($gpus | Select-Object -Unique) -join [char]10
 $disks = Get-CimInstance Win32_DiskDrive | ForEach-Object { "$($_.Model) ($([Math]::Round($_.Size / 1GB))GB)" }
 $disk_str = $disks -join [char]10
 
-# Monitor via WMI
+# OS
+$os = (Get-CimInstance Win32_OperatingSystem | Select-Object -First 1).Caption
+
+$info = @{
+    cpu=$cpu
+    cspVendor=$csProduct.Vendor
+    cspName=$csProduct.Name
+    cspVersion=$csProduct.Version
+    csManufacturer=$cs.Manufacturer
+    csModel=$cs.Model
+    mbManufacturer=$mb_raw.Manufacturer
+    mbProduct=$mb_raw.Product
+    ram=$ram
+    gpu=$gpu_str
+    disk=$disk_str
+    os=$os
+}
+Write-Output "${HARDWARE_JSON_START}"
+$info | ConvertTo-Json -Compress
+Write-Output "${HARDWARE_JSON_END}"
+`
+        const monitorScript = `
+$ErrorActionPreference = 'SilentlyContinue'
+$ProgressPreference = 'SilentlyContinue'
+
 $mon_list = @()
 try {
     $params = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBasicDisplayParams -ErrorAction Stop
-    $ids    = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorID -ErrorAction Stop
+    $ids = Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorID -ErrorAction Stop
     for ($i = 0; $i -lt $ids.Count; $i++) {
         $m = $ids[$i]
         $n_bytes = [byte[]]($m.UserFriendlyName | Where-Object { $_ -ne 0 })
@@ -178,41 +230,30 @@ if ($mon_list.Count -eq 0) {
         }
     } catch {}
 }
-$mon_str = $mon_list -join [char]10
-
-# OS
-$os = (Get-CimInstance Win32_OperatingSystem | Select-Object -First 1).Caption
-
 $info = @{
-    cpu=$cpu
-    cspVendor=$csProduct.Vendor
-    cspName=$csProduct.Name
-    cspVersion=$csProduct.Version
-    csManufacturer=$cs.Manufacturer
-    csModel=$cs.Model
-    mbManufacturer=$mb_raw.Manufacturer
-    mbProduct=$mb_raw.Product
-    ram=$ram
-    gpu=$gpu_str
-    disk=$disk_str
-    mon=$mon_str
-    os=$os
+    mon=($mon_list -join [char]10)
 }
-Write-Output "---HW_JSON_START---"
+Write-Output "${MONITOR_JSON_START}"
 $info | ConvertTo-Json -Compress
-Write-Output "---HW_JSON_END---"
+Write-Output "${MONITOR_JSON_END}"
 `
-        const rawResult = await execPowerShell(hwScript)
-        let data: any = {}
-        const match = rawResult.match(/---HW_JSON_START---(.*?)---HW_JSON_END---/s)
-        if (match && match[1]) {
-          try {
-            data = JSON.parse(match[1].trim())
-          } catch (e) {
-            console.error('SystemService: JSON Parse Error:', e, '\nRaw:', rawResult.slice(0, 500))
-          }
-        } else {
-          console.error('SystemService: No JSON markers found in output. Raw output:', rawResult.slice(0, 500))
+        const rawHardwareResult = await execPowerShellEncoded(hardwareScript)
+        const data = parseMarkedJson<RawHardwarePayload>(
+          rawHardwareResult,
+          HARDWARE_JSON_START,
+          HARDWARE_JSON_END,
+          'hardware',
+        ) || {}
+
+        const rawMonitorResult = await execPowerShellEncoded(monitorScript)
+        const monitorData = parseMarkedJson<Pick<RawHardwarePayload, 'mon'>>(
+          rawMonitorResult,
+          MONITOR_JSON_START,
+          MONITOR_JSON_END,
+          'monitor',
+        )
+        if (monitorData?.mon) {
+          data.mon = monitorData.mon
         }
 
         let electronDisplays: ElectronDisplay[] = []
@@ -383,7 +424,7 @@ Write-Output "---STATS_JSON_START---"
 $results | ConvertTo-Json -Compress
 Write-Output "---STATS_JSON_END---"
 `
-        const rawResult = await execPowerShell(statsScript)
+        const rawResult = await execPowerShellEncoded(statsScript)
         const match = rawResult.match(/---STATS_JSON_START---(.*?)---STATS_JSON_END---/s)
         if (match && match[1]) {
           try {

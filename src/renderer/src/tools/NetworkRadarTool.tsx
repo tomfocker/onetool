@@ -13,6 +13,7 @@ import {
 } from 'lucide-react'
 import { useNetworkRadar } from '../hooks/useNetworkRadar'
 import { formatPingLatency } from '../../../shared/networkRadar'
+import { areAllPingResultsPending } from '../../../shared/toolState'
 
 const styles = `
   @keyframes radar-sweep {
@@ -96,6 +97,7 @@ export const NetworkRadarTool: React.FC = () => {
     scanLan,
     fetchNetworkInfo
   } = useNetworkRadar()
+  const showInitialProbeState = isPinging && areAllPingResultsPending(pingResults)
 
   useEffect(() => {
     const styleSheet = document.createElement('style')
@@ -131,6 +133,11 @@ export const NetworkRadarTool: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {showInitialProbeState && (
+                <div className="sm:col-span-2 rounded-xl border border-blue-500/10 bg-blue-500/5 px-4 py-3 text-sm text-blue-600">
+                  正在探测公共网络节点，首轮结果返回前会短暂显示“测试中...”，这不是卡死。
+                </div>
+              )}
               {pingResults.map((result, idx) => (
                 <div key={idx} className="p-4 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between hover:bg-white/10 transition-all">
                   <div className="flex items-center gap-3">
