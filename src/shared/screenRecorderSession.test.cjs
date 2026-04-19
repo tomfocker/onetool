@@ -36,6 +36,19 @@ test('nudgeRecorderBounds clamps safely when bounds start outside the display', 
   )
 })
 
+test('nudgeRecorderBounds clamps width reductions to the configured minimum size', () => {
+  assert.deepEqual(
+    nudgeRecorderBounds(
+      { x: 24, y: 12, width: 96, height: 80 },
+      'width',
+      -40,
+      { x: 0, y: 0, width: 200, height: 150 },
+      64
+    ),
+    { x: 24, y: 12, width: 64, height: 80 }
+  )
+})
+
 test('isRecorderSelectionValid respects the minimum size override', () => {
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 79, height: 80 }, 80), false)
   assert.equal(isRecorderSelectionValid({ x: 0, y: 0, width: 80, height: 80 }, 80), true)

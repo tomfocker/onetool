@@ -53,7 +53,10 @@ function loadUseScreenRecorderModule() {
   return module.exports
 }
 
-const { applyRecorderSessionSnapshot } = loadUseScreenRecorderModule()
+const {
+  applyRecorderSessionSnapshot,
+  getScreenRecorderViewState
+} = loadUseScreenRecorderModule()
 
 function toPlainObject(value) {
   return JSON.parse(JSON.stringify(value))
@@ -103,6 +106,44 @@ test('applyRecorderSessionSnapshot hydrates late-mounted draft state from the au
     {
       draftMode: 'area',
       outputPath: 'C:/tmp/session.mp4'
+    }
+  )
+})
+
+test('getScreenRecorderViewState keeps hotkey editing and section 3 scoped to active recording states', () => {
+  assert.deepEqual(
+    toPlainObject(getScreenRecorderViewState('idle')),
+    {
+      controlsLocked: false,
+      showPreStartControls: true,
+      showRecordingControls: false
+    }
+  )
+
+  assert.deepEqual(
+    toPlainObject(getScreenRecorderViewState('ready-to-record')),
+    {
+      controlsLocked: false,
+      showPreStartControls: true,
+      showRecordingControls: false
+    }
+  )
+
+  assert.deepEqual(
+    toPlainObject(getScreenRecorderViewState('recording')),
+    {
+      controlsLocked: true,
+      showPreStartControls: false,
+      showRecordingControls: true
+    }
+  )
+
+  assert.deepEqual(
+    toPlainObject(getScreenRecorderViewState('finishing')),
+    {
+      controlsLocked: true,
+      showPreStartControls: false,
+      showRecordingControls: true
     }
   )
 })

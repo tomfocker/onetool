@@ -78,6 +78,8 @@ export const ScreenRecorderTool: React.FC = () => {
     stopRecording,
     sessionStatus,
     controlsLocked,
+    showPreStartControls,
+    showRecordingControls,
     canStartRecording,
     isPreparingSelection,
     selectionDraft,
@@ -93,6 +95,12 @@ export const ScreenRecorderTool: React.FC = () => {
   useEffect(() => {
     setLocalHotkey(recorderHotkey)
   }, [recorderHotkey])
+
+  useEffect(() => {
+    if (controlsLocked && isRecordingHotkey) {
+      setIsRecordingHotkey(false)
+    }
+  }, [controlsLocked, isRecordingHotkey, setIsRecordingHotkey])
 
   useEffect(() => {
     const styleSheet = document.createElement('style')
@@ -295,9 +303,8 @@ export const ScreenRecorderTool: React.FC = () => {
     finishing: '正在结束录制，请稍候保存完成'
   }[sessionStatus]
 
-  const recordButtonDisabled = sessionStatus === 'recording'
-    ? false
-    : sessionStatus === 'finishing' || isPreparingSelection || !canStartRecording
+  const startButtonDisabled = sessionStatus === 'finishing' || isPreparingSelection || !canStartRecording
+  const stopButtonDisabled = sessionStatus === 'finishing'
   const currentTargetLabel = recordingMode === 'full'
     ? selectedScreen?.name || '未选择屏幕'
     : selectionRect
@@ -621,6 +628,33 @@ export const ScreenRecorderTool: React.FC = () => {
               </div>
 
               <div className="space-y-5">
+                {showPreStartControls && (
+                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
+                    <div>
+                      <p className="text-sm font-semibold">开始录制</p>
+                      <p className="text-xs text-muted-foreground mt-1">在开始前确认当前录制目标和输出设置。</p>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
+                      <p className="text-sm font-semibold mb-2">开始前检查</p>
+                      <ul className="text-xs text-muted-foreground space-y-2">
+                        <li>目标: {currentTargetLabel}</li>
+                        <li>格式: {format.toUpperCase()} · {fps} FPS · {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}</li>
+                        <li>{recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}</li>
+                      </ul>
+                    </div>
+
+                    <button
+                      onClick={handleToggleRecording}
+                      disabled={startButtonDisabled}
+                      className="w-full py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-black disabled:opacity-60 disabled:cursor-not-allowed"
+                    >
+                      <span className="w-3 h-3 bg-red-500 rounded-full" />
+                      开始录制
+                    </button>
+                  </div>
+                )}
+
                 <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -637,15 +671,20 @@ export const ScreenRecorderTool: React.FC = () => {
                       type="text"
                       value={isRecordingHotkey ? '正在录入...' : localHotkey.replace('CommandOrControl+', 'Ctrl+')}
                       readOnly
-                      onClick={() => setIsRecordingHotkey(true)}
+                      onClick={() => {
+                        if (!controlsLocked) {
+                          setIsRecordingHotkey(true)
+                        }
+                      }}
+                      disabled={controlsLocked}
                       className={`flex-1 bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey
                         ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-400'
                         : 'border-white/10 hover:border-white/30'
-                      }`}
+                      } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
                     />
                     <button
                       onClick={handleSaveHotkey}
-                      disabled={isSavingHotkey || isRecordingHotkey}
+                      disabled={controlsLocked || isSavingHotkey || isRecordingHotkey}
                       className="px-4 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold transition-all"
                     >
                       {isSavingHotkey ? '保存中' : '保存'}
@@ -653,7 +692,11 @@ export const ScreenRecorderTool: React.FC = () => {
                   </div>
 
                   <p className="text-[11px] text-muted-foreground">
-                    {isRecordingHotkey ? '按下新的组合键完成录入。' : '点击输入框后，按下新的组合键。'}
+                    {controlsLocked
+                      ? '录制进行中时无法修改热键。'
+                      : isRecordingHotkey
+                        ? '按下新的组合键完成录入。'
+                        : '点击输入框后，按下新的组合键。'}
                   </p>
                 </div>
 
@@ -669,7 +712,8 @@ export const ScreenRecorderTool: React.FC = () => {
             </div>
           </section>
 
-          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
+          {showRecordingControls && (
+            <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-semibold text-red-400 mb-1">3. 录制中控制</p>
@@ -719,17 +763,17 @@ export const ScreenRecorderTool: React.FC = () => {
                 </div>
 
                 <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-sm font-semibold mb-2">开始前检查</p>
+                  <p className="text-sm font-semibold mb-2">录制中提示</p>
                   <ul className="text-xs text-muted-foreground space-y-2">
                     <li>目标: {currentTargetLabel}</li>
-                    <li>格式: {format.toUpperCase()} · {fps} FPS · {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}</li>
-                    <li>{recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}</li>
+                    <li>格式: {format.toUpperCase()} · {fps} FPS</li>
+                    <li>{sessionStatus === 'finishing' ? '正在等待编码与文件写入完成。' : '使用下方按钮停止录制并返回文件。'}</li>
                   </ul>
                 </div>
 
                 <button
                   onClick={handleToggleRecording}
-                  disabled={recordButtonDisabled}
+                  disabled={stopButtonDisabled}
                   className={`w-full py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center gap-3 ${sessionStatus === 'recording'
                     ? 'bg-red-500 hover:bg-red-600 text-white'
                     : sessionStatus === 'finishing'
@@ -753,7 +797,8 @@ export const ScreenRecorderTool: React.FC = () => {
                 </button>
               </div>
             </div>
-          </section>
+            </section>
+          )}
         </div>
       </div>
 

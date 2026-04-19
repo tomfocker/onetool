@@ -52,6 +52,16 @@ export function applyRecorderSessionSnapshot(
   }
 }
 
+export function getScreenRecorderViewState(status: RecorderSessionUpdate['status']) {
+  const controlsLocked = status === 'recording' || status === 'finishing'
+
+  return {
+    controlsLocked,
+    showPreStartControls: !controlsLocked,
+    showRecordingControls: controlsLocked
+  }
+}
+
 export function useScreenRecorder() {
   const [outputPath, setOutputPath] = useState('')
   const [format, setFormat] = useState<RecorderFormat>('mp4')
@@ -438,7 +448,11 @@ export function useScreenRecorder() {
     void prepareSelection(session.selectionBounds)
   }, [prepareSelection, selectionDisplayBounds, session.mode, session.selectionBounds])
 
-  const controlsLocked = session.status === 'recording' || session.status === 'finishing'
+  const {
+    controlsLocked,
+    showPreStartControls,
+    showRecordingControls
+  } = getScreenRecorderViewState(session.status)
   const isRecording = controlsLocked
   const recordingMode = draftMode
   const selectionRect = recordingMode === 'area' ? session.selectionBounds : null
@@ -474,6 +488,8 @@ export function useScreenRecorder() {
     stopRecording,
     sessionStatus: session.status,
     controlsLocked,
+    showPreStartControls,
+    showRecordingControls,
     canStartRecording,
     isPreparingSelection,
     selectionDraft,
