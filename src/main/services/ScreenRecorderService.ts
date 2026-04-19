@@ -672,6 +672,13 @@ export class ScreenRecorderService {
     }
   }
 
+  getSession(): IpcResponse<RecorderSessionUpdate> {
+    return {
+      success: true,
+      data: this.getSessionSnapshot()
+    }
+  }
+
   getDefaultPath(): IpcResponse<string> {
     return { success: true, data: path.join(app.getPath('desktop'), `recording-${Date.now()}.mp4`) }
   }

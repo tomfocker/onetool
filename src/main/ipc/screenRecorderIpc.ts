@@ -37,6 +37,10 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
     return screenRecorderService.getDefaultPath()
   })
 
+  ipcMain.handle('screen-recorder-get-session', async () => {
+    return screenRecorderService.getSession()
+  })
+
   ipcMain.handle('screen-recorder-prepare-selection', async (_event, bounds) => {
     try {
       const validBounds = RecorderBoundsSchema.parse(bounds)

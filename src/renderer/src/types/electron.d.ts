@@ -122,6 +122,7 @@ declare global {
         getWindows: () => Promise<IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>>
         getScreens: () => Promise<IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>>
         getDefaultPath: () => Promise<IpcResponse<string>>
+        getSession: () => Promise<IpcResponse<RecorderSessionUpdate>>
         onToggleHotkey: (callback: () => void) => () => void
         selectOutput: () => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
         prepareSelection: (bounds: RecorderBounds) => Promise<IpcResponse<RecorderSelectionPreview>>

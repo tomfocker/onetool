@@ -6,6 +6,10 @@ type RecorderFormat = 'mp4' | 'gif'
 type RecorderQuality = 'low' | 'medium' | 'high'
 type RecorderMode = 'full' | 'area'
 type ScreenSource = { id: string; name: string; display_id: string; thumbnail: string }
+type RecorderSessionDraft = {
+  draftMode: RecorderMode
+  outputPath: string
+}
 
 const INITIAL_SESSION: RecorderSessionUpdate = {
   status: 'idle',
@@ -15,6 +19,16 @@ const INITIAL_SESSION: RecorderSessionUpdate = {
   selectionBounds: null,
   selectionPreviewDataUrl: null,
   selectedDisplayId: null
+}
+
+export function applyRecorderSessionSnapshot(
+  currentDraft: RecorderSessionDraft,
+  nextSession: RecorderSessionUpdate
+): RecorderSessionDraft {
+  return {
+    draftMode: nextSession.mode,
+    outputPath: nextSession.outputPath || currentDraft.outputPath
+  }
 }
 
 export function useScreenRecorder() {
@@ -29,6 +43,28 @@ export function useScreenRecorder() {
   const [recorderHotkey, setRecorderHotkey] = useState('Alt+Shift+R')
   const [isSavingHotkey, setIsSavingHotkey] = useState(false)
   const [isRecordingHotkey, setIsRecordingHotkey] = useState(false)
+
+  const applyAuthoritativeSession = useCallback((nextSession: RecorderSessionUpdate) => {
+    setSession(nextSession)
+    setDraftMode((currentDraftMode) => {
+      return applyRecorderSessionSnapshot(
+        {
+          draftMode: currentDraftMode,
+          outputPath
+        },
+        nextSession
+      ).draftMode
+    })
+    setOutputPath((currentOutputPath) => {
+      return applyRecorderSessionSnapshot(
+        {
+          draftMode: nextSession.mode,
+          outputPath: currentOutputPath
+        },
+        nextSession
+      ).outputPath
+    })
+  }, [outputPath])
 
   const loadScreens = useCallback(async () => {
     if (!window.electron?.screenRecorder?.getScreens) {
@@ -150,11 +186,18 @@ export function useScreenRecorder() {
         }
       }
 
+      if (window.electron?.screenRecorder?.getSession) {
+        const response = await window.electron.screenRecorder.getSession()
+        if (response.success && response.data) {
+          applyAuthoritativeSession(response.data)
+        }
+      }
+
       await loadScreens()
     }
 
     init()
-  }, [loadScreens])
+  }, [applyAuthoritativeSession, loadScreens])
 
   useEffect(() => {
     if (!window.electron?.screenRecorder?.onSessionUpdated) {
@@ -162,21 +205,13 @@ export function useScreenRecorder() {
     }
 
     const unsubscribe = window.electron.screenRecorder.onSessionUpdated((nextSession) => {
-      setSession(nextSession)
-
-      if (nextSession.outputPath) {
-        setOutputPath(nextSession.outputPath)
-      }
-
-      if (nextSession.status === 'recording' || nextSession.status === 'finishing') {
-        setDraftMode(nextSession.mode)
-      }
+      applyAuthoritativeSession(nextSession)
     })
 
     return () => {
       unsubscribe()
     }
-  }, [])
+  }, [applyAuthoritativeSession])
 
   useEffect(() => {
     if (draftMode === 'full' && screenList.length === 0) {
@@ -207,7 +242,7 @@ export function useScreenRecorder() {
   }, [draftMode, screenList, session.selectedDisplayId])
 
   const isRecording = session.status === 'recording' || session.status === 'finishing'
-  const recordingMode = isRecording ? session.mode : draftMode
+  const recordingMode = draftMode
   const selectionRect = recordingMode === 'area' ? session.selectionBounds : null
   const recordingTime = session.recordingTime
 

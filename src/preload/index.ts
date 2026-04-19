@@ -224,6 +224,9 @@ const screenRecorderAPI = {
   getDefaultPath: () => {
     return ipcRenderer.invoke('screen-recorder-get-default-path')
   },
+  getSession: () => {
+    return ipcRenderer.invoke('screen-recorder-get-session')
+  },
   getHotkey: () => {
     return ipcRenderer.invoke('recorder-hotkey-get')
   },
