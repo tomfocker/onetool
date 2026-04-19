@@ -218,6 +218,10 @@ function hasActiveDownload(state: UpdateState): boolean {
   return (state.status === 'available' || state.status === 'downloading') && Boolean(state.latestVersion)
 }
 
+function shouldPreserveActionableCheckState(state: UpdateState): boolean {
+  return hasActiveDownload(state) || state.status === 'downloaded'
+}
+
 export class AppUpdateService extends EventEmitter {
   private readonly app: AppLike
 
@@ -389,6 +393,8 @@ export class AppUpdateService extends EventEmitter {
     }
 
     this.checkForUpdatesPromise = (async () => {
+      const preCheckState = this.getState()
+
       try {
         this.setState(createCheckingState(this.state.currentVersion))
         const result = await this.autoUpdater.checkForUpdates()
@@ -400,7 +406,10 @@ export class AppUpdateService extends EventEmitter {
         return { success: true }
       } catch (error) {
         const message = getErrorMessage(error)
-        this.setState(createErrorStateFromCurrentState(this.state, message))
+        const errorStateBase = shouldPreserveActionableCheckState(preCheckState)
+          ? preCheckState
+          : this.state
+        this.setState(createErrorStateFromCurrentState(errorStateBase, message))
         return { success: false, error: message }
       } finally {
         this.checkForUpdatesPromise = null

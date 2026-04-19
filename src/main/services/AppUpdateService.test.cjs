@@ -218,6 +218,90 @@ test('checkForUpdates records an error state when the updater throws', async () 
   assert.equal(service.getState().status, 'error')
 })
 
+test('failed re-check preserves available update metadata', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  await service.checkForUpdates()
+
+  autoUpdater.checkForUpdates = async () => {
+    throw new Error('network down')
+  }
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /network down/)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'error',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: null,
+    errorMessage: 'network down'
+  })
+})
+
+test('failed re-check preserves downloaded update metadata', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+
+  autoUpdater.checkForUpdates = async () => {
+    throw new Error('network down')
+  }
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /network down/)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'error',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: 'network down'
+  })
+})
+
 test('checkForUpdates deduplicates overlapping calls and shares one updater request', async () => {
   let checkCalls = 0
   let releaseCheck
