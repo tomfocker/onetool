@@ -883,14 +883,17 @@ test('shouldTriggerAutoCheckOnSettingsChange only triggers the transition from d
   assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, false, false, 'win32'), false)
   assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, true, 'win32'), false)
   assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false, 'darwin'), false)
+  assert.equal(shouldTriggerAutoCheckOnSettingsChange(false, true, true, false, 'win32', true), false)
 })
 
 test('registerAutoUpdateSettingsChangeHandler follows the real settings changed event path and gates checks to the supported runtime', async () => {
   const { registerAutoUpdateSettingsChangeHandler } = loadAppUpdateServiceModule()
   let win32Handler = null
   let darwinHandler = null
+  let portableHandler = null
   let win32CheckCalls = 0
   let darwinCheckCalls = 0
+  let portableCheckCalls = 0
 
   registerAutoUpdateSettingsChangeHandler({
     settingsService: {
@@ -930,13 +933,35 @@ test('registerAutoUpdateSettingsChangeHandler follows the real settings changed 
     }
   })
 
+  registerAutoUpdateSettingsChangeHandler({
+    settingsService: {
+      getSettings: () => ({ autoCheckForUpdates: false }),
+      on: (_event, handler) => {
+        portableHandler = handler
+      }
+    },
+    appUpdateService: {
+      checkForUpdates: async () => {
+        portableCheckCalls += 1
+      }
+    },
+    runtime: {
+      platform: 'win32',
+      isPackaged: true,
+      isDevelopment: false,
+      isPortableWindowsRuntime: true
+    }
+  })
+
   win32Handler({ autoCheckForUpdates: false })
   win32Handler({ autoCheckForUpdates: true })
   win32Handler({ autoCheckForUpdates: true })
   darwinHandler({ autoCheckForUpdates: true })
+  portableHandler({ autoCheckForUpdates: true })
 
   assert.equal(win32CheckCalls, 1)
   assert.equal(darwinCheckCalls, 0)
+  assert.equal(portableCheckCalls, 0)
 })
 
 test('initialize only runs one startup auto-check when called concurrently', async () => {

@@ -21,7 +21,7 @@ npm run release:win
 
 默认产物：
 
-- `onetool-<version>-win-x64.exe`
+- `onetool-<version>-win-x64-setup.exe`
 - `onetool-<version>-win-x64-portable.exe`
 - `latest.yml`
 - 对应的 `.blockmap`
@@ -52,7 +52,9 @@ npm run release:win
 - `autoCheckForUpdates` 开启时，Windows 正式包会在启动阶段自动检查一次更新
 - 设置页提供手动“立即检查更新”入口，适合用户临时复核当前可见版本
 - 如果检查结果是“没有可用更新”，界面会把它当作正常状态而不是错误
-- 非 Windows、未打包环境和开发态不会触发 GitHub Releases 自动检查；手动检查也会在主进程直接返回统一的“不支持自动更新”状态，而不会发起远端请求
+- 非 Windows、未打包环境、开发态和 Windows 便携版都不会触发 GitHub Releases 自动检查
+- Windows 便携版即使把 `autoCheckForUpdates` 从关闭切回开启，也不会补跑后台检查或弹出“不支持自动更新”提示
+- 不支持自动更新的运行时里，手动检查会在主进程直接返回统一的“不支持自动更新”状态，而不会发起远端请求
 
 ## 可选签名
 

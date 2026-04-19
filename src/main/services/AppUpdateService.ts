@@ -62,9 +62,15 @@ export function shouldTriggerAutoCheckOnSettingsChange(
   nextAutoCheckEnabled: boolean,
   isPackaged: boolean,
   isDevelopment: boolean,
-  platform: NodeJS.Platform
+  platform: NodeJS.Platform,
+  isPortableRuntime = false
 ): boolean {
-  return nextAutoCheckEnabled && !previousAutoCheckEnabled && isSupportedAutoUpdateRuntime(platform, isPackaged, isDevelopment)
+  return (
+    nextAutoCheckEnabled &&
+    !previousAutoCheckEnabled &&
+    isSupportedAutoUpdateRuntime(platform, isPackaged, isDevelopment) &&
+    !isPortableRuntime
+  )
 }
 
 export function registerAutoUpdateSettingsChangeHandler(deps: {
@@ -79,6 +85,7 @@ export function registerAutoUpdateSettingsChangeHandler(deps: {
     platform: NodeJS.Platform
     isPackaged: boolean
     isDevelopment: boolean
+    isPortableWindowsRuntime?: boolean
   }
 }): void {
   let autoCheckForUpdatesEnabled = Boolean(deps.settingsService.getSettings().autoCheckForUpdates)
@@ -92,7 +99,8 @@ export function registerAutoUpdateSettingsChangeHandler(deps: {
         nextAutoCheckForUpdatesEnabled,
         deps.runtime.isPackaged,
         deps.runtime.isDevelopment,
-        deps.runtime.platform
+        deps.runtime.platform,
+        Boolean(deps.runtime.isPortableWindowsRuntime)
       )
     ) {
       void deps.appUpdateService.checkForUpdates()

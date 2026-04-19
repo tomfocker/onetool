@@ -23,6 +23,7 @@ import { appUpdateService, registerAutoUpdateSettingsChangeHandler } from './ser
 import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
+import { createBeforeQuitAndInstallHook } from './utils/updateInstallFlow'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -210,9 +211,7 @@ app.whenReady().then(() => {
   createWindow()
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
-  appUpdateService.setBeforeQuitAndInstall(() => {
-    windowManagerService.setIsQuitting(true)
-  })
+  appUpdateService.setBeforeQuitAndInstall(createBeforeQuitAndInstallHook(windowManagerService))
 
   settingsService.on('changed', (newSettings) => {
     windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
@@ -224,7 +223,9 @@ app.whenReady().then(() => {
     runtime: {
       platform: process.platform,
       isPackaged: app.isPackaged,
-      isDevelopment: is.dev
+      isDevelopment: is.dev,
+      isPortableWindowsRuntime:
+        Boolean(process.env.PORTABLE_EXECUTABLE_FILE) || Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
     }
   })
 
