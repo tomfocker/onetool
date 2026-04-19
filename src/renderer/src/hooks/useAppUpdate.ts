@@ -92,6 +92,55 @@ export function resolveAppUpdatePendingAction(
   return pendingAction
 }
 
+function getAppUpdateStatusLabel(state: UpdateState | null | undefined, pendingAction: AppUpdateAction | null): string {
+  if (pendingAction === 'check' && (!state || state.status === 'idle')) {
+    return '正在检查更新...'
+  }
+
+  if (!state) {
+    return '等待检查更新'
+  }
+
+  if (state.status === 'idle') {
+    return '等待检查更新'
+  }
+
+  if (state.status === 'checking') {
+    return '正在检查更新...'
+  }
+
+  if (state.status === 'available') {
+    return `发现新版本 ${getLatestVersionLabel(state)}`
+  }
+
+  if (state.status === 'not-available') {
+    return '已是最新版本'
+  }
+
+  if (state.status === 'downloading') {
+    const progress = state.progressPercent === null ? '' : ` ${Math.max(0, Math.min(100, state.progressPercent))}%`
+    return `正在下载 ${getLatestVersionLabel(state)}${progress}`
+  }
+
+  if (state.status === 'downloaded') {
+    return `版本 ${getLatestVersionLabel(state)} 已下载完成`
+  }
+
+  if (state.status === 'error') {
+    return state.errorMessage || '更新失败'
+  }
+
+  return '等待检查更新'
+}
+
+export function deriveAppUpdateStatusText(
+  state: UpdateState | null | undefined,
+  pendingAction: AppUpdateAction | null = null
+): string {
+  const currentVersion = state?.currentVersion || '未知版本'
+  return `当前版本 ${currentVersion} · ${getAppUpdateStatusLabel(state, pendingAction)}`
+}
+
 export function createAppUpdateErrorState(errorMessage: string, previousState?: UpdateState | null): UpdateState {
   return {
     status: 'error',

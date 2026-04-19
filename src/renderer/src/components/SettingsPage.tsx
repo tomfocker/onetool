@@ -5,6 +5,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { useSettings } from '../hooks/useSettings'
+import { deriveAppUpdateStatusText, useAppUpdate } from '../hooks/useAppUpdate'
 
 interface SettingItemProps {
   icon: React.ReactNode
@@ -37,6 +38,7 @@ export const SettingsPage: React.FC = () => {
   const [autoStartEnabled, setAutoStartEnabled] = useState(false)
   const [doctorReport, setDoctorReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
+  const { updateState, pendingAction, checkForUpdates } = useAppUpdate()
 
   const runDoctor = async () => {
     setIsChecking(true)
@@ -72,6 +74,17 @@ export const SettingsPage: React.FC = () => {
     }
   }
 
+  const handleAutoCheckForUpdatesChange = async (checked: boolean) => {
+    const result = await updateSettings({ autoCheckForUpdates: checked })
+    if (!result.success) {
+      console.error('SettingsPage: Failed to update autoCheckForUpdates:', result.error)
+    }
+  }
+
+  const handleCheckForUpdates = async () => {
+    await checkForUpdates()
+  }
+
   if (isLoading || !settings) {
     return <div className="p-8 text-center text-muted-foreground">加载设置中...</div>
   }
@@ -103,6 +116,41 @@ export const SettingsPage: React.FC = () => {
             checked={settings.minimizeToTray}
             onCheckedChange={handleMinimizeToTrayChange}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
+        <CardHeader>
+          <CardTitle className="text-lg font-bold">更新</CardTitle>
+          <CardDescription>控制启动自动检查和手动更新检查</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <SettingItem
+            icon={<Activity size={18} className="text-emerald-500" />}
+            title="启动时自动检查更新"
+            description="应用启动后自动查询可用版本"
+            checked={settings.autoCheckForUpdates}
+            onCheckedChange={handleAutoCheckForUpdatesChange}
+          />
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-muted/25 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0 space-y-1">
+              <p className="text-sm font-medium text-foreground">
+                {deriveAppUpdateStatusText(updateState, pendingAction)}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                更新器只会读取已发布的 Release，草稿版不会在客户端可见。
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleCheckForUpdates}
+              disabled={pendingAction === 'check'}
+              className="rounded-xl"
+            >
+              {pendingAction === 'check' ? '正在检查...' : '立即检查更新'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

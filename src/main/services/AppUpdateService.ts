@@ -143,6 +143,8 @@ export class AppUpdateService extends EventEmitter {
 
   private initialized = false
 
+  private initializationPromise: Promise<IpcResponse> | null = null
+
   private state: UpdateState
 
   constructor(dependencies: AppUpdateServiceDependencies = {}) {
@@ -249,27 +251,37 @@ export class AppUpdateService extends EventEmitter {
       return { success: true }
     }
 
-    try {
-      if (!this.shouldAutoCheckOnStartup()) {
-        this.initialized = true
-        return { success: true }
-      }
-
-      if (!(await this.getAutoCheckEnabled())) {
-        this.initialized = true
-        return { success: true }
-      }
-
-      const result = await this.checkForUpdates()
-      if (result.success) {
-        this.initialized = true
-      }
-
-      return result
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      return { success: false, error: message }
+    if (this.initializationPromise) {
+      return this.initializationPromise
     }
+
+    this.initializationPromise = (async () => {
+      try {
+        if (!this.shouldAutoCheckOnStartup()) {
+          this.initialized = true
+          return { success: true }
+        }
+
+        if (!(await this.getAutoCheckEnabled())) {
+          this.initialized = true
+          return { success: true }
+        }
+
+        const result = await this.checkForUpdates()
+        if (result.success) {
+          this.initialized = true
+        }
+
+        return result
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        return { success: false, error: message }
+      } finally {
+        this.initializationPromise = null
+      }
+    })()
+
+    return this.initializationPromise
   }
 
   async checkForUpdates(): Promise<IpcResponse> {

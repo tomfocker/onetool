@@ -52,6 +52,7 @@ const {
   createAppUpdateErrorState,
   createAppUpdateBridgeLifecycle,
   deriveAppUpdatePromptState,
+  deriveAppUpdateStatusText,
   resolveAppUpdatePendingAction
 } = loadUseAppUpdateModule()
 
@@ -153,6 +154,20 @@ test('deriveAppUpdatePromptState maps error updates to a visible retry prompt', 
       progressPercent: null,
       primaryActionLabel: '重新检查更新'
     }
+  )
+})
+
+test('deriveAppUpdateStatusText treats not-available as a benign latest-version status', () => {
+  assert.equal(
+    deriveAppUpdateStatusText({
+      status: 'not-available',
+      currentVersion: '1.0.0',
+      latestVersion: null,
+      releaseNotes: null,
+      progressPercent: null,
+      errorMessage: null
+    }),
+    '当前版本 1.0.0 · 已是最新版本'
   )
 })
 

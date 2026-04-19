@@ -363,3 +363,47 @@ test('initialize can retry after a startup settings failure', async () => {
   assert.equal(second.success, true)
   assert.equal(autoUpdater.checkForUpdatesCalls, 1)
 })
+
+test('initialize only runs one startup auto-check when called concurrently', async () => {
+  let checkCalls = 0
+  const deferred = new Promise((resolve) => {
+    setImmediate(resolve)
+  })
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    },
+    autoUpdater: {
+      autoDownload: false,
+      on(event, handler) {
+        this.listeners = this.listeners || {}
+        this.listeners[event] = handler
+      },
+      emit(event, ...args) {
+        this.listeners?.[event]?.(...args)
+      },
+      checkForUpdates: async () => {
+        checkCalls += 1
+        autoUpdater.checkForUpdatesCalls = checkCalls
+        await deferred
+        return { updateInfo: null }
+      },
+      downloadUpdate: async () => {},
+      quitAndInstall: async () => {}
+    }
+  })
+  const service = new AppUpdateService({
+    isDevelopment: false,
+    getSettings: async () => ({ autoCheckForUpdates: true })
+  })
+
+  const first = service.initialize()
+  const second = service.initialize()
+
+  await Promise.all([first, second])
+
+  assert.equal(checkCalls, 1)
+})
