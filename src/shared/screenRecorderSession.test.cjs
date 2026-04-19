@@ -2,6 +2,8 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  beginRecorderSelectionSession,
+  cancelRecorderSelectionSession,
   clampRecorderBounds,
   nudgeRecorderBounds,
   isRecorderSelectionValid,
@@ -125,6 +127,7 @@ test('resolveRecorderStartSession uses the prepared area draft instead of caller
     {
       outputPath: 'C:/tmp/new-output.mp4',
       displayId: 'display-2',
+      usePreparedSelection: true,
       bounds: { x: 999, y: 999, width: 111, height: 111 }
     }
   )
@@ -140,4 +143,69 @@ test('resolveRecorderStartSession uses the prepared area draft instead of caller
     selectionPreviewDataUrl: 'data:image/png;base64,preview',
     selectedDisplayId: 'display-1'
   })
+})
+
+test('beginRecorderSelectionSession clears stale area drafts and ignores active recording states', () => {
+  assert.deepEqual(
+    beginRecorderSelectionSession(
+      toRecorderSessionUpdate({
+        status: 'ready-to-record',
+        mode: 'area',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:00',
+        selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+        selectionPreviewDataUrl: 'data:image/png;base64,preview',
+        selectedDisplayId: 'display-1'
+      })
+    ),
+    {
+      status: 'selecting-area',
+      mode: 'area',
+      outputPath: 'C:/tmp/capture.mp4',
+      recordingTime: '00:00:00',
+      selectionBounds: null,
+      selectionPreviewDataUrl: null,
+      selectedDisplayId: null
+    }
+  )
+
+  assert.equal(
+    beginRecorderSelectionSession(
+      toRecorderSessionUpdate({
+        status: 'recording',
+        mode: 'full',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:10',
+        selectionBounds: null,
+        selectionPreviewDataUrl: null,
+        selectedDisplayId: 'display-1'
+      })
+    ),
+    null
+  )
+})
+
+test('cancelRecorderSelectionSession clears stale area drafts after a canceled reselection', () => {
+  assert.deepEqual(
+    cancelRecorderSelectionSession(
+      toRecorderSessionUpdate({
+        status: 'selecting-area',
+        mode: 'area',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:00',
+        selectionBounds: { x: 3, y: 4, width: 320, height: 180 },
+        selectionPreviewDataUrl: 'data:image/png;base64,preview',
+        selectedDisplayId: 'display-2'
+      })
+    ),
+    {
+      status: 'idle',
+      mode: 'full',
+      outputPath: 'C:/tmp/capture.mp4',
+      recordingTime: '00:00:00',
+      selectionBounds: null,
+      selectionPreviewDataUrl: null,
+      selectedDisplayId: null
+    }
+  )
 })

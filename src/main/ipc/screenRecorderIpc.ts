@@ -51,7 +51,10 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
   })
 
   ipcMain.handle('recorder-selection-open', async () => {
-    screenRecorderService.beginSelection()
+    const startedSelection = screenRecorderService.beginSelection()
+    if (!startedSelection) {
+      return { success: false, error: '录制进行中，无法重新选择区域' }
+    }
     screenshotService.openSelectionWindow(undefined, 'recorder-selection-result')
     return { success: true }
   })

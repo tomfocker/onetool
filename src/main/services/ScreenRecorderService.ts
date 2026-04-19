@@ -6,6 +6,8 @@ import ffmpeg from 'fluent-ffmpeg'
 import ffmpegStatic from 'ffmpeg-static'
 import { IpcResponse } from '../../shared/types'
 import {
+  beginRecorderSelectionSession,
+  cancelRecorderSelectionSession,
   createRecorderSessionUpdate,
   clampRecorderBounds,
   ensureRecorderOutputPath,
@@ -477,22 +479,24 @@ export class ScreenRecorderService {
   }
 
   beginSelection() {
-    this.updateSession({
-      status: 'selecting-area',
-      mode: 'area',
-      recordingTime: INITIAL_RECORDING_TIME
-    })
+    const nextSession = beginRecorderSelectionSession(this.session)
+    if (!nextSession) {
+      return false
+    }
+
+    this.session = nextSession
+    this.emitSessionUpdate()
+    return true
   }
 
   cancelSelection() {
     if (this.session.status !== 'selecting-area') {
-      return
+      return false
     }
 
-    this.updateSession({
-      status: 'idle',
-      recordingTime: INITIAL_RECORDING_TIME
-    })
+    this.session = cancelRecorderSelectionSession(this.session)
+    this.emitSessionUpdate()
+    return true
   }
 
   async prepareSelection(bounds: RecorderBounds): Promise<IpcResponse<SelectionPreviewResult>> {
@@ -567,7 +571,8 @@ export class ScreenRecorderService {
       const normalizedOutputPath = ensureRecorderOutputPath(config.outputPath, config.format === 'gif' ? 'gif' : 'mp4')
       const sessionUpdate = resolveRecorderStartSession(this.session, {
         outputPath: normalizedOutputPath,
-        displayId: config.displayId
+        displayId: config.displayId,
+        usePreparedSelection: Boolean(config.bounds)
       })
 
       this.session = sessionUpdate

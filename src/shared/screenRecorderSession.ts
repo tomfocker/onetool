@@ -37,6 +37,7 @@ export interface RecorderSessionUpdateInput {
 export interface RecorderStartSessionInput {
   outputPath: string
   displayId?: string
+  usePreparedSelection?: boolean
 }
 
 const MIN_RECORDER_SIZE = 64
@@ -166,7 +167,7 @@ export function resolveRecorderStartSession(
   current: RecorderSessionUpdate,
   input: RecorderStartSessionInput
 ): RecorderSessionUpdate {
-  if (current.mode === 'area' && current.selectionBounds) {
+  if (input.usePreparedSelection && current.selectionBounds) {
     return toRecorderSessionUpdate({
       status: 'recording',
       mode: 'area',
@@ -186,5 +187,37 @@ export function resolveRecorderStartSession(
     selectionBounds: null,
     selectionPreviewDataUrl: null,
     selectedDisplayId: input.displayId ?? null
+  })
+}
+
+export function beginRecorderSelectionSession(
+  current: RecorderSessionUpdate
+): RecorderSessionUpdate | null {
+  if (current.status === 'recording' || current.status === 'finishing') {
+    return null
+  }
+
+  return toRecorderSessionUpdate({
+    status: 'selecting-area',
+    mode: 'area',
+    outputPath: current.outputPath,
+    recordingTime: '00:00:00',
+    selectionBounds: null,
+    selectionPreviewDataUrl: null,
+    selectedDisplayId: null
+  })
+}
+
+export function cancelRecorderSelectionSession(
+  current: RecorderSessionUpdate
+): RecorderSessionUpdate {
+  return toRecorderSessionUpdate({
+    status: 'idle',
+    mode: 'full',
+    outputPath: current.outputPath,
+    recordingTime: '00:00:00',
+    selectionBounds: null,
+    selectionPreviewDataUrl: null,
+    selectedDisplayId: null
   })
 }
