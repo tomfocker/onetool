@@ -18,6 +18,33 @@ export const ScreenRecorderConfigSchema = z.object({
 
 export type ScreenRecorderConfig = z.infer<typeof ScreenRecorderConfigSchema>;
 
+export const RecorderBoundsSchema = z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number()
+});
+
+export const RecorderSelectionPreviewSchema = z.object({
+    bounds: RecorderBoundsSchema,
+    displayBounds: RecorderBoundsSchema,
+    previewDataUrl: z.string().min(1)
+});
+
+export const RecorderSessionUpdateSchema = z.object({
+    status: z.enum(['idle', 'selecting-area', 'ready-to-record', 'recording', 'finishing']).optional(),
+    mode: z.enum(['full', 'area']).optional(),
+    outputPath: z.string().min(1).optional(),
+    recordingTime: z.string().optional(),
+    selectionBounds: RecorderBoundsSchema.optional(),
+    selectionPreviewDataUrl: z.string().min(1).optional(),
+    selectedDisplayId: z.string().nullable().optional()
+});
+
+export type RecorderBounds = z.infer<typeof RecorderBoundsSchema>;
+export type RecorderSelectionPreview = z.infer<typeof RecorderSelectionPreviewSchema>;
+export type RecorderSessionUpdate = z.infer<typeof RecorderSessionUpdateSchema>;
+
 // Auto Clicker Config Schema
 export const AutoClickerConfigSchema = z.object({
     interval: z.number().int().positive(),

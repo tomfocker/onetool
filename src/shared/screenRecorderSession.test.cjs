@@ -6,7 +6,8 @@ const {
   nudgeRecorderBounds,
   isRecorderSelectionValid,
   ensureRecorderOutputPath,
-  toRecorderSessionUpdate
+  toRecorderSessionUpdate,
+  toRecorderSelectionPreviewUpdate
 } = require('./screenRecorderSession.ts')
 
 test('clampRecorderBounds respects the configurable minimum size', () => {
@@ -64,4 +65,26 @@ test('toRecorderSessionUpdate returns only the required session fields', () => {
       selectedDisplayId: '12'
     }
   )
+})
+
+test('toRecorderSelectionPreviewUpdate creates a ready-to-record snapshot for a prepared area', () => {
+  const selectionBounds = { x: 25, y: 40, width: 320, height: 180 }
+  const update = toRecorderSelectionPreviewUpdate({
+    outputPath: 'C:/tmp/capture.mp4',
+    selectionBounds,
+    selectionPreviewDataUrl: 'data:image/png;base64,preview',
+    selectedDisplayId: '7'
+  })
+
+  selectionBounds.x = 999
+
+  assert.deepEqual(update, {
+    status: 'ready-to-record',
+    mode: 'area',
+    outputPath: 'C:/tmp/capture.mp4',
+    recordingTime: '00:00:00',
+    selectionBounds: { x: 25, y: 40, width: 320, height: 180 },
+    selectionPreviewDataUrl: 'data:image/png;base64,preview',
+    selectedDisplayId: '7'
+  })
 })

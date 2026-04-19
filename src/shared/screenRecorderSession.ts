@@ -34,6 +34,13 @@ export interface RecorderSessionUpdateInput {
   selectedDisplayId?: string | null
 }
 
+export interface RecorderSelectionPreviewInput {
+  outputPath?: string
+  selectionBounds: RecorderBounds
+  selectionPreviewDataUrl: string
+  selectedDisplayId: string | null
+}
+
 const MIN_RECORDER_SIZE = 64
 
 function clamp(value: number, min: number, max: number): number {
@@ -154,4 +161,18 @@ export function toRecorderSessionUpdate(update: RecorderSessionUpdateInput): Rec
   }
 
   return nextUpdate
+}
+
+export function toRecorderSelectionPreviewUpdate(
+  input: RecorderSelectionPreviewInput
+): RecorderSessionUpdate {
+  return toRecorderSessionUpdate({
+    status: 'ready-to-record',
+    mode: 'area',
+    outputPath: input.outputPath,
+    recordingTime: '00:00:00',
+    selectionBounds: input.selectionBounds,
+    selectionPreviewDataUrl: input.selectionPreviewDataUrl,
+    selectedDisplayId: input.selectedDisplayId
+  })
 }
