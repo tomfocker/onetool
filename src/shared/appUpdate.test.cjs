@@ -36,6 +36,24 @@ test('createAvailableUpdateState returns the available shared update contract', 
   )
 })
 
+test('createAvailableUpdateState allows missing release notes', () => {
+  assert.deepEqual(
+    createAvailableUpdateState({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      releaseNotes: null
+    }),
+    {
+      status: 'available',
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      releaseNotes: null,
+      progressPercent: null,
+      errorMessage: null
+    }
+  )
+})
+
 test('createDownloadingUpdateState rounds download progress percent', () => {
   assert.deepEqual(
     createDownloadingUpdateState({

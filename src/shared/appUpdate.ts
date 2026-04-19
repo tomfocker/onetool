@@ -19,7 +19,7 @@ export interface UpdateState {
 export interface UpdateVersionDetails {
   currentVersion: string
   latestVersion: string
-  releaseNotes: string
+  releaseNotes: string | null
 }
 
 export interface UpdateDownloadDetails {
