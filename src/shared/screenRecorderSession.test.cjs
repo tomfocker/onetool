@@ -6,7 +6,8 @@ const {
   nudgeRecorderBounds,
   isRecorderSelectionValid,
   ensureRecorderOutputPath,
-  toRecorderSessionUpdate
+  toRecorderSessionUpdate,
+  resolveRecorderStartSession
 } = require('./screenRecorderSession.ts')
 
 test('clampRecorderBounds respects the configurable minimum size', () => {
@@ -107,4 +108,36 @@ test('toRecorderSessionUpdate fills empty snapshot fields explicitly', () => {
       selectedDisplayId: null
     }
   )
+})
+
+test('resolveRecorderStartSession uses the prepared area draft instead of caller bounds', () => {
+  const preparedSelectionBounds = { x: 10, y: 20, width: 300, height: 200 }
+  const resolved = resolveRecorderStartSession(
+    toRecorderSessionUpdate({
+      status: 'ready-to-record',
+      mode: 'area',
+      outputPath: 'C:/tmp/previous.mp4',
+      recordingTime: '00:00:00',
+      selectionBounds: preparedSelectionBounds,
+      selectionPreviewDataUrl: 'data:image/png;base64,preview',
+      selectedDisplayId: 'display-1'
+    }),
+    {
+      outputPath: 'C:/tmp/new-output.mp4',
+      displayId: 'display-2',
+      bounds: { x: 999, y: 999, width: 111, height: 111 }
+    }
+  )
+
+  preparedSelectionBounds.x = 500
+
+  assert.deepEqual(resolved, {
+    status: 'recording',
+    mode: 'area',
+    outputPath: 'C:/tmp/new-output.mp4',
+    recordingTime: '00:00:00',
+    selectionBounds: { x: 10, y: 20, width: 300, height: 200 },
+    selectionPreviewDataUrl: 'data:image/png;base64,preview',
+    selectedDisplayId: 'display-1'
+  })
 })

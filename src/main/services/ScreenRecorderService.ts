@@ -9,9 +9,9 @@ import {
   createRecorderSessionUpdate,
   clampRecorderBounds,
   ensureRecorderOutputPath,
+  resolveRecorderStartSession,
   toRecorderSessionUpdate,
   type RecorderBounds,
-  type RecorderSessionMode,
   type RecorderSessionUpdate
 } from '../../shared/screenRecorderSession'
 import { processRegistry } from './ProcessRegistry'
@@ -294,8 +294,8 @@ export class ScreenRecorderService {
   }
 
   private getIndicatorBounds(config: ScreenRecorderConfig): RecorderBounds {
-    if (config.bounds) {
-      return config.bounds
+    if (this.session.mode === 'area' && this.session.selectionBounds) {
+      return this.session.selectionBounds
     }
 
     if (config.displayId) {
@@ -312,17 +312,18 @@ export class ScreenRecorderService {
     const primaryDisplay = screen.getPrimaryDisplay()
     const fps = config.fps || 30
     const args = ['-y', '-f', 'gdigrab', '-framerate', fps.toString()]
+    const areaBounds = this.session.mode === 'area' ? this.session.selectionBounds : null
 
-    if (config.bounds) {
+    if (areaBounds) {
       const targetDisplay = screen.getDisplayNearestPoint({
-        x: config.bounds.x + config.bounds.width / 2,
-        y: config.bounds.y + config.bounds.height / 2
+        x: areaBounds.x + areaBounds.width / 2,
+        y: areaBounds.y + areaBounds.height / 2
       })
       const scaleFactor = targetDisplay.scaleFactor
-      let realX = Math.floor((config.bounds.x - targetDisplay.bounds.x) * scaleFactor + targetDisplay.bounds.x * scaleFactor)
-      let realY = Math.floor((config.bounds.y - targetDisplay.bounds.y) * scaleFactor + targetDisplay.bounds.y * scaleFactor)
-      let realW = Math.floor(config.bounds.width * scaleFactor)
-      let realH = Math.floor(config.bounds.height * scaleFactor)
+      let realX = Math.floor((areaBounds.x - targetDisplay.bounds.x) * scaleFactor + targetDisplay.bounds.x * scaleFactor)
+      let realY = Math.floor((areaBounds.y - targetDisplay.bounds.y) * scaleFactor + targetDisplay.bounds.y * scaleFactor)
+      let realW = Math.floor(areaBounds.width * scaleFactor)
+      let realH = Math.floor(areaBounds.height * scaleFactor)
 
       realW = realW % 2 === 0 ? realW : realW - 1
       realH = realH % 2 === 0 ? realH : realH - 1
@@ -563,29 +564,14 @@ export class ScreenRecorderService {
         return { success: false, error: 'FFmpeg 未正确安装或路径无效' }
       }
 
-      const mode: RecorderSessionMode = config.bounds ? 'area' : 'full'
       const normalizedOutputPath = ensureRecorderOutputPath(config.outputPath, config.format === 'gif' ? 'gif' : 'mp4')
-      const sessionUpdate: Partial<Omit<RecorderSessionUpdate, 'selectionBounds'>> & {
-        selectionBounds?: RecorderBounds | null
-      } = {
-        status: 'recording',
-        mode,
+      const sessionUpdate = resolveRecorderStartSession(this.session, {
         outputPath: normalizedOutputPath,
-        recordingTime: INITIAL_RECORDING_TIME,
-        selectedDisplayId: config.bounds
-          ? this.session.selectedDisplayId
-          : config.displayId || null
-      }
+        displayId: config.displayId
+      })
 
-      if (config.bounds) {
-        sessionUpdate.selectionBounds = config.bounds
-        sessionUpdate.selectionPreviewDataUrl = this.session.selectionPreviewDataUrl
-      } else {
-        sessionUpdate.selectionBounds = null
-        sessionUpdate.selectionPreviewDataUrl = null
-      }
-
-      this.updateSession(sessionUpdate)
+      this.session = sessionUpdate
+      this.emitSessionUpdate()
 
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.minimize()
@@ -635,8 +621,8 @@ export class ScreenRecorderService {
 
       const indicatorBounds = this.getIndicatorBounds({ ...config, outputPath: normalizedOutputPath })
       this.createIndicatorWindow(indicatorBounds)
-      if (config.bounds) {
-        this.createBorderWindow(config.bounds)
+      if (this.session.mode === 'area' && this.session.selectionBounds) {
+        this.createBorderWindow(this.session.selectionBounds)
       }
 
       return { success: true }

@@ -34,6 +34,11 @@ export interface RecorderSessionUpdateInput {
   selectedDisplayId?: string | null
 }
 
+export interface RecorderStartSessionInput {
+  outputPath: string
+  displayId?: string
+}
+
 const MIN_RECORDER_SIZE = 64
 
 function clamp(value: number, min: number, max: number): number {
@@ -154,5 +159,32 @@ export function createRecorderSessionUpdate(
       typeof patch.selectedDisplayId === 'undefined'
         ? current.selectedDisplayId
         : patch.selectedDisplayId
+  })
+}
+
+export function resolveRecorderStartSession(
+  current: RecorderSessionUpdate,
+  input: RecorderStartSessionInput
+): RecorderSessionUpdate {
+  if (current.mode === 'area' && current.selectionBounds) {
+    return toRecorderSessionUpdate({
+      status: 'recording',
+      mode: 'area',
+      outputPath: input.outputPath,
+      recordingTime: '00:00:00',
+      selectionBounds: current.selectionBounds,
+      selectionPreviewDataUrl: current.selectionPreviewDataUrl,
+      selectedDisplayId: current.selectedDisplayId
+    })
+  }
+
+  return toRecorderSessionUpdate({
+    status: 'recording',
+    mode: 'full',
+    outputPath: input.outputPath,
+    recordingTime: '00:00:00',
+    selectionBounds: null,
+    selectionPreviewDataUrl: null,
+    selectedDisplayId: input.displayId ?? null
   })
 }
