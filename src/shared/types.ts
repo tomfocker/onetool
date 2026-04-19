@@ -7,6 +7,7 @@ export interface AppSettings {
   floatBallHotkey: string
   screenshotSavePath: string
   autoSaveScreenshot: boolean
+  autoCheckForUpdates: boolean
   clipboardHotkey: string
   minimizeToTray: boolean
 

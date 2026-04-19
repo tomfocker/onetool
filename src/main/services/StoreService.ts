@@ -35,6 +35,7 @@ export class StoreService extends EventEmitter {
         screenshotHotkey: 'Alt+Shift+S',
         screenshotSavePath: '',
         autoSaveScreenshot: false,
+        autoCheckForUpdates: true,
         floatBallHotkey: 'Alt+Shift+F',
         clipboardHotkey: 'Alt+Shift+V',
         minimizeToTray: true,

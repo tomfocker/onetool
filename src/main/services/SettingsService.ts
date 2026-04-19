@@ -12,6 +12,7 @@ export class SettingsService extends EventEmitter {
     clipboardHotkey: 'Alt+Shift+C',
     screenshotSavePath: '',
     autoSaveScreenshot: false,
+    autoCheckForUpdates: true,
     minimizeToTray: true,
     translateApiUrl: 'https://api.openai.com/v1',
     translateApiKey: '',

@@ -6,7 +6,7 @@
 
 - 本地可通过统一脚本产出安装包和便携版
 - GitHub Actions 可手动触发打包
-- 推送 `v*` 标签时会自动生成草稿 Release 并上传构建产物
+- 推送 `v*` 标签时会先自动生成草稿 Release，再上传构建产物
 - 如果配置了签名证书，`electron-builder` 会在同一条链路里自动签名
 
 ## 本地构建
@@ -45,6 +45,8 @@ npm run release:win
 4. 上传构建工件
 5. 创建 GitHub 草稿 Release 并附带安装包、便携版和更新元数据
 
+草稿 Release 需要在 GitHub 上手动或自动发布为正式 Release 之后，运行时更新器才会把它当作可见版本。
+
 ## 可选签名
 
 当前仓库已经不再显式禁用 Windows 签名。要启用签名，只需要在 GitHub 仓库或本地环境配置 `electron-builder` 识别的证书变量。
@@ -60,7 +62,7 @@ npm run release:win
 
 ## 当前边界
 
-这条链路解决的是“持续产出正式工件”的问题，还没有解决：
+这条链路解决的是“持续产出正式工件”的问题。运行时更新器只读取已发布的 Release，草稿 Release 不会对客户端可见。当前还没有解决：
 
 - 自动更新客户端接入
 - SmartScreen 信任积累
