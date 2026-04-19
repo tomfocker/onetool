@@ -233,6 +233,44 @@ test('resolveAppUpdateActionResult preserves previous metadata for resolved down
   )
 })
 
+test('resolveAppUpdateActionResult uses the latest state when a bridge update arrives before a resolved failure', () => {
+  let latestState = {
+    status: 'idle',
+    currentVersion: '1.0.0',
+    latestVersion: null,
+    releaseNotes: null,
+    progressPercent: null,
+    errorMessage: null
+  }
+
+  latestState = {
+    status: 'available',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.0',
+    releaseNotes: 'Bug fixes',
+    progressPercent: 48,
+    errorMessage: null
+  }
+
+  assert.deepEqual(
+    toPlainObject(resolveAppUpdateActionResult(
+      { success: false, error: 'download failed' },
+      () => latestState
+    )),
+    {
+      shouldClearPendingAction: true,
+      errorState: {
+        status: 'error',
+        currentVersion: '1.0.0',
+        latestVersion: '1.2.0',
+        releaseNotes: 'Bug fixes',
+        progressPercent: 48,
+        errorMessage: 'download failed'
+      }
+    }
+  )
+})
+
 test('canInvokeAppUpdateAction blocks duplicate in-flight actions but allows a different action', () => {
   assert.equal(canInvokeAppUpdateAction('download', 'download'), false)
   assert.equal(canInvokeAppUpdateAction('download', 'install'), true)

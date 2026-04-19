@@ -131,6 +131,12 @@ test('startup auto-check is skipped while the app is unpackaged', async () => {
 
 test('checkForUpdates emits checking then available when an update is found', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    },
     autoUpdater: {
       autoDownload: false,
       on(event, handler) {
@@ -148,7 +154,10 @@ test('checkForUpdates emits checking then available when an update is found', as
       quitAndInstall: async () => {}
     }
   })
-  const service = new AppUpdateService()
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
   const states = []
 
   service.on('state-changed', (state) => {
@@ -165,6 +174,12 @@ test('checkForUpdates emits checking then available when an update is found', as
 
 test('checkForUpdates records an error state when the updater throws', async () => {
   const { AppUpdateService } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    },
     autoUpdater: {
       autoDownload: false,
       on(event, handler) {
@@ -181,7 +196,10 @@ test('checkForUpdates records an error state when the updater throws', async () 
       quitAndInstall: async () => {}
     }
   })
-  const service = new AppUpdateService()
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
   const states = []
 
   service.on('state-changed', (state) => {
@@ -203,6 +221,12 @@ test('checkForUpdates deduplicates overlapping calls and shares one updater requ
     releaseCheck = resolve
   })
   const { AppUpdateService } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    },
     autoUpdater: {
       autoDownload: false,
       on(event, handler) {
@@ -221,7 +245,10 @@ test('checkForUpdates deduplicates overlapping calls and shares one updater requ
       quitAndInstall: async () => {}
     }
   })
-  const service = new AppUpdateService()
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
 
   const first = service.checkForUpdates()
   const second = service.checkForUpdates()
@@ -232,6 +259,50 @@ test('checkForUpdates deduplicates overlapping calls and shares one updater requ
   assert.equal(checkCalls, 1)
   assert.equal(firstResult.success, true)
   assert.equal(secondResult.success, true)
+})
+
+test('manual checkForUpdates returns a safe unsupported-runtime result on packaged non-Windows runtimes', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'darwin',
+    isDevelopment: false
+  })
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /不支持自动更新/)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'idle')
+})
+
+test('manual checkForUpdates returns a safe unsupported-runtime result while unpackaged', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: false,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /不支持自动更新/)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'idle')
 })
 
 test('initialize skips auto-check on packaged non-Windows runtimes', async () => {
@@ -269,8 +340,18 @@ test('downloadUpdate refuses before an update is available', async () => {
 })
 
 test('update-downloaded marks the service ready to install', async () => {
-  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
-  const service = new AppUpdateService()
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
   const states = []
 
   service.on('state-changed', (state) => {
@@ -307,8 +388,18 @@ test('update-downloaded marks the service ready to install', async () => {
 })
 
 test('release notes survive update-downloaded when no new notes are provided', async () => {
-  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule()
-  const service = new AppUpdateService()
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
 
   autoUpdater.checkForUpdates = async () => {
     autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })

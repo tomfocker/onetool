@@ -94,15 +94,20 @@ export function resolveAppUpdatePendingAction(
 
 export function resolveAppUpdateActionResult(
   result: { success?: boolean; error?: unknown } | null | undefined,
-  previousState?: UpdateState | null
+  previousState?: UpdateState | null | (() => UpdateState | null | undefined)
 ): {
   shouldClearPendingAction: boolean
   errorState: UpdateState | null
 } {
   if (result?.success === false) {
+    const resolvedPreviousState =
+      typeof previousState === 'function'
+        ? previousState()
+        : previousState
+
     return {
       shouldClearPendingAction: true,
-      errorState: createAppUpdateErrorState(getErrorMessage(result.error), previousState)
+      errorState: createAppUpdateErrorState(getErrorMessage(result.error), resolvedPreviousState)
     }
   }
 
@@ -261,11 +266,17 @@ export function deriveAppUpdatePromptState(state: UpdateState | null | undefined
 export function useAppUpdate() {
   const [updateState, setUpdateState] = useState<UpdateState | null>(null)
   const [pendingAction, setPendingAction] = useState<AppUpdateAction | null>(null)
+  const updateStateRef = useRef<UpdateState | null>(null)
   const pendingActionRef = useRef<AppUpdateAction | null>(null)
 
-  const setErrorState = useCallback((error: unknown, previousState?: UpdateState | null) => {
-    setUpdateState(createAppUpdateErrorState(getErrorMessage(error), previousState))
+  const applyUpdateState = useCallback((nextState: UpdateState | null) => {
+    updateStateRef.current = nextState
+    setUpdateState(nextState)
   }, [])
+
+  const setErrorState = useCallback((error: unknown, previousState?: UpdateState | null) => {
+    applyUpdateState(createAppUpdateErrorState(getErrorMessage(error), previousState))
+  }, [applyUpdateState])
 
   const clearPendingAction = useCallback(() => {
     pendingActionRef.current = null
@@ -282,16 +293,16 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('downloadUpdate')()
-      const completion = resolveAppUpdateActionResult(result, updateState)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
-        setUpdateState(completion.errorState)
+        applyUpdateState(completion.errorState)
       }
     } catch (error) {
       clearPendingAction()
-      setErrorState(error, updateState)
+      setErrorState(error, updateStateRef.current)
     }
-  }, [clearPendingAction, setErrorState, updateState])
+  }, [applyUpdateState, clearPendingAction, setErrorState])
 
   const runQuitAndInstall = useCallback(async () => {
     if (!canInvokeAppUpdateAction(pendingActionRef.current, 'install')) {
@@ -303,16 +314,16 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('quitAndInstall')()
-      const completion = resolveAppUpdateActionResult(result, updateState)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
-        setUpdateState(completion.errorState)
+        applyUpdateState(completion.errorState)
       }
     } catch (error) {
       clearPendingAction()
-      setErrorState(error, updateState)
+      setErrorState(error, updateStateRef.current)
     }
-  }, [clearPendingAction, setErrorState, updateState])
+  }, [applyUpdateState, clearPendingAction, setErrorState])
 
   const checkForUpdates = useCallback(async () => {
     if (!canInvokeAppUpdateAction(pendingActionRef.current, 'check')) {
@@ -324,16 +335,16 @@ export function useAppUpdate() {
 
     try {
       const result = await getUpdatesBridgeMethod('checkForUpdates')()
-      const completion = resolveAppUpdateActionResult(result, updateState)
+      const completion = resolveAppUpdateActionResult(result, () => updateStateRef.current)
       if (completion.shouldClearPendingAction && completion.errorState) {
         clearPendingAction()
-        setUpdateState(completion.errorState)
+        applyUpdateState(completion.errorState)
       }
     } catch (error) {
       clearPendingAction()
-      setErrorState(error, updateState)
+      setErrorState(error, updateStateRef.current)
     }
-  }, [clearPendingAction, setErrorState, updateState])
+  }, [applyUpdateState, clearPendingAction, setErrorState])
 
   useEffect(() => {
     return createAppUpdateBridgeLifecycle({
@@ -341,12 +352,12 @@ export function useAppUpdate() {
       onStateChanged: (callback) => {
         return window.electron?.updates?.onStateChanged?.(callback)
       },
-      onState: setUpdateState,
+      onState: applyUpdateState,
       onError: (message) => {
-        setUpdateState(createAppUpdateErrorState(message))
+        applyUpdateState(createAppUpdateErrorState(message))
       }
     })
-  }, [])
+  }, [applyUpdateState])
 
   useEffect(() => {
     const nextPendingAction = resolveAppUpdatePendingAction(pendingActionRef.current, updateState)

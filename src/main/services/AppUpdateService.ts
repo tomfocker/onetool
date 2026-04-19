@@ -38,6 +38,8 @@ type AppUpdateServiceDependencies = {
   getSettings?: () => Promise<UpdateSettings> | UpdateSettings
 }
 
+const UNSUPPORTED_AUTO_UPDATE_RUNTIME_ERROR = '当前运行环境不支持自动更新'
+
 export function isSupportedAutoUpdateRuntime(
   platform: NodeJS.Platform,
   isPackaged: boolean,
@@ -344,6 +346,13 @@ export class AppUpdateService extends EventEmitter {
   }
 
   async checkForUpdates(): Promise<IpcResponse> {
+    if (!this.shouldAutoCheckOnStartup()) {
+      return {
+        success: false,
+        error: UNSUPPORTED_AUTO_UPDATE_RUNTIME_ERROR
+      }
+    }
+
     if (this.checkForUpdatesPromise) {
       return this.checkForUpdatesPromise
     }
