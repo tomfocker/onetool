@@ -59,6 +59,16 @@ function toPlainObject(value) {
   return JSON.parse(JSON.stringify(value))
 }
 
+function createDeferred() {
+  let resolve
+  let reject
+  const promise = new Promise((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 test('deriveAppUpdatePromptState maps available updates to a confirm-download prompt', () => {
   assert.deepEqual(
     toPlainObject(deriveAppUpdatePromptState({
@@ -192,4 +202,41 @@ test('createAppUpdateBridgeLifecycle unsubscribes on cleanup and surfaces initia
   assert.equal(unsubscribed, 1)
   assert.deepEqual(seenStates, [{ status: 'checking' }])
   assert.equal(seenError, 'bridge down')
+})
+
+test('createAppUpdateBridgeLifecycle ignores a stale initial getState result after a newer subscription state arrives', async () => {
+  const deferred = createDeferred()
+  const seenStates = []
+  let emitState = null
+
+  const cleanup = createAppUpdateBridgeLifecycle({
+    getState: () => deferred.promise,
+    onStateChanged: (callback) => {
+      emitState = callback
+      return () => undefined
+    },
+    onState: (state) => {
+      seenStates.push(state)
+    },
+    onError: () => undefined
+  })
+
+  emitState({ status: 'checking' })
+  deferred.resolve({
+    success: true,
+    data: {
+      status: 'idle',
+      currentVersion: '1.0.0',
+      latestVersion: null,
+      releaseNotes: null,
+      progressPercent: null,
+      errorMessage: null
+    }
+  })
+
+  await deferred.promise
+  await new Promise(resolve => setTimeout(resolve, 0))
+  cleanup()
+
+  assert.deepEqual(seenStates, [{ status: 'checking' }])
 })

@@ -110,11 +110,13 @@ export function createAppUpdateBridgeLifecycle(deps: {
   onError: (message: string) => void
 }): () => void {
   let isActive = true
+  let stateRevision = 0
 
   void (async () => {
     try {
       const result = await deps.getState()
-      if (isActive && result?.success && result.data) {
+      if (isActive && result?.success && result.data && stateRevision === 0) {
+        stateRevision = 1
         deps.onState(result.data)
       }
     } catch (error) {
@@ -126,6 +128,7 @@ export function createAppUpdateBridgeLifecycle(deps: {
 
   const unsubscribe = deps.onStateChanged((nextState) => {
     if (isActive) {
+      stateRevision += 1
       deps.onState(nextState)
     }
   })
@@ -195,15 +198,6 @@ export function useAppUpdate() {
     setUpdateState(createAppUpdateErrorState(getErrorMessage(error), previousState))
   }, [])
 
-  const checkForUpdates = useCallback(async () => {
-    try {
-      return await getUpdatesBridgeMethod('checkForUpdates')()
-    } catch (error) {
-      setErrorState(error, updateState)
-      return undefined
-    }
-  }, [setErrorState, updateState])
-
   const clearPendingAction = useCallback(() => {
     pendingActionRef.current = null
     setPendingAction(null)
@@ -241,7 +235,7 @@ export function useAppUpdate() {
     }
   }, [clearPendingAction, setErrorState, updateState])
 
-  const runCheckForUpdates = useCallback(async () => {
+  const checkForUpdates = useCallback(async () => {
     if (!canInvokeAppUpdateAction(pendingActionRef.current, 'check')) {
       return
     }
@@ -283,11 +277,11 @@ export function useAppUpdate() {
       updateState,
       promptState: deriveAppUpdatePromptState(updateState),
       pendingAction,
-      checkForUpdates: runCheckForUpdates,
+      checkForUpdates,
       downloadUpdate: runDownloadUpdate,
       quitAndInstall: runQuitAndInstall
     }
-  }, [pendingAction, runCheckForUpdates, runDownloadUpdate, runQuitAndInstall, updateState])
+  }, [checkForUpdates, pendingAction, runDownloadUpdate, runQuitAndInstall, updateState])
 }
 
 export type { UpdatePromptState }
