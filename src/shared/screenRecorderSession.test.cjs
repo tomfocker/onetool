@@ -182,6 +182,28 @@ test('resolveRecorderStartSession uses the prepared area draft instead of caller
   })
 })
 
+test('resolveRecorderStartSession refuses to start area recording while reselection is still open', () => {
+  assert.equal(
+    resolveRecorderStartSession(
+      toRecorderSessionUpdate({
+        status: 'selecting-area',
+        mode: 'area',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:00',
+        selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+        selectionPreviewDataUrl: 'data:image/png;base64,preview',
+        selectedDisplayId: 'display-1'
+      }),
+      {
+        outputPath: 'C:/tmp/new-output.mp4',
+        displayId: 'display-2',
+        usePreparedSelection: true
+      }
+    ),
+    null
+  )
+})
+
 test('beginRecorderSelectionSession preserves an existing prepared area while opening reselection', () => {
   assert.deepEqual(
     beginRecorderSelectionSession(

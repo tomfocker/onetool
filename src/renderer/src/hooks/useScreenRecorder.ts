@@ -5,6 +5,7 @@ import type {
   RecorderSessionUpdate
 } from '../../../shared/ipc-schemas'
 import {
+  canStartPreparedRecorderSelection,
   ensureRecorderOutputPath,
   getRecorderSelectionValidationError,
   nudgeRecorderBounds
@@ -313,11 +314,16 @@ export function useScreenRecorder() {
     }
 
     if (draftMode === 'area') {
-      if (!activeSession.selectionBounds) {
-        return { success: false, error: '请先框选录制区域' }
+      if (!canStartPreparedRecorderSelection(activeSession)) {
+        return { success: false, error: '请先完成录制区域确认' }
       }
 
-      config.bounds = activeSession.selectionBounds
+      const preparedBounds = activeSession.selectionBounds
+      if (!preparedBounds) {
+        return { success: false, error: '请先完成录制区域确认' }
+      }
+
+      config.bounds = preparedBounds
 
       if (activeSession.selectedDisplayId) {
         config.displayId = activeSession.selectedDisplayId
@@ -467,7 +473,7 @@ export function useScreenRecorder() {
   const canStartRecording =
     !controlsLocked &&
     Boolean(outputPath) &&
-    (recordingMode === 'full' || Boolean(session.selectionBounds && !selectionValidationError))
+    (recordingMode === 'full' || Boolean(canStartPreparedRecorderSelection(session) && !selectionValidationError))
 
   return {
     outputPath, setOutputPath,

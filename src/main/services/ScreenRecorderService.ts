@@ -7,6 +7,7 @@ import ffmpegStatic from 'ffmpeg-static'
 import { IpcResponse } from '../../shared/types'
 import {
   beginRecorderSelectionSession,
+  canStartPreparedRecorderSelection,
   cancelRecorderSelectionSession,
   createRecorderSessionUpdate,
   clampRecorderBounds,
@@ -195,15 +196,11 @@ export class ScreenRecorderService {
           <div class="dot"></div>
           <div>正在录制</div>
           <div class="time" id="time">00:00:00</div>
-          <button class="button secondary" id="expand">返回面板</button>
           <button class="button danger" id="stop">停止</button>
         </div>
         <script>
           const { ipcRenderer } = require('electron');
           const timeNode = document.getElementById('time');
-          document.getElementById('expand').addEventListener('click', () => {
-            ipcRenderer.invoke('screen-recorder-expand-panel');
-          });
           document.getElementById('stop').addEventListener('click', () => {
             ipcRenderer.invoke('screen-recorder-stop');
           });
@@ -543,6 +540,10 @@ export class ScreenRecorderService {
 
   expandPanel(): IpcResponse {
     try {
+      if (this.session.status === 'recording' || this.session.status === 'finishing') {
+        return { success: false, error: '录制中无法展开主面板' }
+      }
+
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         if (this.mainWindow.isMinimized()) {
           this.mainWindow.restore()
@@ -574,6 +575,9 @@ export class ScreenRecorderService {
         displayId: config.displayId,
         usePreparedSelection: Boolean(config.bounds)
       })
+      if (sessionUpdate === null) {
+        return { success: false, error: '请先完成录制区域确认' }
+      }
 
       this.session = sessionUpdate
       this.emitSessionUpdate()

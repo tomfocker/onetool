@@ -81,6 +81,10 @@ function hasPreparedRecorderSelection(current: RecorderSessionUpdate): boolean {
   )
 }
 
+export function canStartPreparedRecorderSelection(current: RecorderSessionUpdate): boolean {
+  return current.status === 'ready-to-record' && hasPreparedRecorderSelection(current)
+}
+
 export function clampRecorderBounds(
   bounds: RecorderBounds,
   availableBounds: RecorderBounds,
@@ -198,8 +202,12 @@ export function createRecorderSessionUpdate(
 export function resolveRecorderStartSession(
   current: RecorderSessionUpdate,
   input: RecorderStartSessionInput
-): RecorderSessionUpdate {
-  if (input.usePreparedSelection && current.selectionBounds) {
+): RecorderSessionUpdate | null {
+  if (input.usePreparedSelection) {
+    if (!canStartPreparedRecorderSelection(current)) {
+      return null
+    }
+
     return toRecorderSessionUpdate({
       status: 'recording',
       mode: 'area',
