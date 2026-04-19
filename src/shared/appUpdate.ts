@@ -1,4 +1,11 @@
-export type UpdateStatus = 'idle' | 'available' | 'downloading' | 'error'
+export type UpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'not-available'
+  | 'downloading'
+  | 'downloaded'
+  | 'error'
 
 export interface UpdateState {
   status: UpdateStatus
