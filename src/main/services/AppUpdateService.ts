@@ -120,6 +120,36 @@ function createErrorState(currentVersion: string, errorMessage: string): UpdateS
   }
 }
 
+function createErrorStateFromCurrentState(state: UpdateState, errorMessage: string): UpdateState {
+  return {
+    status: 'error',
+    currentVersion: state.currentVersion,
+    latestVersion: state.latestVersion,
+    releaseNotes: state.releaseNotes,
+    progressPercent: state.progressPercent,
+    errorMessage
+  }
+}
+
+function getErrorMessage(error: unknown, fallbackMessage = '更新检查失败'): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+
+  return fallbackMessage
+}
+
 function createNotAvailableState(currentVersion: string): UpdateState {
   return {
     status: 'not-available',
@@ -293,8 +323,8 @@ export class AppUpdateService extends EventEmitter {
     })
 
     this.autoUpdater.on('error', (error: Error | string) => {
-      const message = typeof error === 'string' ? error : error?.message || '更新检查失败'
-      this.setState(createErrorState(this.state.currentVersion, message))
+      const message = getErrorMessage(error)
+      this.setState(createErrorStateFromCurrentState(this.state, message))
     })
   }
 
@@ -347,6 +377,7 @@ export class AppUpdateService extends EventEmitter {
 
   async checkForUpdates(): Promise<IpcResponse> {
     if (!this.shouldAutoCheckOnStartup()) {
+      this.setState(createErrorStateFromCurrentState(this.state, UNSUPPORTED_AUTO_UPDATE_RUNTIME_ERROR))
       return {
         success: false,
         error: UNSUPPORTED_AUTO_UPDATE_RUNTIME_ERROR
@@ -368,8 +399,8 @@ export class AppUpdateService extends EventEmitter {
 
         return { success: true }
       } catch (error) {
-        const message = error instanceof Error ? error.message : String(error)
-        this.setState(createErrorState(this.state.currentVersion, message))
+        const message = getErrorMessage(error)
+        this.setState(createErrorStateFromCurrentState(this.state, message))
         return { success: false, error: message }
       } finally {
         this.checkForUpdatesPromise = null
@@ -388,8 +419,8 @@ export class AppUpdateService extends EventEmitter {
       await this.autoUpdater.downloadUpdate()
       return { success: true }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.setState(createErrorState(this.state.currentVersion, message))
+      const message = getErrorMessage(error)
+      this.setState(createErrorStateFromCurrentState(this.state, message))
       return { success: false, error: message }
     }
   }
@@ -403,8 +434,8 @@ export class AppUpdateService extends EventEmitter {
       this.autoUpdater.quitAndInstall()
       return { success: true }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      this.setState(createErrorState(this.state.currentVersion, message))
+      const message = getErrorMessage(error)
+      this.setState(createErrorStateFromCurrentState(this.state, message))
       return { success: false, error: message }
     }
   }

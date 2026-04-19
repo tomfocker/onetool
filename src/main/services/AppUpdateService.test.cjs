@@ -5,6 +5,10 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 
+function toPlainObject(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 function loadAppUpdateServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'AppUpdateService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -261,7 +265,7 @@ test('checkForUpdates deduplicates overlapping calls and shares one updater requ
   assert.equal(secondResult.success, true)
 })
 
-test('manual checkForUpdates returns a safe unsupported-runtime result on packaged non-Windows runtimes', async () => {
+test('manual checkForUpdates publishes a shared unsupported-runtime state on packaged non-Windows runtimes', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
       app: {
@@ -274,16 +278,23 @@ test('manual checkForUpdates returns a safe unsupported-runtime result on packag
     platform: 'darwin',
     isDevelopment: false
   })
+  const states = []
+
+  service.on('state-changed', (state) => {
+    states.push(state)
+  })
 
   const result = await service.checkForUpdates()
 
   assert.equal(result.success, false)
   assert.match(result.error, /不支持自动更新/)
   assert.equal(autoUpdater.checkForUpdatesCalls, 0)
-  assert.equal(service.getState().status, 'idle')
+  assert.equal(service.getState().status, 'error')
+  assert.match(service.getState().errorMessage, /不支持自动更新/)
+  assert.deepEqual(states.map((state) => state.status), ['error'])
 })
 
-test('manual checkForUpdates returns a safe unsupported-runtime result while unpackaged', async () => {
+test('manual checkForUpdates publishes a shared unsupported-runtime state while unpackaged', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
       app: {
@@ -302,7 +313,8 @@ test('manual checkForUpdates returns a safe unsupported-runtime result while unp
   assert.equal(result.success, false)
   assert.match(result.error, /不支持自动更新/)
   assert.equal(autoUpdater.checkForUpdatesCalls, 0)
-  assert.equal(service.getState().status, 'idle')
+  assert.equal(service.getState().status, 'error')
+  assert.match(service.getState().errorMessage, /不支持自动更新/)
 })
 
 test('initialize skips auto-check on packaged non-Windows runtimes', async () => {
@@ -417,6 +429,89 @@ test('release notes survive update-downloaded when no new notes are provided', a
   assert.equal(service.getState().status, 'downloaded')
   assert.equal(service.getState().latestVersion, '1.2.3')
   assert.equal(service.getState().releaseNotes, 'Release notes')
+})
+
+test('downloadUpdate preserves existing metadata when the updater throws', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    throw new Error('download failed')
+  }
+
+  await service.checkForUpdates()
+  const result = await service.downloadUpdate()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /download failed/)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'error',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 65,
+    errorMessage: 'download failed'
+  })
+})
+
+test('quitAndInstall preserves existing metadata when installation fails', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  autoUpdater.quitAndInstall = () => {
+    throw new Error('install failed')
+  }
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+  const result = await service.quitAndInstall()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /install failed/)
+  assert.deepEqual(toPlainObject(service.getState()), {
+    status: 'error',
+    currentVersion: '1.0.0',
+    latestVersion: '1.2.3',
+    releaseNotes: 'Release notes',
+    progressPercent: 100,
+    errorMessage: 'install failed'
+  })
 })
 
 test('stray download-progress and update-downloaded events do not move the service from idle', () => {
