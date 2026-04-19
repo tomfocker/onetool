@@ -408,6 +408,31 @@ test('manual checkForUpdates publishes a shared unsupported-runtime state while 
   assert.match(service.getState().errorMessage, /不支持自动更新/)
 })
 
+test('manual checkForUpdates is disabled for portable Windows runtimes', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false,
+    env: {
+      PORTABLE_EXECUTABLE_FILE: 'D:\\portable\\OneTool.exe'
+    }
+  })
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /不支持自动更新/)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'error')
+})
+
 test('initialize skips auto-check on packaged non-Windows runtimes', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {
@@ -420,6 +445,31 @@ test('initialize skips auto-check on packaged non-Windows runtimes', async () =>
   const service = new AppUpdateService({
     platform: 'darwin',
     isDevelopment: false,
+    getSettings: async () => ({ autoCheckForUpdates: true })
+  })
+
+  const result = await service.initialize()
+
+  assert.equal(result.success, true)
+  assert.equal(autoUpdater.checkForUpdatesCalls, 0)
+  assert.equal(service.getState().status, 'idle')
+})
+
+test('initialize skips auto-check for portable Windows runtimes', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false,
+    env: {
+      PORTABLE_EXECUTABLE_DIR: 'D:\\portable'
+    },
     getSettings: async () => ({ autoCheckForUpdates: true })
   })
 
@@ -644,6 +694,52 @@ test('quitAndInstall prepares the app to quit before invoking the updater instal
 
   assert.equal(result.success, true)
   assert.deepEqual(steps, ['prepare', 'install'])
+})
+
+test('quitAndInstall rolls back quit preparation when install throws synchronously', async () => {
+  const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '1.0.0'
+      }
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+  const steps = []
+
+  autoUpdater.checkForUpdates = async () => {
+    autoUpdater.emit('update-available', { version: '1.2.3', releaseNotes: 'Release notes' })
+    return { updateInfo: { version: '1.2.3', releaseNotes: 'Release notes' } }
+  }
+
+  autoUpdater.downloadUpdate = async () => {
+    autoUpdater.emit('download-progress', { percent: 64.8 })
+    autoUpdater.emit('update-downloaded', { version: '1.2.3', releaseNotes: 'Release notes' })
+  }
+
+  autoUpdater.quitAndInstall = () => {
+    steps.push('install')
+    throw new Error('install failed')
+  }
+
+  service.setBeforeQuitAndInstall(() => {
+    steps.push('prepare')
+    return () => {
+      steps.push('rollback')
+    }
+  })
+
+  await service.checkForUpdates()
+  await service.downloadUpdate()
+  const result = await service.quitAndInstall()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /install failed/)
+  assert.deepEqual(steps, ['prepare', 'install', 'rollback'])
 })
 
 test('stray download-progress and update-downloaded events do not move the service from idle', () => {

@@ -36,6 +36,7 @@ type AppUpdateServiceDependencies = {
   autoUpdater?: AutoUpdaterLike
   isDevelopment?: boolean
   platform?: NodeJS.Platform
+  env?: NodeJS.ProcessEnv
   getSettings?: () => Promise<UpdateSettings> | UpdateSettings
 }
 
@@ -47,6 +48,13 @@ export function isSupportedAutoUpdateRuntime(
   isDevelopment: boolean
 ): boolean {
   return platform === 'win32' && isPackaged && !isDevelopment
+}
+
+export function isPortableWindowsRuntime(env: {
+  PORTABLE_EXECUTABLE_FILE?: string
+  PORTABLE_EXECUTABLE_DIR?: string
+}): boolean {
+  return Boolean(env.PORTABLE_EXECUTABLE_FILE || env.PORTABLE_EXECUTABLE_DIR)
 }
 
 export function shouldTriggerAutoCheckOnSettingsChange(
@@ -234,6 +242,8 @@ export class AppUpdateService extends EventEmitter {
 
   private readonly platform: NodeJS.Platform
 
+  private readonly env: NodeJS.ProcessEnv
+
   private initialized = false
 
   private initializationPromise: Promise<IpcResponse> | null = null
@@ -242,7 +252,7 @@ export class AppUpdateService extends EventEmitter {
 
   private state: UpdateState
 
-  private beforeQuitAndInstall: () => void = () => undefined
+  private beforeQuitAndInstall: () => void | (() => void) = () => undefined
 
   constructor(dependencies: AppUpdateServiceDependencies = {}) {
     super()
@@ -252,6 +262,7 @@ export class AppUpdateService extends EventEmitter {
     this.getSettings = dependencies.getSettings ?? (() => ({ autoCheckForUpdates: true }))
     this.isDevelopment = dependencies.isDevelopment ?? !this.app.isPackaged
     this.platform = dependencies.platform ?? process.platform
+    this.env = dependencies.env ?? process.env
     this.state = createIdleUpdateState(this.app.getVersion())
 
     this.autoUpdater.autoDownload = false
@@ -263,7 +274,7 @@ export class AppUpdateService extends EventEmitter {
     return { ...this.state }
   }
 
-  setBeforeQuitAndInstall(handler: (() => void) | null | undefined): void {
+  setBeforeQuitAndInstall(handler: (() => void | (() => void)) | null | undefined): void {
     this.beforeQuitAndInstall = handler ?? (() => undefined)
   }
 
@@ -346,7 +357,13 @@ export class AppUpdateService extends EventEmitter {
   }
 
   private shouldAutoCheckOnStartup(): boolean {
-    return isSupportedAutoUpdateRuntime(this.platform, this.app.isPackaged, this.isDevelopment)
+    return (
+      isSupportedAutoUpdateRuntime(this.platform, this.app.isPackaged, this.isDevelopment) &&
+      !isPortableWindowsRuntime({
+        PORTABLE_EXECUTABLE_FILE: this.env.PORTABLE_EXECUTABLE_FILE,
+        PORTABLE_EXECUTABLE_DIR: this.env.PORTABLE_EXECUTABLE_DIR
+      })
+    )
   }
 
   async initialize(): Promise<IpcResponse> {
@@ -447,11 +464,15 @@ export class AppUpdateService extends EventEmitter {
       return { success: false, error: '没有可安装的更新' }
     }
 
+    let rollbackQuitPreparation: (() => void) | undefined
+
     try {
-      this.beforeQuitAndInstall()
+      const maybeRollback = this.beforeQuitAndInstall()
+      rollbackQuitPreparation = typeof maybeRollback === 'function' ? maybeRollback : undefined
       this.autoUpdater.quitAndInstall()
       return { success: true }
     } catch (error) {
+      rollbackQuitPreparation?.()
       const message = getErrorMessage(error)
       this.setState(createErrorStateFromCurrentState(this.state, message))
       return { success: false, error: message }
