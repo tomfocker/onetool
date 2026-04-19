@@ -37,7 +37,24 @@ export interface RecorderSessionUpdateInput {
 const MIN_RECORDER_SIZE = 64
 
 function clamp(value: number, min: number, max: number): number {
+  if (max < min) {
+    return min
+  }
+
   return Math.min(Math.max(value, min), max)
+}
+
+function normalizeRecorderBounds(
+  bounds: RecorderBounds,
+  display: RecorderBounds,
+  minSize: number
+): RecorderBounds {
+  const width = clamp(bounds.width, minSize, display.width)
+  const height = clamp(bounds.height, minSize, display.height)
+  const x = clamp(bounds.x, display.x, display.x + display.width - width)
+  const y = clamp(bounds.y, display.y, display.y + display.height - height)
+
+  return { x, y, width, height }
 }
 
 function getOutputExtension(format: 'mp4' | 'gif'): string {
@@ -48,19 +65,12 @@ function getOutputExtension(format: 'mp4' | 'gif'): string {
   return '.mp4'
 }
 
-export function clampRecorderBounds(bounds: RecorderBounds, availableBounds: RecorderBounds): RecorderBounds {
-  const width = clamp(bounds.width, MIN_RECORDER_SIZE, availableBounds.width)
-  const height = clamp(bounds.height, MIN_RECORDER_SIZE, availableBounds.height)
-
-  const maxX = availableBounds.x + availableBounds.width - width
-  const maxY = availableBounds.y + availableBounds.height - height
-
-  return {
-    x: clamp(bounds.x, availableBounds.x, maxX),
-    y: clamp(bounds.y, availableBounds.y, maxY),
-    width,
-    height
-  }
+export function clampRecorderBounds(
+  bounds: RecorderBounds,
+  availableBounds: RecorderBounds,
+  minSize = MIN_RECORDER_SIZE
+): RecorderBounds {
+  return normalizeRecorderBounds(bounds, availableBounds, minSize)
 }
 
 export function nudgeRecorderBounds(
@@ -70,7 +80,8 @@ export function nudgeRecorderBounds(
   display: RecorderBounds,
   minSize = MIN_RECORDER_SIZE
 ): RecorderBounds {
-  const nextBounds = { ...bounds }
+  const normalizedBounds = normalizeRecorderBounds(bounds, display, minSize)
+  const nextBounds = { ...normalizedBounds }
 
   if (field === 'x') {
     const maxX = display.x + display.width - nextBounds.width
@@ -86,7 +97,7 @@ export function nudgeRecorderBounds(
     nextBounds.height = clamp(nextBounds.height + delta, minSize, maxHeight)
   }
 
-  return nextBounds
+  return normalizeRecorderBounds(nextBounds, display, minSize)
 }
 
 export function isRecorderSelectionValid(bounds: RecorderBounds, minSize = MIN_RECORDER_SIZE): boolean {

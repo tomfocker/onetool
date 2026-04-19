@@ -9,25 +9,26 @@ const {
   toRecorderSessionUpdate
 } = require('./screenRecorderSession.ts')
 
-test('clampRecorderBounds keeps bounds within the available area and enforces the minimum size', () => {
+test('clampRecorderBounds respects the configurable minimum size', () => {
   assert.deepEqual(
     clampRecorderBounds(
       { x: -10, y: 5, width: 20, height: 20 },
-      { x: 0, y: 0, width: 100, height: 80 }
+      { x: 0, y: 0, width: 100, height: 80 },
+      80
     ),
-    { x: 0, y: 5, width: 64, height: 64 }
+    { x: 0, y: 0, width: 80, height: 80 }
   )
 })
 
-test('nudgeRecorderBounds nudges a single field and respects the display and minimum size', () => {
+test('nudgeRecorderBounds clamps safely when bounds start outside the display', () => {
   assert.deepEqual(
     nudgeRecorderBounds(
-      { x: 10, y: 12, width: 80, height: 90 },
+      { x: 190, y: 140, width: 40, height: 30 },
       'width',
-      -30,
+      -20,
       { x: 0, y: 0, width: 200, height: 150 }
     ),
-    { x: 10, y: 12, width: 64, height: 90 }
+    { x: 136, y: 86, width: 64, height: 64 }
   )
 })
 
