@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { UpdateState } from '../../../shared/appUpdate'
 
-export type AppUpdateAction = 'download' | 'install'
+export type AppUpdateAction = 'check' | 'download' | 'install'
 
 type UpdatePromptState =
   | {
@@ -42,6 +42,13 @@ function getErrorMessage(error: unknown): string {
     return error.message
   }
 
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+
   if (typeof error === 'string' && error.trim()) {
     return error
   }
@@ -62,6 +69,29 @@ export function canInvokeAppUpdateAction(pendingAction: AppUpdateAction | null, 
   return pendingAction === null || pendingAction !== requestedAction
 }
 
+export function resolveAppUpdatePendingAction(
+  pendingAction: AppUpdateAction | null,
+  updateState: Pick<UpdateState, 'status'> | null | undefined
+): AppUpdateAction | null {
+  if (!pendingAction || !updateState) {
+    return pendingAction
+  }
+
+  if (pendingAction === 'check') {
+    return updateState.status === 'checking' ? 'check' : null
+  }
+
+  if (pendingAction === 'download') {
+    return updateState.status === 'downloading' ? null : updateState.status === 'downloaded' ? null : updateState.status === 'error' ? null : 'download'
+  }
+
+  if (pendingAction === 'install') {
+    return updateState.status === 'error' ? null : 'install'
+  }
+
+  return pendingAction
+}
+
 export function createAppUpdateErrorState(errorMessage: string, previousState?: UpdateState | null): UpdateState {
   return {
     status: 'error',
@@ -70,6 +100,41 @@ export function createAppUpdateErrorState(errorMessage: string, previousState?: 
     releaseNotes: previousState?.releaseNotes ?? null,
     progressPercent: previousState?.progressPercent ?? null,
     errorMessage
+  }
+}
+
+export function createAppUpdateBridgeLifecycle(deps: {
+  getState: () => Promise<{ success: boolean; data?: UpdateState }>
+  onStateChanged: (callback: (state: UpdateState) => void) => (() => void) | void
+  onState: (state: UpdateState) => void
+  onError: (message: string) => void
+}): () => void {
+  let isActive = true
+
+  void (async () => {
+    try {
+      const result = await deps.getState()
+      if (isActive && result?.success && result.data) {
+        deps.onState(result.data)
+      }
+    } catch (error) {
+      if (isActive) {
+        deps.onError(getErrorMessage(error))
+      }
+    }
+  })()
+
+  const unsubscribe = deps.onStateChanged((nextState) => {
+    if (isActive) {
+      deps.onState(nextState)
+    }
+  })
+
+  return () => {
+    isActive = false
+    if (unsubscribe) {
+      unsubscribe()
+    }
   }
 }
 
@@ -176,62 +241,53 @@ export function useAppUpdate() {
     }
   }, [clearPendingAction, setErrorState, updateState])
 
-  useEffect(() => {
-    let isActive = true
-    void (async () => {
-      try {
-        const result = await getUpdatesBridgeMethod('getState')()
-        if (isActive && result?.success && result.data) {
-          setUpdateState(result.data)
-        }
-      } catch (error) {
-        if (isActive) {
-          setUpdateState(createAppUpdateErrorState(getErrorMessage(error)))
-        }
-      }
-    })()
+  const runCheckForUpdates = useCallback(async () => {
+    if (!canInvokeAppUpdateAction(pendingActionRef.current, 'check')) {
+      return
+    }
 
-    const unsubscribe = window.electron?.updates?.onStateChanged?.((nextState: UpdateState) => {
-      if (isActive) {
-        setUpdateState(nextState)
+    pendingActionRef.current = 'check'
+    setPendingAction('check')
+
+    try {
+      await getUpdatesBridgeMethod('checkForUpdates')()
+    } catch (error) {
+      clearPendingAction()
+      setErrorState(error, updateState)
+    }
+  }, [clearPendingAction, setErrorState, updateState])
+
+  useEffect(() => {
+    return createAppUpdateBridgeLifecycle({
+      getState: () => getUpdatesBridgeMethod('getState')(),
+      onStateChanged: (callback) => {
+        return window.electron?.updates?.onStateChanged?.(callback)
+      },
+      onState: setUpdateState,
+      onError: (message) => {
+        setUpdateState(createAppUpdateErrorState(message))
       }
     })
-
-    return () => {
-      isActive = false
-      if (unsubscribe) {
-        unsubscribe()
-      }
-    }
   }, [])
 
   useEffect(() => {
-    if (!pendingAction) {
-      return
+    const nextPendingAction = resolveAppUpdatePendingAction(pendingActionRef.current, updateState)
+    if (nextPendingAction !== pendingActionRef.current) {
+      pendingActionRef.current = nextPendingAction
+      setPendingAction(nextPendingAction)
     }
-
-    if (updateState?.status === 'error') {
-      clearPendingAction()
-      return
-    }
-
-    if (pendingAction === 'download') {
-      if (updateState?.status === 'downloading' || updateState?.status === 'downloaded') {
-        clearPendingAction()
-      }
-    }
-  }, [clearPendingAction, pendingAction, updateState?.status])
+  }, [updateState])
 
   return useMemo(() => {
     return {
       updateState,
       promptState: deriveAppUpdatePromptState(updateState),
       pendingAction,
-      checkForUpdates,
+      checkForUpdates: runCheckForUpdates,
       downloadUpdate: runDownloadUpdate,
       quitAndInstall: runQuitAndInstall
     }
-  }, [checkForUpdates, pendingAction, runDownloadUpdate, runQuitAndInstall, updateState])
+  }, [pendingAction, runCheckForUpdates, runDownloadUpdate, runQuitAndInstall, updateState])
 }
 
 export type { UpdatePromptState }

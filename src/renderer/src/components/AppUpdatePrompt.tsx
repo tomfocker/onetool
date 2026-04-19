@@ -10,7 +10,9 @@ export const AppUpdatePrompt: React.FC = () => {
   }
 
   const primaryActionLabel = promptState.kind === 'error'
-    ? promptState.primaryActionLabel
+    ? pendingAction === 'check'
+      ? '正在检查...'
+      : promptState.primaryActionLabel
     : promptState.kind === 'restart' && pendingAction === 'install'
       ? '正在安装...'
       : promptState.kind === 'confirm-download' && pendingAction === 'download'
@@ -18,6 +20,7 @@ export const AppUpdatePrompt: React.FC = () => {
         : promptState.primaryActionLabel
 
   const primaryActionDisabled =
+    (promptState.kind === 'error' && pendingAction === 'check') ||
     (promptState.kind === 'confirm-download' && pendingAction === 'download') ||
     (promptState.kind === 'restart' && pendingAction === 'install')
 

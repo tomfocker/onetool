@@ -50,7 +50,9 @@ function loadUseAppUpdateModule() {
 const {
   canInvokeAppUpdateAction,
   createAppUpdateErrorState,
-  deriveAppUpdatePromptState
+  createAppUpdateBridgeLifecycle,
+  deriveAppUpdatePromptState,
+  resolveAppUpdatePendingAction
 } = loadUseAppUpdateModule()
 
 function toPlainObject(value) {
@@ -148,4 +150,46 @@ test('canInvokeAppUpdateAction blocks duplicate in-flight actions but allows a d
   assert.equal(canInvokeAppUpdateAction('download', 'download'), false)
   assert.equal(canInvokeAppUpdateAction('download', 'install'), true)
   assert.equal(canInvokeAppUpdateAction(null, 'download'), true)
+  assert.equal(canInvokeAppUpdateAction('check', 'check'), false)
+  assert.equal(canInvokeAppUpdateAction('check', 'download'), true)
+})
+
+test('resolveAppUpdatePendingAction clears download pending on progress and download completion, install pending on error, and keeps check pending while checking', () => {
+  assert.equal(resolveAppUpdatePendingAction('download', { status: 'downloading' }), null)
+  assert.equal(resolveAppUpdatePendingAction('download', { status: 'downloaded' }), null)
+  assert.equal(resolveAppUpdatePendingAction('download', { status: 'error' }), null)
+  assert.equal(resolveAppUpdatePendingAction('install', { status: 'error' }), null)
+  assert.equal(resolveAppUpdatePendingAction('check', { status: 'checking' }), 'check')
+  assert.equal(resolveAppUpdatePendingAction('check', { status: 'available' }), null)
+})
+
+test('createAppUpdateBridgeLifecycle unsubscribes on cleanup and surfaces initial bridge rejection as an error state', async () => {
+  let unsubscribed = 0
+  const seenStates = []
+  let seenError = null
+
+  const cleanup = createAppUpdateBridgeLifecycle({
+    getState: async () => {
+      throw new Error('bridge down')
+    },
+    onStateChanged: (callback) => {
+      callback({ status: 'checking' })
+      return () => {
+        unsubscribed += 1
+      }
+    },
+    onState: (state) => {
+      seenStates.push(state)
+    },
+    onError: (message) => {
+      seenError = message
+    }
+  })
+
+  await new Promise(resolve => setTimeout(resolve, 0))
+  cleanup()
+
+  assert.equal(unsubscribed, 1)
+  assert.deepEqual(seenStates, [{ status: 'checking' }])
+  assert.equal(seenError, 'bridge down')
 })
