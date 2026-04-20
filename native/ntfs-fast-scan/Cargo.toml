@@ -1,0 +1,8 @@
+[package]
+name = "ntfs-fast-scan"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "ntfs-fast-scan"
+path = "src/main.rs"
