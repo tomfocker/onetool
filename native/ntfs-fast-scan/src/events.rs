@@ -344,4 +344,23 @@ mod tests {
         assert!(complete.contains("\"directoryCount\":1"));
         assert!(complete.contains("\"skippedChildren\":0"));
     }
+
+    #[test]
+    fn emit_event_writes_newline_delimited_json_output() {
+        let events = build_scan_events(&sample_snapshot());
+        let mut output = Vec::new();
+
+        for event in &events {
+            emit_event(&mut output, event).expect("emit event");
+        }
+
+        let output = String::from_utf8(output).expect("utf8 output");
+        let lines = output.lines().collect::<Vec<_>>();
+
+        assert_eq!(lines.len(), 4);
+        assert!(lines[0].contains("\"type\":\"volume-info\""));
+        assert!(lines[1].contains("\"summary\":{"));
+        assert!(lines[2].contains("\"largestFiles\":["));
+        assert!(lines[3].contains("\"tree\":{"));
+    }
 }

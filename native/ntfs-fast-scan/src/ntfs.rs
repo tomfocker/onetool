@@ -315,10 +315,6 @@ impl EnumeratedEntry {
 }
 
 pub fn scan_volume(root: &Path) -> io::Result<ScanSnapshot> {
-    if let Some(snapshot) = test_snapshot_override(root) {
-        return Ok(snapshot);
-    }
-
     #[cfg(windows)]
     {
         return scan_volume_windows(root);
@@ -332,60 +328,6 @@ pub fn scan_volume(root: &Path) -> io::Result<ScanSnapshot> {
             "ntfs-fast-scan requires Windows NTFS volume access",
         ))
     }
-}
-
-fn test_snapshot_override(root: &Path) -> Option<ScanSnapshot> {
-    match std::env::var("NTFS_FAST_SCAN_TEST_SNAPSHOT") {
-        Ok(mode) if mode == "sample" => Some(sample_snapshot(root)),
-        _ => None,
-    }
-}
-
-fn sample_snapshot(root: &Path) -> ScanSnapshot {
-    let root_path = path_string(root);
-    let games_path = joined_path_string(root, "Games");
-    let game_path = joined_path_string(Path::new(&games_path), "game.bin");
-    let notes_path = joined_path_string(root, "notes.txt");
-
-    ScanSnapshot {
-        root_path: root_path.clone(),
-        filesystem: "NTFS".to_owned(),
-        root: ScanEntry {
-            path: root_path.clone(),
-            name: root_path,
-            kind: EntryKind::Directory,
-            size_bytes: 40,
-            children: vec![
-                ScanEntry {
-                    path: games_path,
-                    name: "Games".to_owned(),
-                    kind: EntryKind::Directory,
-                    size_bytes: 32,
-                    children: vec![ScanEntry {
-                        path: game_path,
-                        name: "game.bin".to_owned(),
-                        kind: EntryKind::File,
-                        size_bytes: 32,
-                        children: Vec::new(),
-                    }],
-                },
-                ScanEntry {
-                    path: notes_path,
-                    name: "notes.txt".to_owned(),
-                    kind: EntryKind::File,
-                    size_bytes: 8,
-                    children: Vec::new(),
-                },
-            ],
-        },
-        files_scanned: 2,
-    }
-}
-
-fn joined_path_string(base: &Path, child: &str) -> String {
-    let mut path = PathBuf::from(base);
-    path.push(child);
-    path_string(&path)
 }
 
 fn build_snapshot_from_entries(
