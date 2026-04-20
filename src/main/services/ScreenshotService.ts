@@ -139,7 +139,12 @@ export class ScreenshotService {
   /**
    * 开启全屏选区窗口 (支持多显示器)
    */
-  openSelectionWindow(restrictBounds?: { x: number; y: number; width: number; height: number }, resultChannel: string = 'screenshot-selection-result', enhanced: boolean = false): void {
+  openSelectionWindow(
+    restrictBounds?: { x: number; y: number; width: number; height: number },
+    resultChannel: string = 'screenshot-selection-result',
+    enhanced: boolean = false,
+    initialBounds?: { x: number; y: number; width: number; height: number }
+  ): void {
     if (this.selectionWindows.length > 0) return
 
     this.selectionResultsChannel = resultChannel
@@ -182,19 +187,20 @@ export class ScreenshotService {
 
       const route = resultChannel === 'recorder-selection-result' ? '#/recorder-selection' : '#/screenshot-selection'
       const restrictQuery = restrictBounds ? `&restrict=${encodeURIComponent(JSON.stringify(restrictBounds))}` : ''
+      const initialQuery = initialBounds ? `&initial=${encodeURIComponent(JSON.stringify(initialBounds))}` : ''
       const modeQuery = resultChannel === 'recorder-selection-result' ? '&mode=recorder' : ''
       const enhancedQuery = enhanced ? `&enhanced=true` : ''
       // 关键！传递显示器原始偏移，方便 renderer 修正坐标
       const displayQuery = `&display=${display.id}&dx=${display.bounds.x}&dy=${display.bounds.y}`
 
       const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-        ? `${process.env['ELECTRON_RENDERER_URL']}${route}?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
-        : join(__dirname, '../../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`
+        ? `${process.env['ELECTRON_RENDERER_URL']}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
+        : join(__dirname, '../../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
 
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         win.loadURL(url)
       } else {
-        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}${route}?${displayQuery}${restrictQuery}${modeQuery}${enhancedQuery}`)
+        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`)
       }
 
       win.on('closed', () => {
@@ -212,9 +218,6 @@ export class ScreenshotService {
 
     const windowsToClose = [...this.selectionWindows]
     this.selectionWindows = []
-    windowsToClose.forEach(win => {
-      if (!win.isDestroyed()) win.close()
-    })
 
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       let finalBounds = bounds
@@ -228,6 +231,12 @@ export class ScreenshotService {
       }
       this.mainWindow.webContents.send(this.selectionResultsChannel, finalBounds)
     }
+
+    setTimeout(() => {
+      windowsToClose.forEach(win => {
+        if (!win.isDestroyed()) win.close()
+      })
+    }, 0)
   }
 }
 

@@ -258,16 +258,6 @@ export function deriveAppUpdatePromptState(state: UpdateState | null | undefined
     }
   }
 
-  if (state.status === 'error') {
-    return {
-      kind: 'error',
-      title: '更新失败',
-      message: state.errorMessage || '更新服务暂时不可用，请稍后重试。',
-      progressPercent: null,
-      primaryActionLabel: '重新检查更新'
-    }
-  }
-
   return null
 }
 

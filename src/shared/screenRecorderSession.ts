@@ -76,7 +76,6 @@ function hasPreparedRecorderSelection(current: RecorderSessionUpdate): boolean {
   return Boolean(
     current.mode === 'area' &&
     current.selectionBounds &&
-    current.selectionPreviewDataUrl &&
     current.selectedDisplayId
   )
 }

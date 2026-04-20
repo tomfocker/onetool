@@ -55,6 +55,7 @@ function loadUseScreenRecorderModule() {
 
 const {
   applyRecorderSessionSnapshot,
+  bootstrapScreenRecorder,
   getScreenRecorderViewState
 } = loadUseScreenRecorderModule()
 
@@ -146,4 +147,60 @@ test('getScreenRecorderViewState keeps hotkey editing and section 3 scoped to ac
       showRecordingControls: true
     }
   )
+})
+
+test('bootstrapScreenRecorder resolves without blocking on screen capture hydration', async () => {
+  const applied = {
+    outputPath: null,
+    hotkey: null,
+    session: null
+  }
+  let loadScreensStarted = false
+  let resolveLoadScreens
+
+  await bootstrapScreenRecorder(
+    {
+      getDefaultPath: async () => ({ success: true, data: 'C:/tmp/output.mp4' }),
+      getHotkey: async () => ({ success: true, data: 'Alt+Shift+R' }),
+      getSession: async () => ({
+        success: true,
+        data: {
+          status: 'idle',
+          mode: 'full',
+          outputPath: 'C:/tmp/output.mp4',
+          recordingTime: '00:00:00',
+          selectionBounds: null,
+          selectionPreviewDataUrl: null,
+          selectedDisplayId: null
+        }
+      }),
+      loadScreens: async () => {
+        loadScreensStarted = true
+        await new Promise((resolve) => {
+          resolveLoadScreens = resolve
+        })
+      },
+      scheduleScreenLoad: (callback) => {
+        callback()
+      }
+    },
+    {
+      setOutputPath: (value) => {
+        applied.outputPath = value
+      },
+      setRecorderHotkey: (value) => {
+        applied.hotkey = value
+      },
+      applyAuthoritativeSession: (value) => {
+        applied.session = value
+      }
+    }
+  )
+
+  assert.equal(loadScreensStarted, true)
+  assert.equal(applied.outputPath, 'C:/tmp/output.mp4')
+  assert.equal(applied.hotkey, 'Alt+Shift+R')
+  assert.equal(applied.session.outputPath, 'C:/tmp/output.mp4')
+
+  resolveLoadScreens()
 })

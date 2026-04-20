@@ -148,11 +148,11 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const screenRecorderAPI = {
-    selectOutput: () => ipcRenderer.invoke('screen-recorder-select-output'),
+    selectOutput: (format: 'mp4' | 'gif' = 'mp4') => ipcRenderer.invoke('screen-recorder-select-output', format),
     startRecording: (config: ScreenRecorderConfig) => ipcRenderer.invoke('screen-recorder-start', config),
     stopRecording: () => ipcRenderer.invoke('screen-recorder-stop'),
     getStatus: () => ipcRenderer.invoke('screen-recorder-status'),
-    getDefaultPath: () => ipcRenderer.invoke('screen-recorder-get-default-path'),
+    getDefaultPath: (format: 'mp4' | 'gif' = 'mp4') => ipcRenderer.invoke('screen-recorder-get-default-path', format),
     getSession: () => ipcRenderer.invoke('screen-recorder-get-session'),
     getHotkey: () => ipcRenderer.invoke('recorder-hotkey-get'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('recorder-hotkey-set', hotkey),
@@ -162,6 +162,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       return ipcRenderer.invoke('screen-recorder-prepare-selection', bounds)
     },
     expandPanel: () => ipcRenderer.invoke('screen-recorder-expand-panel'),
+    hideSelectionPreview: () => ipcRenderer.invoke('screen-recorder-hide-selection-preview'),
+    moveSelectionBy: (deltaX: number, deltaY: number) => {
+      ipcRenderer.send('screen-recorder-move-selection-by', { deltaX, deltaY })
+    },
     openSelection: () => ipcRenderer.invoke('recorder-selection-open'),
     closeSelection: (bounds: { x: number; y: number; width: number; height: number } | null) => {
       return ipcRenderer.invoke('recorder-selection-close', bounds)
@@ -174,7 +178,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onError: (callback: (data: { message: string }) => void) => onChannel('screen-recorder-error', callback),
     onToggleHotkey: (callback: () => void) => onChannel('screen-recorder-toggle-hotkey', callback),
     onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => onChannel('screen-recorder-session-updated', callback),
-    onIndicatorTimeUpdated: (callback: (time: string) => void) => onChannel('update-time', callback)
+    onIndicatorTimeUpdated: (callback: (time: string) => void) => onChannel('update-time', callback),
+    onSelectionResult: (callback: (bounds: { x: number; y: number; width: number; height: number } | null) => void) => {
+      return onChannel('recorder-selection-result', callback)
+    }
   }
 
   const windowAPI = {

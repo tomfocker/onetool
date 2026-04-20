@@ -140,12 +140,14 @@ declare global {
         getHotkey: () => Promise<IpcResponse<string>>
         getWindows: () => Promise<IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>>
         getScreens: () => Promise<IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>>
-        getDefaultPath: () => Promise<IpcResponse<string>>
+          getDefaultPath: (format?: 'mp4' | 'gif') => Promise<IpcResponse<string>>
         getSession: () => Promise<IpcResponse<RecorderSessionUpdate>>
         onToggleHotkey: (callback: () => void) => () => void
-        selectOutput: () => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
+          selectOutput: (format?: 'mp4' | 'gif') => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
         prepareSelection: (bounds: RecorderBounds) => Promise<IpcResponse<RecorderSelectionPreview>>
         expandPanel: () => Promise<IpcResponse>
+        hideSelectionPreview: () => Promise<IpcResponse>
+        moveSelectionBy: (deltaX: number, deltaY: number) => void
         openSelection: () => Promise<IpcResponse>
         closeSelection: (bounds: RecorderBounds | null) => Promise<IpcResponse>
         startRecording: (config: {
@@ -168,6 +170,7 @@ declare global {
         }) => void) => () => void
         onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => () => void
         onIndicatorTimeUpdated: (callback: (time: string) => void) => () => void
+        onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
       }
       screenSaver: {
         start: () => Promise<IpcResponse>

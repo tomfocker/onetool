@@ -42,14 +42,6 @@ const styles = `
 `
 
 type ToastState = { message: string; type: 'success' | 'error' }
-type SelectionField = 'x' | 'y' | 'width' | 'height'
-
-const selectionFieldLabels: Record<SelectionField, string> = {
-  x: 'X',
-  y: 'Y',
-  width: '宽',
-  height: '高'
-}
 
 export const ScreenRecorderTool: React.FC = () => {
   const [toast, setToast] = useState<ToastState | null>(null)
@@ -82,13 +74,7 @@ export const ScreenRecorderTool: React.FC = () => {
     showRecordingControls,
     canStartRecording,
     isPreparingSelection,
-    selectionDraft,
-    selectionDirty,
-    selectionPreviewDataUrl,
     selectionValidationError,
-    updateSelectionDraftField,
-    commitSelectionDraft,
-    nudgeSelectionField,
     startAreaSelection
   } = useScreenRecorder()
 
@@ -154,20 +140,13 @@ export const ScreenRecorderTool: React.FC = () => {
       return
     }
 
-    const unsubscribeSelection = (window.electron as typeof window.electron & {
-      ipcRenderer?: {
-        on: (channel: string, listener: (_event: unknown, payload: unknown) => void) => () => void
-      }
-    }).ipcRenderer?.on('recorder-selection-result', async (_event: unknown, bounds: any) => {
+    const unsubscribeSelection = window.electron.screenRecorder.onSelectionResult(async (bounds) => {
       if (!bounds || typeof bounds.width !== 'number') {
         return
       }
 
       const result = await setSelectionRect(bounds)
-      if (result.success) {
-        showToast('录制区域已更新', 'success')
-        return
-      }
+      if (result.success) return
 
       showToast(result.error || '更新录制区域失败', 'error')
     })
@@ -198,7 +177,7 @@ export const ScreenRecorderTool: React.FC = () => {
     })
 
     return () => {
-      if (unsubscribeSelection) unsubscribeSelection()
+      unsubscribeSelection()
       unsubscribeStopped()
       if (unsubscribeHotkey) unsubscribeHotkey()
     }
@@ -206,7 +185,7 @@ export const ScreenRecorderTool: React.FC = () => {
 
   const handleSelectOutput = async () => {
     try {
-      const result = await window.electron.screenRecorder.selectOutput()
+      const result = await window.electron.screenRecorder.selectOutput(format)
       if (result.success && result.data && !result.data.canceled && result.data.filePath) {
         setOutputPath(result.data.filePath)
       }
@@ -233,32 +212,6 @@ export const ScreenRecorderTool: React.FC = () => {
       showToast(`设置出错: ${(error as Error).message}`, 'error')
     } finally {
       setIsSavingHotkey(false)
-    }
-  }
-
-  const handleSelectionFieldCommit = async () => {
-    if (!selectionDirty || selectionValidationError) {
-      return
-    }
-
-    const result = await commitSelectionDraft()
-    if (!result.success) {
-      showToast(result.error || '更新录制区域失败', 'error')
-    }
-  }
-
-  const handleSelectionFieldChange = (field: SelectionField, rawValue: string) => {
-    if (rawValue.trim() === '') {
-      return
-    }
-
-    updateSelectionDraftField(field, Number(rawValue))
-  }
-
-  const handleSelectionNudge = async (field: SelectionField, delta: number) => {
-    const result = await nudgeSelectionField(field, delta)
-    if (!result.success) {
-      showToast(result.error || '微调录制区域失败', 'error')
     }
   }
 
@@ -311,7 +264,7 @@ export const ScreenRecorderTool: React.FC = () => {
       ? `区域 ${selectionRect.width} × ${selectionRect.height}`
       : '尚未框选区域'
   const areaReadinessCopy = selectionRect
-    ? selectionValidationError || '区域预览已同步，可直接开始。'
+    ? selectionValidationError || '虚线框已在屏幕上显示，可直接开始。'
     : '请先框选录制区域。'
 
   return (
@@ -393,7 +346,7 @@ export const ScreenRecorderTool: React.FC = () => {
                   <div>
                     <p className="text-sm font-medium">面板驱动区域录制</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      先点击“框选区域”，再在下方确认预览和坐标。
+                      先点击“框选区域”，之后可直接拖动屏幕上的虚线框挪动位置。
                     </p>
                   </div>
                   <button
@@ -409,7 +362,7 @@ export const ScreenRecorderTool: React.FC = () => {
                     最小尺寸 {RECORDER_MIN_SELECTION_SIZE} × {RECORDER_MIN_SELECTION_SIZE}
                   </span>
                   <span className="px-2 py-1 rounded-full bg-white/8 border border-white/10">
-                    {sessionStatus === 'selecting-area' ? '等待框选中' : isPreparingSelection ? '正在刷新预览' : '支持 1px 微调'}
+                    {sessionStatus === 'selecting-area' ? '等待框选中' : isPreparingSelection ? '正在同步虚线框' : '支持 1px 微调'}
                   </span>
                 </div>
               </div>
@@ -506,9 +459,9 @@ export const ScreenRecorderTool: React.FC = () => {
                   <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4 animate-fade-in">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <p className="text-sm font-semibold">区域预览</p>
+                        <p className="text-sm font-semibold">区域确认</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                          调整坐标后会重新生成预览，录制始终保持在当前屏幕内。
+                          虚线框会保留在屏幕实际位置，坐标调整后会实时同步。
                         </p>
                       </div>
                       <button
@@ -520,84 +473,21 @@ export const ScreenRecorderTool: React.FC = () => {
                       </button>
                     </div>
 
-                    <div className="grid grid-cols-1 lg:grid-cols-[1.15fr_0.85fr] gap-4">
-                      <div className="rounded-xl border border-white/10 bg-black/25 overflow-hidden min-h-[220px] flex items-center justify-center">
-                        {selectionPreviewDataUrl ? (
-                          <div className="relative w-full">
-                            <img
-                              src={selectionPreviewDataUrl}
-                              alt="录制区域预览"
-                              className="w-full max-h-[280px] object-cover"
-                            />
-                            {selectionRect && (
-                              <div className="absolute right-3 bottom-3 px-3 py-1.5 rounded-full bg-black/75 text-white text-xs font-medium">
-                                {selectionRect.x}, {selectionRect.y} · {selectionRect.width} × {selectionRect.height}
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          <div className="px-6 text-center space-y-2">
-                            <p className="text-sm font-medium">
-                              {sessionStatus === 'selecting-area' ? '等待框选区域…' : '先点击“框选区域”生成预览'}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              预览会显示最新的区域截图，方便确认边界是否正确。
-                            </p>
-                          </div>
-                        )}
+                    <div className="space-y-3">
+                      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-muted-foreground">
+                        {sessionStatus === 'selecting-area'
+                          ? '正在等待新的框选结果。'
+                          : selectionRect
+                            ? `当前区域 ${selectionRect.x}, ${selectionRect.y} · ${selectionRect.width} × ${selectionRect.height}。可直接拖动屏幕上的虚线框调整位置。`
+                            : '还没有选定区域。'}
                       </div>
-
-                      <div className="space-y-3">
-                        {(['x', 'y', 'width', 'height'] as SelectionField[]).map((field) => (
-                          <div key={field} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                            <div className="flex items-center justify-between mb-2">
-                              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                                {selectionFieldLabels[field]}
-                              </label>
-                              <span className="text-[11px] text-muted-foreground">单位 px</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => void handleSelectionNudge(field, -1)}
-                                disabled={controlsLocked || isPreparingSelection || !selectionDraft}
-                                className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                              >
-                                -1
-                              </button>
-                              <input
-                                type="number"
-                                value={selectionDraft ? selectionDraft[field] : ''}
-                                onChange={(event) => handleSelectionFieldChange(field, event.target.value)}
-                                onBlur={() => void handleSelectionFieldCommit()}
-                                onKeyDown={(event) => {
-                                  if (event.key === 'Enter') {
-                                    void handleSelectionFieldCommit()
-                                  }
-                                }}
-                                disabled={controlsLocked || !selectionDraft}
-                                className="flex-1 bg-transparent border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-60"
-                              />
-                              <button
-                                onClick={() => void handleSelectionNudge(field, 1)}
-                                disabled={controlsLocked || isPreparingSelection || !selectionDraft}
-                                className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                              >
-                                +1
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-
-                        <div className={`rounded-xl border px-3 py-3 text-sm ${selectionValidationError
-                          ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                          : 'border-white/10 bg-white/5 text-muted-foreground'
-                        }`}>
-                          {selectionValidationError
-                            ? selectionValidationError
-                            : selectionDirty
-                              ? '已修改坐标，失焦或按 Enter 后会刷新预览。'
-                              : `当前选区已满足最小尺寸 ${RECORDER_MIN_SELECTION_SIZE}px。`}
-                        </div>
+                      <div className={`rounded-xl border px-3 py-3 text-sm ${selectionValidationError
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
+                        : 'border-white/10 bg-white/5 text-muted-foreground'
+                      }`}>
+                        {selectionValidationError
+                          ? selectionValidationError
+                          : `当前选区已满足最小尺寸 ${RECORDER_MIN_SELECTION_SIZE}px。`}
                       </div>
                     </div>
                   </div>
@@ -634,15 +524,9 @@ export const ScreenRecorderTool: React.FC = () => {
                       <p className="text-sm font-semibold">开始录制</p>
                       <p className="text-xs text-muted-foreground mt-1">在开始前确认当前录制目标和输出设置。</p>
                     </div>
-
-                    <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                      <p className="text-sm font-semibold mb-2">开始前检查</p>
-                      <ul className="text-xs text-muted-foreground space-y-2">
-                        <li>目标: {currentTargetLabel}</li>
-                        <li>格式: {format.toUpperCase()} · {fps} FPS · {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}</li>
-                        <li>{recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}</li>
-                      </ul>
-                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}
+                    </p>
 
                     <button
                       onClick={handleToggleRecording}

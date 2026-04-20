@@ -8,8 +8,8 @@ import {
 } from '../../shared/ipc-schemas'
 
 export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | null) {
-  ipcMain.handle('screen-recorder-select-output', async () => {
-    return screenRecorderService.selectOutput(getMainWindow())
+  ipcMain.handle('screen-recorder-select-output', async (_event, format) => {
+    return screenRecorderService.selectOutput(getMainWindow(), format === 'gif' ? 'gif' : 'mp4')
   })
 
   ipcMain.handle('screen-recorder-get-screens', async () => {
@@ -19,7 +19,10 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
   ipcMain.handle('screen-recorder-start', async (_event, config) => {
     try {
       const validConfig = ScreenRecorderConfigSchema.parse(config)
-      return screenRecorderService.start(validConfig)
+      return screenRecorderService.start({
+        ...validConfig,
+        format: validConfig.format === 'gif' ? 'gif' : 'mp4'
+      })
     } catch (e: any) {
       return { success: false, error: 'Invalid configuration for screen recorder: ' + e.message }
     }
@@ -33,8 +36,8 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
     return screenRecorderService.getStatus()
   })
 
-  ipcMain.handle('screen-recorder-get-default-path', async () => {
-    return screenRecorderService.getDefaultPath()
+  ipcMain.handle('screen-recorder-get-default-path', async (_event, format) => {
+    return screenRecorderService.getDefaultPath(format === 'gif' ? 'gif' : 'mp4')
   })
 
   ipcMain.handle('screen-recorder-get-session', async () => {
@@ -54,12 +57,24 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
     return screenRecorderService.expandPanel()
   })
 
+  ipcMain.handle('screen-recorder-hide-selection-preview', async () => {
+    screenRecorderService.hideSelectionPreview()
+    return { success: true }
+  })
+
+  ipcMain.on('screen-recorder-move-selection-by', (_event, payload) => {
+    const deltaX = Number(payload?.deltaX) || 0
+    const deltaY = Number(payload?.deltaY) || 0
+    screenRecorderService.movePreparedSelectionBy(deltaX, deltaY)
+  })
+
   ipcMain.handle('recorder-selection-open', async () => {
     const startedSelection = screenRecorderService.beginSelection()
     if (!startedSelection) {
       return { success: false, error: '录制进行中，无法重新选择区域' }
     }
-    screenshotService.openSelectionWindow(undefined, 'recorder-selection-result')
+    const existingBounds = screenRecorderService.getPreparedSelectionBounds() ?? undefined
+    screenshotService.openSelectionWindow(existingBounds, 'recorder-selection-result', false, existingBounds)
     return { success: true }
   })
 

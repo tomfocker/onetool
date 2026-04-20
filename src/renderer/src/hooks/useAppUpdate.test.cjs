@@ -145,16 +145,10 @@ test('createAppUpdateErrorState turns a failed initial bridge fetch into a visib
   )
 })
 
-test('deriveAppUpdatePromptState maps error updates to a visible retry prompt', () => {
-  assert.deepEqual(
-    toPlainObject(deriveAppUpdatePromptState(createAppUpdateErrorState('updates bridge unavailable'))),
-    {
-      kind: 'error',
-      title: '更新失败',
-      message: 'updates bridge unavailable',
-      progressPercent: null,
-      primaryActionLabel: '重新检查更新'
-    }
+test('deriveAppUpdatePromptState suppresses global prompts for sticky error updates', () => {
+  assert.equal(
+    deriveAppUpdatePromptState(createAppUpdateErrorState('updates bridge unavailable')),
+    null
   )
 })
 

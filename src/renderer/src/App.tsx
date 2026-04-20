@@ -11,6 +11,7 @@ import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
 import { NotificationContainer } from '@/components/NotificationContainer'
+import { createToolRouteModuleMap } from './appRouting'
 
 // 自动收集 components 和 tools 目录下的所有常规页面和工具组件
 // 使用 eager: false 保持代码分割懒加载策略
@@ -20,9 +21,7 @@ const componentModules = import.meta.glob([
   './components/WebActivator.tsx'
 ])
 const toolModules = import.meta.glob([
-  './tools/*.tsx',
-  '!./tools/ScreenRecorderTool.tsx',
-  '!./tools/SuperScreenshotTool.tsx'
+  './tools/*.tsx'
 ])
 
 function AppContent(): React.JSX.Element {
@@ -40,30 +39,12 @@ function AppContent(): React.JSX.Element {
 
   // 通过 import.meta.glob 自动挂载工具路由，不再使用硬编码和危险的模板字符串导入
   const ToolComponentsMap = useMemo(() => {
+    const routeModules = createToolRouteModuleMap(tools, componentModules, toolModules)
     const map: Record<string, React.LazyExoticComponent<any>> = {}
 
-    tools.forEach(tool => {
-      // 提取文件名，处理遗留的带有路径前缀的情况
-      const componentName = tool.componentPath.split('/').pop()
-      const isComponentDir = tool.componentPath.includes('../components/')
-
-      const modulePath = isComponentDir
-        ? `./components/${componentName}.tsx`
-        : `./tools/${componentName}.tsx`
-
-      const loader = isComponentDir ? componentModules[modulePath] : toolModules[modulePath]
-
-      if (loader) {
-        map[tool.id] = React.lazy(loader as any)
-      } else {
-        console.warn(`[Router] Could not find component file for tool: ${tool.id} at path ${modulePath}`)
-      }
+    Object.entries(routeModules).forEach(([routeId, loader]) => {
+      map[routeId] = React.lazy(loader as any)
     })
-
-    // 单独注册不是工具卡片的特定页面
-    if (componentModules['./components/SettingsPage.tsx']) {
-      map['settings'] = React.lazy(componentModules['./components/SettingsPage.tsx'] as any)
-    }
 
     return map
   }, [])

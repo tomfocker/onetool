@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 
 const {
   beginRecorderSelectionSession,
+  canStartPreparedRecorderSelection,
   cancelRecorderSelectionSession,
   clampRecorderBounds,
   getRecorderSelectionValidationError,
@@ -201,6 +202,48 @@ test('resolveRecorderStartSession refuses to start area recording while reselect
       }
     ),
     null
+  )
+})
+
+test('canStartPreparedRecorderSelection does not require an in-app preview image', () => {
+  assert.equal(
+    canStartPreparedRecorderSelection(
+      toRecorderSessionUpdate({
+        status: 'ready-to-record',
+        mode: 'area',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:00',
+        selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+        selectionPreviewDataUrl: null,
+        selectedDisplayId: 'display-1'
+      })
+    ),
+    true
+  )
+})
+
+test('beginRecorderSelectionSession preserves an existing prepared area even without an in-app preview image', () => {
+  assert.deepEqual(
+    beginRecorderSelectionSession(
+      toRecorderSessionUpdate({
+        status: 'ready-to-record',
+        mode: 'area',
+        outputPath: 'C:/tmp/capture.mp4',
+        recordingTime: '00:00:00',
+        selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+        selectionPreviewDataUrl: null,
+        selectedDisplayId: 'display-1'
+      })
+    ),
+    {
+      status: 'selecting-area',
+      mode: 'area',
+      outputPath: 'C:/tmp/capture.mp4',
+      recordingTime: '00:00:00',
+      selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+      selectionPreviewDataUrl: null,
+      selectedDisplayId: 'display-1'
+    }
   )
 })
 
