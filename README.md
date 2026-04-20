@@ -28,6 +28,7 @@
 ### 系统工具
 - ⚡ **极速装机** - 一键安装常用软件，支持 winget 静默批量安装
 - 🔍 **配置检测** - 检测电脑硬件配置信息，一键生成配置报告
+- 💽 **空间清理** - 扫描目录或磁盘占用，支持图形视图和 Windows NTFS 极速扫描
 
 ### 文件处理
 - 📝 **批量重命名** - 批量重命名文件，支持序号、替换、前后缀等模式
@@ -89,6 +90,12 @@ npm run release:win
 - `Release` 工作流：手动触发 Windows 发布打包，或在推送 `v*` 标签时创建草稿 Release
 
 Windows 发布链路说明见 [docs/distribution/windows-release.md](docs/distribution/windows-release.md)。
+
+### 空间清理 NTFS 极速扫描
+
+- 仅支持 `Windows` 本地 `NTFS` 根盘，例如 `C:\`、`D:\`
+- 普通目录、网络盘、`exFAT`/`FAT32`/`ReFS` 等文件系统不会启用极速模式
+- 不满足条件或原生扫描失败时，会自动回退到普通扫描并显示原因
 
 ## 📂 项目结构
 

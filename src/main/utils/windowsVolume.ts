@@ -31,8 +31,14 @@ function execFileAsync(execFile: ExecFileFn, file: string, args: readonly string
       done(error, stdout)
     })
 
-    if (result && typeof (result as Promise<unknown>).then === 'function') {
-      (result as Promise<{ stdout?: unknown }>).then((value) => {
+    const maybePromise = result as unknown
+    if (
+      maybePromise &&
+      typeof maybePromise === 'object' &&
+      'then' in maybePromise &&
+      typeof (maybePromise as Promise<{ stdout?: unknown }>).then === 'function'
+    ) {
+      ;(maybePromise as Promise<{ stdout?: unknown }>).then((value) => {
         done(null, value?.stdout)
       }, (error) => {
         done(error)

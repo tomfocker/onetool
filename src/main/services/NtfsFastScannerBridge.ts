@@ -1,4 +1,5 @@
-import { spawn as defaultSpawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn as defaultSpawn, type ChildProcessByStdio } from 'node:child_process'
+import type { Readable } from 'node:stream'
 
 export type NtfsFastScannerBridgeEvent = {
   type: string
@@ -25,9 +26,11 @@ export class NtfsFastScannerBridge {
   }
 
   start(rootPath: string, onEvent: (event: NtfsFastScannerBridgeEvent) => void): NtfsFastScannerRunHandle {
+    type ScannerChildProcess = ChildProcessByStdio<null, Readable, Readable>
+
     const child = this.spawn(this.scannerPath, ['scan', '--root', rootPath], {
       stdio: ['ignore', 'pipe', 'pipe']
-    }) as ChildProcessWithoutNullStreams
+    }) as unknown as ScannerChildProcess
 
     let stderr = ''
     let stdoutBuffer = ''
