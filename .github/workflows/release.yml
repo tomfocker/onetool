@@ -30,6 +30,12 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc
+
       - name: Cache Electron builder downloads
         uses: actions/cache@v4
         with:

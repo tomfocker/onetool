@@ -118,6 +118,14 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
   return module.exports
 }
 
+test('package build config includes ntfs fast scanner resource', () => {
+  const pkg = require(path.join(__dirname, '../../../package.json'))
+  const entry = pkg.build.extraResources.find((item) => item.from === 'resources/space-scan/ntfs-fast-scan.exe')
+
+  assert.ok(entry)
+  assert.equal(entry.to, 'space-scan/ntfs-fast-scan.exe')
+})
+
 test('idle space cleanup session includes scan mode metadata', () => {
   const { createIdleSpaceCleanupSession } = require('../../shared/spaceCleanup.ts')
   const session = createIdleSpaceCleanupSession()

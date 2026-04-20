@@ -14,3 +14,5 @@ release
 *.swp
 *.swo
 *~
+native/ntfs-fast-scan/target/
+resources/space-scan/ntfs-fast-scan.exe
