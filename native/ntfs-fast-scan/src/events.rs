@@ -4,30 +4,34 @@ use crate::aggregate;
 use crate::ntfs::ScanSnapshot;
 
 #[derive(Clone, Debug)]
-pub struct DirectorySummary {
+pub struct LargestFile {
     pub path: String,
+    pub name: String,
     pub size_bytes: u64,
-}
-
-#[derive(Clone, Debug)]
-pub struct FileSummary {
-    pub path: String,
-    pub size_bytes: u64,
+    pub extension: Option<String>,
 }
 
 #[derive(Clone, Debug)]
 pub struct ScanSummary {
     pub total_bytes: u64,
-    pub files_scanned: u64,
-    pub directories_scanned: u64,
+    pub scanned_files: u64,
+    pub scanned_directories: u64,
+    pub skipped_entries: u64,
+    pub largest_file: Option<LargestFile>,
 }
 
 #[derive(Clone, Debug)]
 pub struct TreeNode {
-    pub path: String,
+    pub id: String,
     pub name: String,
+    pub path: String,
     pub node_type: String,
     pub size_bytes: u64,
+    pub children_count: u64,
+    pub file_count: u64,
+    pub directory_count: u64,
+    pub skipped_children: u64,
+    pub extension: Option<String>,
     pub children: Vec<TreeNode>,
 }
 
@@ -39,14 +43,14 @@ pub enum ScanEvent {
         filesystem: String,
     },
     TopLevelSummary {
-        directories: Vec<DirectorySummary>,
-        files_scanned: u64,
+        summary: ScanSummary,
     },
     LargestFiles {
-        items: Vec<FileSummary>,
+        largest_files: Vec<LargestFile>,
     },
     Complete {
         summary: ScanSummary,
+        largest_files: Vec<LargestFile>,
         tree: TreeNode,
     },
 }
@@ -73,44 +77,41 @@ impl ScanEvent {
                 ("rootPath", json_string(root_path)),
                 ("filesystem", json_string(filesystem)),
             ]),
-            ScanEvent::TopLevelSummary {
-                directories,
-                files_scanned,
-            } => json_object([
-                ("type", json_string(self.event_type())),
-                (
-                    "directories",
-                    json_array(directories.iter().map(DirectorySummary::to_json)),
-                ),
-                ("filesScanned", files_scanned.to_string()),
-            ]),
-            ScanEvent::LargestFiles { items } => json_object([
-                ("type", json_string(self.event_type())),
-                ("items", json_array(items.iter().map(FileSummary::to_json))),
-            ]),
-            ScanEvent::Complete { summary, tree } => json_object([
+            ScanEvent::TopLevelSummary { summary } => json_object([
                 ("type", json_string(self.event_type())),
                 ("summary", summary.to_json()),
+            ]),
+            ScanEvent::LargestFiles { largest_files } => json_object([
+                ("type", json_string(self.event_type())),
+                (
+                    "largestFiles",
+                    json_array(largest_files.iter().map(LargestFile::to_json)),
+                ),
+            ]),
+            ScanEvent::Complete {
+                summary,
+                largest_files,
+                tree,
+            } => json_object([
+                ("type", json_string(self.event_type())),
+                ("summary", summary.to_json()),
+                (
+                    "largestFiles",
+                    json_array(largest_files.iter().map(LargestFile::to_json)),
+                ),
                 ("tree", tree.to_json()),
             ]),
         }
     }
 }
 
-impl DirectorySummary {
+impl LargestFile {
     fn to_json(&self) -> String {
         json_object([
             ("path", json_string(&self.path)),
+            ("name", json_string(&self.name)),
             ("sizeBytes", self.size_bytes.to_string()),
-        ])
-    }
-}
-
-impl FileSummary {
-    fn to_json(&self) -> String {
-        json_object([
-            ("path", json_string(&self.path)),
-            ("sizeBytes", self.size_bytes.to_string()),
+            ("extension", json_nullable_string(self.extension.as_deref())),
         ])
     }
 }
@@ -119,28 +120,51 @@ impl ScanSummary {
     fn to_json(&self) -> String {
         json_object([
             ("totalBytes", self.total_bytes.to_string()),
-            ("filesScanned", self.files_scanned.to_string()),
-            ("directoriesScanned", self.directories_scanned.to_string()),
+            ("scannedFiles", self.scanned_files.to_string()),
+            ("scannedDirectories", self.scanned_directories.to_string()),
+            ("skippedEntries", self.skipped_entries.to_string()),
+            (
+                "largestFile",
+                self.largest_file
+                    .as_ref()
+                    .map(LargestFile::to_json)
+                    .unwrap_or_else(|| "null".to_owned()),
+            ),
         ])
     }
 }
 
 impl TreeNode {
     fn to_json(&self) -> String {
-        json_object([
-            ("path", json_string(&self.path)),
+        let mut fields = vec![
+            ("id", json_string(&self.id)),
             ("name", json_string(&self.name)),
+            ("path", json_string(&self.path)),
             ("type", json_string(&self.node_type)),
             ("sizeBytes", self.size_bytes.to_string()),
-            (
-                "children",
-                json_array(self.children.iter().map(TreeNode::to_json)),
-            ),
-        ])
+            ("childrenCount", self.children_count.to_string()),
+            ("fileCount", self.file_count.to_string()),
+            ("directoryCount", self.directory_count.to_string()),
+            ("skippedChildren", self.skipped_children.to_string()),
+        ];
+
+        if self.node_type == "file" || self.extension.is_some() {
+            fields.push(("extension", json_nullable_string(self.extension.as_deref())));
+        }
+
+        if self.node_type == "directory" {
+            fields.push(("children", json_array(self.children.iter().map(TreeNode::to_json))));
+        }
+
+        json_object_dynamic(fields)
     }
 }
 
 pub fn build_scan_events(snapshot: &ScanSnapshot) -> Vec<ScanEvent> {
+    let largest_files = aggregate::largest_files(snapshot, 50);
+    let summary = aggregate::summary(snapshot, &largest_files);
+    let tree = aggregate::tree(snapshot);
+
     vec![
         ScanEvent::VolumeInfo {
             mode: "ntfs-fast".to_owned(),
@@ -148,15 +172,15 @@ pub fn build_scan_events(snapshot: &ScanSnapshot) -> Vec<ScanEvent> {
             filesystem: snapshot.filesystem.clone(),
         },
         ScanEvent::TopLevelSummary {
-            directories: aggregate::top_level_directories(snapshot),
-            files_scanned: snapshot.files_scanned,
+            summary: summary.clone(),
         },
         ScanEvent::LargestFiles {
-            items: aggregate::largest_files(snapshot, 50),
+            largest_files: largest_files.clone(),
         },
         ScanEvent::Complete {
-            summary: aggregate::summary(snapshot),
-            tree: aggregate::tree(snapshot),
+            summary,
+            largest_files,
+            tree,
         },
     ]
 }
@@ -167,6 +191,10 @@ pub fn emit_event<W: Write>(writer: &mut W, event: &ScanEvent) -> io::Result<()>
 }
 
 fn json_object<const N: usize>(fields: [(&str, String); N]) -> String {
+    json_object_dynamic(fields.into_iter().collect())
+}
+
+fn json_object_dynamic(fields: Vec<(&str, String)>) -> String {
     let mut output = String::from("{");
 
     for (index, (key, value)) in fields.into_iter().enumerate() {
@@ -200,6 +228,12 @@ where
 
     output.push(']');
     output
+}
+
+fn json_nullable_string(value: Option<&str>) -> String {
+    value
+        .map(json_string)
+        .unwrap_or_else(|| "null".to_owned())
 }
 
 fn json_string(value: &str) -> String {
@@ -284,17 +318,30 @@ mod tests {
     }
 
     #[test]
-    fn serializes_summary_payloads_as_json_lines() {
+    fn serializes_session_compatible_payloads_as_json_lines() {
         let events = build_scan_events(&sample_snapshot());
         let top_level = events[1].to_json_line();
         let largest_files = events[2].to_json_line();
         let complete = events[3].to_json_line();
 
-        assert!(top_level.contains("\"directories\":["));
-        assert!(top_level.contains("\"filesScanned\":2"));
-        assert!(largest_files.contains("\"items\":["));
+        assert!(top_level.contains("\"summary\":{"));
+        assert!(top_level.contains("\"scannedFiles\":2"));
+        assert!(top_level.contains("\"scannedDirectories\":2"));
+        assert!(top_level.contains("\"skippedEntries\":0"));
+        assert!(top_level.contains("\"largestFile\":{"));
+
+        assert!(largest_files.contains("\"largestFiles\":["));
         assert!(largest_files.contains(&json_string(r"C:\Games\game.bin")));
+        assert!(largest_files.contains("\"name\":\"game.bin\""));
+        assert!(largest_files.contains("\"extension\":\".bin\""));
+
         assert!(complete.contains("\"totalBytes\":40"));
+        assert!(complete.contains("\"largestFiles\":["));
+        assert!(complete.contains("\"id\":\"C:\\\\\""));
         assert!(complete.contains("\"type\":\"directory\""));
+        assert!(complete.contains("\"childrenCount\":2"));
+        assert!(complete.contains("\"fileCount\":2"));
+        assert!(complete.contains("\"directoryCount\":1"));
+        assert!(complete.contains("\"skippedChildren\":0"));
     }
 }

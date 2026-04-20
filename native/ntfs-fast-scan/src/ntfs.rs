@@ -16,16 +16,16 @@ use std::ptr::{null, null_mut};
 #[cfg(windows)]
 use self::win32::{
     CloseHandle, CreateFileW, DeviceIoControl, FileIdInfo, FileIdType, FileStandardInfo,
-    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx,
-    GetVolumeInformationW, OpenFileById, BY_HANDLE_FILE_INFORMATION, DRIVE_FIXED, DRIVE_RAMDISK,
-    DRIVE_REMOVABLE, ERROR_HANDLE_EOF, ERROR_NO_MORE_FILES, FILE_ATTRIBUTE_DIRECTORY,
-    FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_DESCRIPTOR, FILE_ID_INFO,
-    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_STANDARD_INFO,
-    FILE_SUPPORTS_USN_JOURNAL, FSCTL_ENUM_USN_DATA, HANDLE, INVALID_HANDLE_VALUE,
-    MFT_ENUM_DATA_V0, OPEN_EXISTING, USN_RECORD_V2, USN_RECORD_V3, ExtendedFileIdType,
+    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
+    OpenFileById, BY_HANDLE_FILE_INFORMATION, DRIVE_FIXED, ERROR_HANDLE_EOF,
+    ERROR_NO_MORE_FILES, FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128,
+    FILE_ID_DESCRIPTOR, FILE_ID_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_STANDARD_INFO, FILE_SUPPORTS_USN_JOURNAL, FSCTL_ENUM_USN_DATA, HANDLE,
+    INVALID_HANDLE_VALUE, MFT_ENUM_DATA_V0, OPEN_EXISTING, USN_RECORD_V2, USN_RECORD_V3,
+    ExtendedFileIdType,
 };
 
-const ROOT_PATH_ERROR: &str = "root path must be a local NTFS volume root like C:\\";
+const ROOT_PATH_ERROR: &str = "root path must be a fixed local NTFS volume root like C:\\";
 #[cfg(windows)]
 const FILE_SHARES: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 #[cfg(windows)]
@@ -315,6 +315,10 @@ impl EnumeratedEntry {
 }
 
 pub fn scan_volume(root: &Path) -> io::Result<ScanSnapshot> {
+    if let Some(snapshot) = test_snapshot_override(root) {
+        return Ok(snapshot);
+    }
+
     #[cfg(windows)]
     {
         return scan_volume_windows(root);
@@ -328,6 +332,60 @@ pub fn scan_volume(root: &Path) -> io::Result<ScanSnapshot> {
             "ntfs-fast-scan requires Windows NTFS volume access",
         ))
     }
+}
+
+fn test_snapshot_override(root: &Path) -> Option<ScanSnapshot> {
+    match std::env::var("NTFS_FAST_SCAN_TEST_SNAPSHOT") {
+        Ok(mode) if mode == "sample" => Some(sample_snapshot(root)),
+        _ => None,
+    }
+}
+
+fn sample_snapshot(root: &Path) -> ScanSnapshot {
+    let root_path = path_string(root);
+    let games_path = joined_path_string(root, "Games");
+    let game_path = joined_path_string(Path::new(&games_path), "game.bin");
+    let notes_path = joined_path_string(root, "notes.txt");
+
+    ScanSnapshot {
+        root_path: root_path.clone(),
+        filesystem: "NTFS".to_owned(),
+        root: ScanEntry {
+            path: root_path.clone(),
+            name: root_path,
+            kind: EntryKind::Directory,
+            size_bytes: 40,
+            children: vec![
+                ScanEntry {
+                    path: games_path,
+                    name: "Games".to_owned(),
+                    kind: EntryKind::Directory,
+                    size_bytes: 32,
+                    children: vec![ScanEntry {
+                        path: game_path,
+                        name: "game.bin".to_owned(),
+                        kind: EntryKind::File,
+                        size_bytes: 32,
+                        children: Vec::new(),
+                    }],
+                },
+                ScanEntry {
+                    path: notes_path,
+                    name: "notes.txt".to_owned(),
+                    kind: EntryKind::File,
+                    size_bytes: 8,
+                    children: Vec::new(),
+                },
+            ],
+        },
+        files_scanned: 2,
+    }
+}
+
+fn joined_path_string(base: &Path, child: &str) -> String {
+    let mut path = PathBuf::from(base);
+    path.push(child);
+    path_string(&path)
 }
 
 fn build_snapshot_from_entries(
@@ -650,7 +708,7 @@ fn invalid_root_path(root: &Path) -> io::Error {
 fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
     let root_wide = wide_string(&root.root_path);
     let drive_type = unsafe { GetDriveTypeW(root_wide.as_ptr()) };
-    if !matches!(drive_type, DRIVE_FIXED | DRIVE_REMOVABLE | DRIVE_RAMDISK) {
+    if !supports_fast_ntfs_drive_type(drive_type) {
         return Err(invalid_root_path(Path::new(&root.root_path)));
     }
 
@@ -702,6 +760,11 @@ fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
     }
 
     Ok(filesystem)
+}
+
+#[cfg(windows)]
+fn supports_fast_ntfs_drive_type(drive_type: u32) -> bool {
+    drive_type == DRIVE_FIXED
 }
 
 #[cfg(windows)]
@@ -1032,6 +1095,14 @@ mod tests {
         assert!(validate_root_path(Path::new(r"C:\Windows")).is_err());
         assert!(validate_root_path(Path::new(r"\\server\share\")).is_err());
         assert!(validate_root_path(Path::new("relative")).is_err());
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn ntfs_fast_mode_only_accepts_fixed_drive_types() {
+        assert!(supports_fast_ntfs_drive_type(DRIVE_FIXED));
+        assert!(!supports_fast_ntfs_drive_type(super::win32::DRIVE_REMOVABLE));
+        assert!(!supports_fast_ntfs_drive_type(super::win32::DRIVE_RAMDISK));
     }
 
     #[test]
