@@ -3,9 +3,9 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 #[cfg(windows)]
-use std::ffi::c_void;
-#[cfg(windows)]
 use std::ffi::OsStr;
+#[cfg(windows)]
+use std::ffi::c_void;
 #[cfg(windows)]
 use std::mem::{size_of, zeroed};
 #[cfg(windows)]
@@ -15,14 +15,13 @@ use std::ptr::{null, null_mut};
 
 #[cfg(windows)]
 use self::win32::{
-    CloseHandle, CreateFileW, DeviceIoControl, FileIdInfo, GetDriveTypeW,
-    GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
-    BY_HANDLE_FILE_INFORMATION, DRIVE_FIXED, ERROR_HANDLE_EOF, ERROR_NO_MORE_FILES,
-    FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO,
-    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_SUPPORTS_USN_JOURNAL,
-    FSCTL_ENUM_USN_DATA, FSCTL_GET_NTFS_FILE_RECORD, HANDLE, INVALID_HANDLE_VALUE,
-    MFT_ENUM_DATA_V0, NTFS_FILE_RECORD_INPUT_BUFFER, OPEN_EXISTING, USN_RECORD_V2,
-    USN_RECORD_V3,
+    BY_HANDLE_FILE_INFORMATION, CloseHandle, CreateFileW, DRIVE_FIXED, DeviceIoControl,
+    ERROR_HANDLE_EOF, ERROR_NO_MORE_FILES, FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS,
+    FILE_ID_128, FILE_ID_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+    FILE_SUPPORTS_USN_JOURNAL, FSCTL_ENUM_USN_DATA, FSCTL_GET_NTFS_FILE_RECORD, FileIdInfo,
+    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
+    HANDLE, INVALID_HANDLE_VALUE, MFT_ENUM_DATA_V0, NTFS_FILE_RECORD_INPUT_BUFFER, OPEN_EXISTING,
+    USN_RECORD_V2, USN_RECORD_V3,
 };
 
 const ROOT_PATH_ERROR: &str = "root path must be a fixed local NTFS volume root like C:\\";
@@ -30,9 +29,16 @@ const ROOT_PATH_ERROR: &str = "root path must be a fixed local NTFS volume root 
 const FILE_SHARES: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 #[cfg(windows)]
 const GENERIC_READ_ACCESS: u32 = 0x8000_0000;
+#[cfg(windows)]
+const FILE_RECORD_BUFFER_SIZE: usize = 64 * 1024;
 
 #[cfg(windows)]
-#[allow(non_camel_case_types, non_snake_case, non_upper_case_globals, dead_code)]
+#[allow(
+    non_camel_case_types,
+    non_snake_case,
+    non_upper_case_globals,
+    dead_code
+)]
 mod win32 {
     use super::c_void;
 
@@ -418,7 +424,9 @@ fn build_entry(
     skipped_entries: &mut u64,
 ) -> io::Result<Option<ScanEntry>> {
     if !visited.insert(node_id) {
-        return Err(io::Error::other("cycle detected while materializing NTFS tree"));
+        return Err(io::Error::other(
+            "cycle detected while materializing NTFS tree",
+        ));
     }
 
     let node = nodes
@@ -559,6 +567,21 @@ struct RawRecord {
 
 #[cfg(windows)]
 #[derive(Debug)]
+struct FileRecordQueryBuffer {
+    output: Vec<u8>,
+}
+
+#[cfg(windows)]
+impl FileRecordQueryBuffer {
+    fn new() -> Self {
+        Self {
+            output: vec![0u8; FILE_RECORD_BUFFER_SIZE],
+        }
+    }
+}
+
+#[cfg(windows)]
+#[derive(Debug)]
 struct OwnedHandle {
     raw: HANDLE,
 }
@@ -593,29 +616,32 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
     let root_identifiers = query_root_identifiers(root_handle.raw)?;
     let volume_handle = open_volume_handle(&validated_root)?;
     let (raw_records, id_format) = enumerate_mft_records(volume_handle.raw)?;
+    let mut file_record_buffer = FileRecordQueryBuffer::new();
 
     let root_reference = match id_format {
         IdFormat::Legacy64 => FileReference::from_u64(root_identifiers.legacy_id),
         IdFormat::Extended128 => root_identifiers.extended_id,
     };
 
-    let entries = raw_records
-        .into_iter()
-        .map(|record| {
-            let size_bytes = match record.kind {
-                EntryKind::File => resolve_file_size(volume_handle.raw, record.file_reference_number),
-                EntryKind::Directory => Some(0),
-            };
+    let mut entries = Vec::with_capacity(raw_records.len());
+    for record in raw_records {
+        let size_bytes = match record.kind {
+            EntryKind::File => resolve_file_size(
+                volume_handle.raw,
+                record.file_reference_number,
+                &mut file_record_buffer,
+            ),
+            EntryKind::Directory => Some(0),
+        };
 
-            EnumeratedEntry::from_parts(
-                record.id,
-                record.parent_id,
-                record.name,
-                record.kind,
-                size_bytes,
-            )
-        })
-        .collect();
+        entries.push(EnumeratedEntry::from_parts(
+            record.id,
+            record.parent_id,
+            record.name,
+            record.kind,
+            size_bytes,
+        ));
+    }
 
     build_snapshot_from_entries(
         Path::new(&validated_root.root_path),
@@ -834,7 +860,9 @@ fn enumerate_mft_records(volume_handle: HANDLE) -> io::Result<(Vec<RawRecord>, I
         if succeeded == 0 {
             let error = io::Error::last_os_error();
             match error.raw_os_error() {
-                Some(code) if code == ERROR_HANDLE_EOF as i32 || code == ERROR_NO_MORE_FILES as i32 => {
+                Some(code)
+                    if code == ERROR_HANDLE_EOF as i32 || code == ERROR_NO_MORE_FILES as i32 =>
+                {
                     break;
                 }
                 _ => {
@@ -891,7 +919,8 @@ fn parse_raw_record(bytes: &[u8]) -> io::Result<(RawRecord, usize, IdFormat)> {
 
     match major_version {
         2 => {
-            let record = unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const USN_RECORD_V2) };
+            let record =
+                unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const USN_RECORD_V2) };
             let name = parse_record_name(
                 &bytes[..record_length],
                 record.FileNameOffset as usize,
@@ -911,7 +940,8 @@ fn parse_raw_record(bytes: &[u8]) -> io::Result<(RawRecord, usize, IdFormat)> {
             ))
         }
         3 => {
-            let record = unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const USN_RECORD_V3) };
+            let record =
+                unsafe { std::ptr::read_unaligned(bytes.as_ptr() as *const USN_RECORD_V3) };
             let name = parse_record_name(
                 &bytes[..record_length],
                 record.FileNameOffset as usize,
@@ -962,16 +992,23 @@ fn entry_kind_from_attributes(attributes: u32) -> EntryKind {
 }
 
 #[cfg(windows)]
-fn resolve_file_size(volume_handle: HANDLE, file_reference_number: u64) -> Option<u64> {
-    query_file_size_from_file_record(volume_handle, file_reference_number).ok()
+fn resolve_file_size(
+    volume_handle: HANDLE,
+    file_reference_number: u64,
+    file_record_buffer: &mut FileRecordQueryBuffer,
+) -> Option<u64> {
+    query_file_size_from_file_record(volume_handle, file_reference_number, file_record_buffer).ok()
 }
 
 #[cfg(windows)]
-fn query_file_size_from_file_record(volume_handle: HANDLE, file_reference_number: u64) -> io::Result<u64> {
+fn query_file_size_from_file_record(
+    volume_handle: HANDLE,
+    file_reference_number: u64,
+    file_record_buffer: &mut FileRecordQueryBuffer,
+) -> io::Result<u64> {
     let mut input = NTFS_FILE_RECORD_INPUT_BUFFER {
         FileReferenceNumber: file_reference_number as i64,
     };
-    let mut output = vec![0u8; 64 * 1024];
     let mut bytes_returned = 0u32;
     let ok = unsafe {
         DeviceIoControl(
@@ -979,8 +1016,8 @@ fn query_file_size_from_file_record(volume_handle: HANDLE, file_reference_number
             FSCTL_GET_NTFS_FILE_RECORD,
             &mut input as *mut _ as *mut _,
             size_of::<NTFS_FILE_RECORD_INPUT_BUFFER>() as u32,
-            output.as_mut_ptr() as *mut _,
-            output.len() as u32,
+            file_record_buffer.output.as_mut_ptr() as *mut _,
+            file_record_buffer.output.len() as u32,
             &mut bytes_returned,
             null_mut(),
         )
@@ -996,19 +1033,35 @@ fn query_file_size_from_file_record(volume_handle: HANDLE, file_reference_number
         ));
     }
 
-    parse_file_record_output(&output[..bytes_returned as usize])
+    parse_file_record_output(
+        file_reference_number,
+        &file_record_buffer.output[..bytes_returned as usize],
+    )
 }
 
 #[cfg(windows)]
-fn parse_file_record_output(bytes: &[u8]) -> io::Result<u64> {
+fn parse_file_record_output(requested_file_reference_number: u64, bytes: &[u8]) -> io::Result<u64> {
     const OUTPUT_HEADER_SIZE: usize = size_of::<i64>() + size_of::<u32>();
     if bytes.len() < OUTPUT_HEADER_SIZE {
         return Err(io::Error::other("truncated NTFS file record output"));
     }
 
-    let file_record_length =
-        u32::from_le_bytes(bytes[size_of::<i64>()..OUTPUT_HEADER_SIZE].try_into().expect("file record length"))
-            as usize;
+    let returned_file_reference_number = i64::from_le_bytes(
+        bytes[..size_of::<i64>()]
+            .try_into()
+            .expect("file reference number"),
+    ) as u64;
+    if returned_file_reference_number != requested_file_reference_number {
+        return Err(io::Error::other(format!(
+            "returned file reference {returned_file_reference_number} did not match requested {requested_file_reference_number}"
+        )));
+    }
+
+    let file_record_length = u32::from_le_bytes(
+        bytes[size_of::<i64>()..OUTPUT_HEADER_SIZE]
+            .try_into()
+            .expect("file record length"),
+    ) as usize;
     if bytes.len() < OUTPUT_HEADER_SIZE + file_record_length {
         return Err(io::Error::other("incomplete NTFS file record payload"));
     }
@@ -1043,15 +1096,20 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
     let mut offset = first_attribute_offset;
 
     while offset + 16 <= record.len() {
-        let attribute_type =
-            u32::from_le_bytes(record[offset..offset + 4].try_into().expect("attribute type"));
+        let attribute_type = u32::from_le_bytes(
+            record[offset..offset + 4]
+                .try_into()
+                .expect("attribute type"),
+        );
         if attribute_type == ATTR_TYPE_END {
             break;
         }
 
-        let record_length =
-            u32::from_le_bytes(record[offset + 4..offset + 8].try_into().expect("attribute length"))
-                as usize;
+        let record_length = u32::from_le_bytes(
+            record[offset + 4..offset + 8]
+                .try_into()
+                .expect("attribute length"),
+        ) as usize;
         if record_length == 0 || offset + record_length > record.len() {
             return Err(io::Error::other("invalid attribute record length"));
         }
@@ -1067,8 +1125,11 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
                 }
             }
             ATTR_TYPE_DATA if name_length == 0 => {
-                if let Some(size) = parse_data_attribute(record, offset, record_length, non_resident)? {
-                    unnamed_data_size = Some(unnamed_data_size.map_or(size, |existing| existing.max(size)));
+                if let Some(size) =
+                    parse_data_attribute(record, offset, record_length, non_resident)?
+                {
+                    unnamed_data_size =
+                        Some(unnamed_data_size.map_or(size, |existing| existing.max(size)));
                 }
             }
             _ => {}
@@ -1077,16 +1138,14 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
         offset += record_length;
     }
 
-    unnamed_data_size
-        .or(file_name_size)
-        .ok_or_else(|| {
-            let detail = if attribute_list_present {
-                "file record size lives outside the base record"
-            } else {
-                "file record did not expose a usable size attribute"
-            };
-            io::Error::other(detail)
-        })
+    unnamed_data_size.or(file_name_size).ok_or_else(|| {
+        let detail = if attribute_list_present {
+            "file record size lives outside the base record"
+        } else {
+            "file record did not expose a usable size attribute"
+        };
+        io::Error::other(detail)
+    })
 }
 
 #[cfg(windows)]
@@ -1114,27 +1173,41 @@ fn parse_data_attribute(
         return Err(io::Error::other("truncated resident data attribute"));
     }
 
-    let value_length =
-        u32::from_le_bytes(record[offset + 16..offset + 20].try_into().expect("resident value length"));
+    let value_length = u32::from_le_bytes(
+        record[offset + 16..offset + 20]
+            .try_into()
+            .expect("resident value length"),
+    );
     Ok(Some(value_length as u64))
 }
 
 #[cfg(windows)]
-fn parse_file_name_attribute(record: &[u8], offset: usize, record_length: usize) -> io::Result<Option<u64>> {
+fn parse_file_name_attribute(
+    record: &[u8],
+    offset: usize,
+    record_length: usize,
+) -> io::Result<Option<u64>> {
     if record_length < 24 {
         return Err(io::Error::other("truncated file-name attribute"));
     }
 
-    let value_length =
-        u32::from_le_bytes(record[offset + 16..offset + 20].try_into().expect("file-name value length"))
-            as usize;
-    let value_offset =
-        u16::from_le_bytes(record[offset + 20..offset + 22].try_into().expect("file-name value offset"))
-            as usize;
+    let value_length = u32::from_le_bytes(
+        record[offset + 16..offset + 20]
+            .try_into()
+            .expect("file-name value length"),
+    ) as usize;
+    let value_offset = u16::from_le_bytes(
+        record[offset + 20..offset + 22]
+            .try_into()
+            .expect("file-name value offset"),
+    ) as usize;
     let value_start = offset + value_offset;
     let real_size_offset = value_start + 48;
 
-    if value_offset >= record_length || value_length < 56 || real_size_offset + 8 > offset + record_length {
+    if value_offset >= record_length
+        || value_length < 56
+        || real_size_offset + 8 > offset + record_length
+    {
         return Ok(None);
     }
 
@@ -1148,12 +1221,18 @@ fn parse_file_name_attribute(record: &[u8], offset: usize, record_length: usize)
 
 #[cfg(windows)]
 fn wide_string(value: &str) -> Vec<u16> {
-    OsStr::new(value).encode_wide().chain(std::iter::once(0)).collect()
+    OsStr::new(value)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 #[cfg(windows)]
 fn wide_buffer_to_string(buffer: &[u16]) -> String {
-    let length = buffer.iter().position(|value| *value == 0).unwrap_or(buffer.len());
+    let length = buffer
+        .iter()
+        .position(|value| *value == 0)
+        .unwrap_or(buffer.len());
     String::from_utf16_lossy(&buffer[..length])
 }
 
@@ -1165,7 +1244,9 @@ mod tests {
     #[test]
     fn validate_root_path_only_accepts_local_volume_roots() {
         assert_eq!(
-            validate_root_path(Path::new(r"C:\")).expect("drive root").root_path,
+            validate_root_path(Path::new(r"C:\"))
+                .expect("drive root")
+                .root_path,
             r"C:\"
         );
         assert_eq!(
@@ -1184,7 +1265,9 @@ mod tests {
     #[test]
     fn ntfs_fast_mode_only_accepts_fixed_drive_types() {
         assert!(supports_fast_ntfs_drive_type(DRIVE_FIXED));
-        assert!(!supports_fast_ntfs_drive_type(super::win32::DRIVE_REMOVABLE));
+        assert!(!supports_fast_ntfs_drive_type(
+            super::win32::DRIVE_REMOVABLE
+        ));
         assert!(!supports_fast_ntfs_drive_type(super::win32::DRIVE_RAMDISK));
     }
 
@@ -1259,14 +1342,74 @@ mod tests {
         record[attribute_offset + 4..attribute_offset + 8]
             .copy_from_slice(&(attribute_length as u32).to_le_bytes());
         record[attribute_offset + 8] = 0;
-        record[attribute_offset + 16..attribute_offset + 20].copy_from_slice(&(64u32).to_le_bytes());
-        record[attribute_offset + 20..attribute_offset + 22].copy_from_slice(&(24u16).to_le_bytes());
+        record[attribute_offset + 16..attribute_offset + 20]
+            .copy_from_slice(&(64u32).to_le_bytes());
+        record[attribute_offset + 20..attribute_offset + 22]
+            .copy_from_slice(&(24u16).to_le_bytes());
 
         let value_start = attribute_offset + 24;
         record[value_start + 48..value_start + 56].copy_from_slice(&(1234i64).to_le_bytes());
         let end_offset = attribute_offset + attribute_length;
         record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
 
-        assert_eq!(parse_file_record_size(&record).expect("file record size"), 1234);
+        assert_eq!(
+            parse_file_record_size(&record).expect("file record size"),
+            1234
+        );
+    }
+
+    #[cfg(windows)]
+    fn build_test_file_record_output(returned_file_reference_number: u64) -> Vec<u8> {
+        let mut record = vec![0u8; 160];
+        record[..4].copy_from_slice(b"FILE");
+        record[20..22].copy_from_slice(&(48u16).to_le_bytes());
+
+        let attribute_offset = 48usize;
+        let attribute_length = 88usize;
+        record[attribute_offset..attribute_offset + 4].copy_from_slice(&(0x30u32).to_le_bytes());
+        record[attribute_offset + 4..attribute_offset + 8]
+            .copy_from_slice(&(attribute_length as u32).to_le_bytes());
+        record[attribute_offset + 8] = 0;
+        record[attribute_offset + 16..attribute_offset + 20]
+            .copy_from_slice(&(64u32).to_le_bytes());
+        record[attribute_offset + 20..attribute_offset + 22]
+            .copy_from_slice(&(24u16).to_le_bytes());
+
+        let value_start = attribute_offset + 24;
+        record[value_start + 48..value_start + 56].copy_from_slice(&(1234i64).to_le_bytes());
+        let end_offset = attribute_offset + attribute_length;
+        record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+
+        let mut output = Vec::with_capacity(size_of::<i64>() + size_of::<u32>() + record.len());
+        output.extend_from_slice(&(returned_file_reference_number as i64).to_le_bytes());
+        output.extend_from_slice(&(record.len() as u32).to_le_bytes());
+        output.extend_from_slice(&record);
+        output
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_output_accepts_exact_requested_reference() {
+        let output = build_test_file_record_output(42);
+
+        assert_eq!(
+            parse_file_record_output(42, &output).expect("matched file record output"),
+            1234
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_output_rejects_mismatched_returned_reference() {
+        let output = build_test_file_record_output(41);
+
+        let error =
+            parse_file_record_output(42, &output).expect_err("mismatched file record output");
+        assert!(
+            error
+                .to_string()
+                .contains("returned file reference 41 did not match requested 42"),
+            "unexpected error: {error}"
+        );
     }
 }

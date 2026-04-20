@@ -153,7 +153,10 @@ impl TreeNode {
         }
 
         if self.node_type == "directory" {
-            fields.push(("children", json_array(self.children.iter().map(TreeNode::to_json))));
+            fields.push((
+                "children",
+                json_array(self.children.iter().map(TreeNode::to_json)),
+            ));
         }
 
         json_object_dynamic(fields)
@@ -231,9 +234,7 @@ where
 }
 
 fn json_nullable_string(value: Option<&str>) -> String {
-    value
-        .map(json_string)
-        .unwrap_or_else(|| "null".to_owned())
+    value.map(json_string).unwrap_or_else(|| "null".to_owned())
 }
 
 fn json_string(value: &str) -> String {
@@ -396,13 +397,17 @@ mod tests {
     #[test]
     fn serializes_partial_results_when_entries_are_unresolved() {
         let events = build_scan_events(&partial_snapshot());
+        let top_level = events[1].to_json_line();
         let complete = events[3].to_json_line();
 
-        assert!(complete.contains("\"scannedFiles\":1"));
-        assert!(complete.contains("\"skippedEntries\":1"));
-        assert!(complete.contains("\"totalBytes\":8"));
-        assert!(complete.contains("\"largestFile\":{"));
-        assert!(complete.contains("\"skippedChildren\":1"));
+        assert_eq!(
+            top_level,
+            r#"{"type":"top-level-summary","summary":{"totalBytes":8,"scannedFiles":1,"scannedDirectories":1,"skippedEntries":1,"largestFile":{"path":"C:\\notes.txt","name":"notes.txt","sizeBytes":8,"extension":".txt"}}}"#
+        );
+        assert_eq!(
+            complete,
+            r#"{"type":"complete","summary":{"totalBytes":8,"scannedFiles":1,"scannedDirectories":1,"skippedEntries":1,"largestFile":{"path":"C:\\notes.txt","name":"notes.txt","sizeBytes":8,"extension":".txt"}},"largestFiles":[{"path":"C:\\notes.txt","name":"notes.txt","sizeBytes":8,"extension":".txt"}],"tree":{"id":"C:\\","name":"C:\\","path":"C:\\","type":"directory","sizeBytes":8,"childrenCount":1,"fileCount":1,"directoryCount":0,"skippedChildren":1,"children":[{"id":"C:\\notes.txt","name":"notes.txt","path":"C:\\notes.txt","type":"file","sizeBytes":8,"childrenCount":0,"fileCount":0,"directoryCount":0,"skippedChildren":0,"extension":".txt"}]}}"#
+        );
         assert!(!complete.contains("unresolved.bin"));
     }
 }
