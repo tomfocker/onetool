@@ -475,9 +475,7 @@ select {
     inset 0 -1px 0 rgba(210, 224, 247, 0.72),
     var(--hero-shadow);
   backdrop-filter: blur(16px) saturate(1.06);
-  transition:
-    transform 300ms ease,
-    box-shadow 300ms ease;
+  transition: box-shadow 300ms ease;
 }
 
 .hero-layer::before {
@@ -836,19 +834,6 @@ select {
     --section-gap: clamp(64px, 9vw, 96px);
   }
 
-  .hero-scroll {
-    height: auto;
-  }
-
-  .hero-sticky {
-    position: relative;
-  }
-
-  .hero-home {
-    min-height: auto;
-    padding-top: 132px;
-  }
-
   .hero-layout,
   .system-strip {
     grid-template-columns: 1fr;
@@ -887,6 +872,19 @@ select {
     inset: 12px 0 auto;
   }
 
+  .hero-scroll {
+    height: auto;
+  }
+
+  .hero-sticky {
+    position: relative;
+  }
+
+  .hero-home {
+    min-height: auto;
+    padding-top: 156px;
+  }
+
   .site-nav {
     border-radius: 28px;
     flex-wrap: wrap;
@@ -904,10 +902,6 @@ select {
     width: 100%;
     justify-content: center;
     flex-wrap: wrap;
-  }
-
-  .hero-home {
-    padding-top: 156px;
   }
 
   .hero-layout {
