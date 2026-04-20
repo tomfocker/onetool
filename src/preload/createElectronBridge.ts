@@ -301,6 +301,19 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     }
   }
 
+  const spaceCleanupAPI = {
+    chooseRoot: () => ipcRenderer.invoke('space-cleanup-choose-root'),
+    startScan: (rootPath: string) => ipcRenderer.invoke('space-cleanup-start-scan', rootPath),
+    cancelScan: () => ipcRenderer.invoke('space-cleanup-cancel-scan'),
+    getSession: () => ipcRenderer.invoke('space-cleanup-get-session'),
+    openPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-open-path', targetPath),
+    copyPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-copy-path', targetPath),
+    deleteToTrash: (targetPath: string) => ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath),
+    onProgress: (callback: (data: any) => void) => onChannel('space-cleanup-progress', callback),
+    onComplete: (callback: (data: any) => void) => onChannel('space-cleanup-complete', callback),
+    onError: (callback: (data: any) => void) => onChannel('space-cleanup-error', callback)
+  }
+
   const updatesAPI = {
     getState: () => ipcRenderer.invoke('updates-get-state'),
     checkForUpdates: () => ipcRenderer.invoke('updates-check'),
@@ -313,6 +326,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     app: appAPI,
     doctor: doctorAPI,
     devEnvironment: devEnvironmentAPI,
+    spaceCleanup: spaceCleanupAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,
     rename: renameAPI,

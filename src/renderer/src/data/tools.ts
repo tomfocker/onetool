@@ -18,6 +18,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'DevEnvironmentManagerTool'
   },
   {
+    id: 'space-cleanup',
+    name: '空间清理',
+    description: '扫描目录体积并快速清理大文件',
+    category: '系统维护',
+    icon: 'HardDrive',
+    componentPath: 'SpaceCleanupTool'
+  },
+  {
     id: 'network-radar',
     name: '网络雷达',
     description: '局域网设备扫描与网络延迟监控',

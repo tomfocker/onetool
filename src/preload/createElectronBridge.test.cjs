@@ -128,6 +128,13 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.devEnvironment.update('python')
   await bridge.devEnvironment.updateAll()
   await bridge.devEnvironment.openRelatedTool('wsl')
+  await bridge.spaceCleanup.chooseRoot()
+  await bridge.spaceCleanup.startScan('C:\\scan')
+  await bridge.spaceCleanup.cancelScan()
+  await bridge.spaceCleanup.getSession()
+  await bridge.spaceCleanup.openPath('C:\\scan\\movie.mkv')
+  await bridge.spaceCleanup.copyPath('C:\\scan\\movie.mkv')
+  await bridge.spaceCleanup.deleteToTrash('C:\\scan\\movie.mkv')
   await bridge.screenRecorder.getDefaultPath('gif')
   await bridge.screenRecorder.selectOutput('gif')
   await bridge.screenRecorder.openSelection()
@@ -145,6 +152,13 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['dev-environment-update', 'python'],
     ['dev-environment-update-all'],
     ['dev-environment-open-related-tool', 'wsl'],
+    ['space-cleanup-choose-root'],
+    ['space-cleanup-start-scan', 'C:\\scan'],
+    ['space-cleanup-cancel-scan'],
+    ['space-cleanup-get-session'],
+    ['space-cleanup-open-path', 'C:\\scan\\movie.mkv'],
+    ['space-cleanup-copy-path', 'C:\\scan\\movie.mkv'],
+    ['space-cleanup-delete-to-trash', 'C:\\scan\\movie.mkv'],
     ['screen-recorder-get-default-path', 'gif'],
     ['screen-recorder-select-output', 'gif'],
     ['recorder-selection-open'],
@@ -189,6 +203,41 @@ test('createElectronBridge exposes explicit dev environment subscriptions and un
   assert.equal(mocks.removed.at(-3)[0], 'dev-environment-log')
   assert.equal(mocks.removed.at(-2)[0], 'dev-environment-progress')
   assert.equal(mocks.removed.at(-1)[0], 'dev-environment-operation-complete')
+})
+
+test('createElectronBridge exposes explicit space cleanup subscriptions and unsubscribes cleanly', () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let progress = null
+  let complete = null
+  let error = null
+  const unsubscribeProgress = bridge.spaceCleanup.onProgress((data) => {
+    progress = data
+  })
+  const unsubscribeComplete = bridge.spaceCleanup.onComplete((data) => {
+    complete = data
+  })
+  const unsubscribeError = bridge.spaceCleanup.onError((data) => {
+    error = data
+  })
+
+  mocks.listeners.get('space-cleanup-progress')({}, { status: 'scanning' })
+  mocks.listeners.get('space-cleanup-complete')({}, { status: 'completed' })
+  mocks.listeners.get('space-cleanup-error')({}, { status: 'failed', error: 'denied' })
+
+  assert.equal(progress.status, 'scanning')
+  assert.equal(complete.status, 'completed')
+  assert.equal(error.error, 'denied')
+
+  unsubscribeProgress()
+  unsubscribeComplete()
+  unsubscribeError()
+
+  assert.equal(mocks.removed.at(-3)[0], 'space-cleanup-progress')
+  assert.equal(mocks.removed.at(-2)[0], 'space-cleanup-complete')
+  assert.equal(mocks.removed.at(-1)[0], 'space-cleanup-error')
 })
 
 test('createElectronBridge exposes an explicit direct-drag helper for prepared recorder selections', () => {

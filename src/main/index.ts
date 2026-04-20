@@ -50,6 +50,8 @@ import { registerTranslateIpc } from './ipc/translateIpc'
 import { registerUpdateIpc } from './ipc/updateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 import { registerWslIpc } from './ipc/wslIpc'
+import { registerSpaceCleanupIpc } from './ipc/spaceCleanupIpc'
+import { spaceCleanupService } from './services/SpaceCleanupService'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -84,6 +86,7 @@ function createWindow(): void {
   colorPickerService.setMainWindow(mainWindow)
   webActivatorService.setMainWindow(mainWindow)
   quickInstallerService.setMainWindow(mainWindow)
+  spaceCleanupService.setMainWindow(mainWindow)
   // DevEnvironmentService receives the window via IPC registration refresh.
   windowManagerService.setMainWindow(mainWindow)
   screenshotService.setMainWindow(mainWindow)
@@ -188,6 +191,7 @@ app.whenReady().then(() => {
   registerUpdateIpc(() => mainWindow)
   registerWebActivatorIpc()
   registerWslIpc()
+  registerSpaceCleanupIpc(() => mainWindow)
 
   // Silent system health check
   setTimeout(async () => {
