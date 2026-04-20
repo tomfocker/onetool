@@ -9,10 +9,17 @@ import {
   createIdleSpaceCleanupSession,
   type SpaceCleanupLargestFile,
   type SpaceCleanupNode,
+  type SpaceCleanupScanMode,
   type SpaceCleanupSession,
   trimLargestFiles
 } from '../../shared/spaceCleanup'
 import { logger } from '../utils/logger'
+import { getFastScanEligibility } from '../utils/windowsVolume'
+import {
+  NtfsFastScannerBridge,
+  type NtfsFastScannerBridgeEvent,
+  type NtfsFastScannerRunHandle
+} from './NtfsFastScannerBridge'
 
 type SpaceCleanupServiceDependencies = {
   fsPromises?: typeof fs
@@ -20,6 +27,8 @@ type SpaceCleanupServiceDependencies = {
   dialogModule?: typeof dialog
   shellModule?: typeof shell
   clipboardModule?: typeof clipboard
+  getFastScanEligibility?: typeof getFastScanEligibility
+  ntfsFastScannerBridge?: Pick<NtfsFastScannerBridge, 'start'>
   now?: () => number
   createId?: () => string
   yieldEvery?: number
@@ -33,15 +42,23 @@ type TraversalState = {
 
 type MutableSummary = ReturnType<typeof createEmptySpaceCleanupSummary>
 
+function resolveNtfsFastScannerPath(pathModule: typeof path) {
+  const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : process.cwd()
+  return pathModule.join(resourcesPath, 'space-scan', 'ntfs-fast-scan.exe')
+}
+
 export class SpaceCleanupService {
   private mainWindow: BrowserWindow | null = null
   private currentSession: SpaceCleanupSession = createIdleSpaceCleanupSession()
   private cancelled = false
+  private activeNtfsFastScanRun: NtfsFastScannerRunHandle | null = null
   private readonly fsPromises: typeof fs
   private readonly pathModule: typeof path
   private readonly dialogModule: typeof dialog
   private readonly shellModule: typeof shell
   private readonly clipboardModule: typeof clipboard
+  private readonly getFastScanEligibility: typeof getFastScanEligibility
+  private readonly ntfsFastScannerBridge: Pick<NtfsFastScannerBridge, 'start'>
   private readonly now: () => number
   private readonly createId: () => string
   private readonly yieldEvery: number
@@ -52,6 +69,10 @@ export class SpaceCleanupService {
     this.dialogModule = dependencies.dialogModule ?? dialog
     this.shellModule = dependencies.shellModule ?? shell
     this.clipboardModule = dependencies.clipboardModule ?? clipboard
+    this.getFastScanEligibility = dependencies.getFastScanEligibility ?? getFastScanEligibility
+    this.ntfsFastScannerBridge = dependencies.ntfsFastScannerBridge ?? new NtfsFastScannerBridge({
+      scannerPath: resolveNtfsFastScannerPath(this.pathModule)
+    })
     this.now = dependencies.now ?? Date.now
     this.createId = dependencies.createId ?? randomUUID
     this.yieldEvery = dependencies.yieldEvery ?? 50
@@ -87,27 +108,91 @@ export class SpaceCleanupService {
         status: 'cancelled',
         finishedAt: new Date(this.now()).toISOString()
       }
+      this.activeNtfsFastScanRun?.cancel()
+      this.activeNtfsFastScanRun = null
     }
 
     return { success: true, data: this.currentSession }
   }
 
   async startScan(rootPath: string): Promise<IpcResponse<SpaceCleanupSession>> {
-    const session: SpaceCleanupSession = {
+    this.currentSession = this.createScanningSession(rootPath, 'filesystem', null, false)
+    this.cancelled = false
+    this.activeNtfsFastScanRun = null
+    this.emit('space-cleanup-progress', this.currentSession)
+
+    const eligibility = await this.getFastScanEligibility(rootPath)
+
+    if (this.cancelled || this.currentSession.status === 'cancelled') {
+      this.currentSession = {
+        ...this.currentSession,
+        status: 'cancelled',
+        finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
+      }
+      this.emit('space-cleanup-complete', this.currentSession)
+      return { success: true, data: this.currentSession }
+    }
+
+    if (eligibility.mode === 'ntfs-fast') {
+      return this.startNtfsFastScan(rootPath)
+    }
+
+    return this.startFilesystemScan(rootPath, eligibility.reason)
+  }
+
+  async openPath(targetPath: string): Promise<IpcResponse> {
+    const targetStat = await this.fsPromises.stat(targetPath)
+    if (targetStat.isDirectory()) {
+      const result = await this.shellModule.openPath(targetPath)
+      return result === '' ? { success: true } : { success: false, error: result }
+    }
+
+    this.shellModule.showItemInFolder(targetPath)
+    return { success: true }
+  }
+
+  async copyPath(targetPath: string): Promise<IpcResponse> {
+    this.clipboardModule.writeText(targetPath)
+    return { success: true }
+  }
+
+  async deleteToTrash(targetPath: string): Promise<IpcResponse> {
+    await this.shellModule.trashItem(targetPath)
+    return { success: true }
+  }
+
+  private createScanningSession(
+    rootPath: string,
+    scanMode: SpaceCleanupScanMode,
+    scanModeReason: string | null,
+    isPartial: boolean
+  ): SpaceCleanupSession {
+    return {
+      ...createIdleSpaceCleanupSession(),
       sessionId: this.createId(),
       rootPath,
       status: 'scanning',
-      startedAt: new Date(this.now()).toISOString(),
-      finishedAt: null,
-      summary: createEmptySpaceCleanupSummary(),
-      largestFiles: [],
-      tree: null,
+      scanMode,
+      scanModeReason,
+      isPartial,
+      startedAt: new Date(this.now()).toISOString()
+    }
+  }
+
+  private async startFilesystemScan(
+    rootPath: string,
+    scanModeReason: string | null
+  ): Promise<IpcResponse<SpaceCleanupSession>> {
+    this.currentSession = {
+      ...this.currentSession,
+      rootPath,
+      scanMode: 'filesystem',
+      scanModeReason,
+      isPartial: false,
       error: null
     }
-
-    this.currentSession = session
-    this.cancelled = false
-    this.emit('space-cleanup-progress', session)
+    this.activeNtfsFastScanRun = null
+    this.emit('space-cleanup-progress', this.currentSession)
 
     const traversalState: TraversalState = {
       largestFiles: [],
@@ -148,25 +233,58 @@ export class SpaceCleanupService {
     }
   }
 
-  async openPath(targetPath: string): Promise<IpcResponse> {
-    const targetStat = await this.fsPromises.stat(targetPath)
-    if (targetStat.isDirectory()) {
-      const result = await this.shellModule.openPath(targetPath)
-      return result === '' ? { success: true } : { success: false, error: result }
+  private async startNtfsFastScan(rootPath: string): Promise<IpcResponse<SpaceCleanupSession>> {
+    this.currentSession = {
+      ...this.currentSession,
+      rootPath,
+      scanMode: 'ntfs-fast',
+      scanModeReason: null,
+      isPartial: true,
+      error: null
     }
+    this.emit('space-cleanup-progress', this.currentSession)
 
-    this.shellModule.showItemInFolder(targetPath)
-    return { success: true }
-  }
+    const run = this.ntfsFastScannerBridge.start(rootPath, (event) => {
+      this.handleNtfsFastScanEvent(event)
+    })
+    this.activeNtfsFastScanRun = run
 
-  async copyPath(targetPath: string): Promise<IpcResponse> {
-    this.clipboardModule.writeText(targetPath)
-    return { success: true }
-  }
+    try {
+      await run.done
+      this.currentSession = {
+        ...this.currentSession,
+        status: this.currentSession.status === 'cancelled' ? 'cancelled' : 'completed',
+        finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString(),
+        isPartial: this.currentSession.status === 'cancelled' ? this.currentSession.isPartial : false
+      }
+      this.emit('space-cleanup-complete', this.currentSession)
+      return { success: true, data: this.currentSession }
+    } catch (error) {
+      const message = (error as Error).message
+      if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
+        this.currentSession = {
+          ...this.currentSession,
+          status: 'cancelled',
+          finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
+        }
+        this.emit('space-cleanup-complete', this.currentSession)
+        return { success: true, data: this.currentSession }
+      }
 
-  async deleteToTrash(targetPath: string): Promise<IpcResponse> {
-    await this.shellModule.trashItem(targetPath)
-    return { success: true }
+      logger.error('SpaceCleanup: ntfs-fast scan failed', error)
+      this.currentSession = {
+        ...this.currentSession,
+        status: 'failed',
+        finishedAt: new Date(this.now()).toISOString(),
+        error: message
+      }
+      this.emit('space-cleanup-error', this.currentSession)
+      return { success: false, error: message, data: this.currentSession }
+    } finally {
+      if (this.activeNtfsFastScanRun === run) {
+        this.activeNtfsFastScanRun = null
+      }
+    }
   }
 
   private emit(channel: string, payload: SpaceCleanupSession) {
@@ -175,6 +293,48 @@ export class SpaceCleanupService {
     }
 
     this.mainWindow.webContents.send(channel, payload)
+  }
+
+  private handleNtfsFastScanEvent(event: NtfsFastScannerBridgeEvent) {
+    const nextSession: SpaceCleanupSession = { ...this.currentSession }
+
+    if (event.type === 'volume-info') {
+      if (typeof event.rootPath === 'string') {
+        nextSession.rootPath = event.rootPath
+      }
+      nextSession.scanMode = event.mode === 'ntfs-fast' ? 'ntfs-fast' : nextSession.scanMode
+      nextSession.scanModeReason = null
+    }
+
+    if (event.summary && typeof event.summary === 'object') {
+      const largestFiles = Array.isArray(event.largestFiles)
+        ? event.largestFiles as SpaceCleanupLargestFile[]
+        : nextSession.largestFiles
+
+      nextSession.summary = {
+        ...createEmptySpaceCleanupSummary(),
+        ...(event.summary as MutableSummary),
+        largestFile:
+          (event.summary as MutableSummary).largestFile ??
+          largestFiles[0] ??
+          null
+      }
+      nextSession.largestFiles = largestFiles
+    }
+
+    if (event.tree && typeof event.tree === 'object') {
+      nextSession.tree = event.tree as SpaceCleanupNode
+    }
+
+    if (event.type === 'complete') {
+      nextSession.status = this.cancelled || nextSession.status === 'cancelled' ? 'cancelled' : 'completed'
+      nextSession.finishedAt = new Date(this.now()).toISOString()
+      nextSession.isPartial = false
+      nextSession.error = null
+    }
+
+    this.currentSession = nextSession
+    this.emit('space-cleanup-progress', this.currentSession)
   }
 
   private async scanNode(

@@ -14,6 +14,21 @@ function createDirent(name, kind) {
   }
 }
 
+function createTree(rootPath, sizeBytes) {
+  return {
+    id: rootPath,
+    name: rootPath,
+    path: rootPath,
+    type: 'directory',
+    sizeBytes,
+    childrenCount: 0,
+    fileCount: 0,
+    directoryCount: 0,
+    skippedChildren: 0,
+    children: []
+  }
+}
+
 function loadSpaceCleanupServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'SpaceCleanupService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -51,6 +66,30 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
       return { logger }
     }
 
+    if (specifier === '../utils/windowsVolume') {
+      return {
+        getFastScanEligibility: overrides.fastEligibility || (async () => ({ mode: 'filesystem', reason: null }))
+      }
+    }
+
+    if (specifier === './NtfsFastScannerBridge') {
+      const defaultRunHandle = {
+        done: Promise.resolve(),
+        cancel() {}
+      }
+      return {
+        NtfsFastScannerBridge: class NtfsFastScannerBridgeMock {
+          start(rootPath, onEvent) {
+            if (overrides.fastBridge?.start) {
+              return overrides.fastBridge.start(rootPath, onEvent)
+            }
+
+            return defaultRunHandle
+          }
+        }
+      }
+    }
+
     if (specifier === '../../shared/spaceCleanup') {
       return require(path.join(__dirname, '../../shared/spaceCleanup.ts'))
     }
@@ -86,6 +125,106 @@ test('idle space cleanup session includes scan mode metadata', () => {
   assert.equal(session.scanMode, 'filesystem')
   assert.equal(session.scanModeReason, null)
   assert.equal(session.isPartial, false)
+})
+
+test('startScan uses ntfs-fast mode for eligible NTFS root volumes', async () => {
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 123,
+            scannedFiles: 0,
+            scannedDirectories: 1,
+            skippedEntries: 0,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\', 123)
+        })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 4000, createId: () => 'session-fast-1' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'ntfs-fast')
+  assert.equal(result.data.summary.totalBytes, 123)
+  assert.equal(result.data.tree.path, 'D:\\')
+})
+
+test('startScan keeps filesystem mode and ineligibility reason for non-eligible paths', async () => {
+  const entries = {
+    'D:\\folder': [createDirent('nested.bin', 'file')]
+  }
+  const stats = {
+    'D:\\folder': { isDirectory: () => true, size: 0 },
+    'D:\\folder\\nested.bin': { isDirectory: () => false, size: 7 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'filesystem', reason: 'NTFS 极速扫描仅支持本地盘根路径' }),
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5000, createId: () => 'session-filesystem-1' })
+  const result = await service.startScan('D:\\folder')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.scanModeReason, 'NTFS 极速扫描仅支持本地盘根路径')
+  assert.equal(result.data.summary.totalBytes, 7)
+})
+
+test('cancelScan cancels an active ntfs-fast run through the bridge handle', async () => {
+  let cancelCalls = 0
+  let releaseScan
+  let markStarted
+  const fastDone = new Promise((resolve) => {
+    releaseScan = resolve
+  })
+  const fastStarted = new Promise((resolve) => {
+    markStarted = resolve
+  })
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start() {
+        markStarted()
+        return {
+          done: fastDone,
+          cancel() {
+            cancelCalls += 1
+            releaseScan()
+          }
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 6000, createId: () => 'session-fast-2' })
+  const resultPromise = service.startScan('D:\\')
+  await fastStarted
+  const cancelResult = service.cancelScan()
+  const result = await resultPromise
+
+  assert.equal(cancelResult.success, true)
+  assert.equal(cancelCalls, 1)
+  assert.equal(cancelResult.data.status, 'cancelled')
+  assert.equal(result.data.status, 'cancelled')
 })
 
 test('startScan aggregates nested directory sizes and largest files', async () => {
