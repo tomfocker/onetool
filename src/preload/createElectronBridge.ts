@@ -9,7 +9,8 @@ import {
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
-import { LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
+import type { SpaceCleanupSession } from '../shared/spaceCleanup'
+import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
 type WebUtilsLike = Pick<WebUtils, 'getPathForFile'>
@@ -302,16 +303,16 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const spaceCleanupAPI = {
-    chooseRoot: () => ipcRenderer.invoke('space-cleanup-choose-root'),
-    startScan: (rootPath: string) => ipcRenderer.invoke('space-cleanup-start-scan', rootPath),
-    cancelScan: () => ipcRenderer.invoke('space-cleanup-cancel-scan'),
-    getSession: () => ipcRenderer.invoke('space-cleanup-get-session'),
-    openPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-open-path', targetPath),
-    copyPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-copy-path', targetPath),
-    deleteToTrash: (targetPath: string) => ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath),
-    onProgress: (callback: (data: any) => void) => onChannel('space-cleanup-progress', callback),
-    onComplete: (callback: (data: any) => void) => onChannel('space-cleanup-complete', callback),
-    onError: (callback: (data: any) => void) => onChannel('space-cleanup-error', callback)
+    chooseRoot: () => ipcRenderer.invoke('space-cleanup-choose-root') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>,
+    startScan: (rootPath: string) => ipcRenderer.invoke('space-cleanup-start-scan', rootPath) as Promise<IpcResponse<SpaceCleanupSession>>,
+    cancelScan: () => ipcRenderer.invoke('space-cleanup-cancel-scan') as Promise<IpcResponse<SpaceCleanupSession>>,
+    getSession: () => ipcRenderer.invoke('space-cleanup-get-session') as Promise<IpcResponse<SpaceCleanupSession>>,
+    openPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-open-path', targetPath) as Promise<IpcResponse>,
+    copyPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-copy-path', targetPath) as Promise<IpcResponse>,
+    deleteToTrash: (targetPath: string) => ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath) as Promise<IpcResponse>,
+    onProgress: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-progress', callback),
+    onComplete: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-complete', callback),
+    onError: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-error', callback)
   }
 
   const updatesAPI = {

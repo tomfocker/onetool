@@ -57,6 +57,7 @@ const {
   getSpaceCleanupActionAvailability,
   layoutTreemapItems
 } = loadUseSpaceCleanupModule()
+const { createIdleSpaceCleanupSession } = require(path.join(__dirname, '../../../shared/spaceCleanup.ts'))
 
 function toPlainObject(value) {
   return JSON.parse(JSON.stringify(value))
@@ -168,6 +169,39 @@ test('buildSpaceCleanupViewModel exposes summary cards and the selected node det
   assert.equal(viewModel.summaryCards[0].value, '500 B')
   assert.equal(viewModel.selectedNode?.name, 'movie.mkv')
   assert.equal(viewModel.breadcrumbs.at(-1)?.path, 'C:\\scan\\movie.mkv')
+})
+
+test('buildSpaceCleanupViewModel exposes scan mode, fallback reason, and partial result labels', () => {
+  const viewModel = buildSpaceCleanupViewModel({
+    session: {
+      ...createIdleSpaceCleanupSession(),
+      status: 'scanning',
+      scanMode: 'filesystem',
+      scanModeReason: '当前路径不是 NTFS 根盘',
+      isPartial: true
+    },
+    selectedPath: null
+  })
+
+  assert.equal(viewModel.modeLabel, '普通扫描')
+  assert.match(viewModel.modeReason, /NTFS 根盘/)
+  assert.equal(viewModel.partialLabel, '结果正在持续补全')
+})
+
+test('buildSpaceCleanupViewModel marks ntfs-fast sessions explicitly', () => {
+  const viewModel = buildSpaceCleanupViewModel({
+    session: {
+      ...createIdleSpaceCleanupSession(),
+      status: 'completed',
+      scanMode: 'ntfs-fast',
+      isPartial: false
+    },
+    selectedPath: null
+  })
+
+  assert.equal(viewModel.modeLabel, '极速扫描（NTFS）')
+  assert.equal(viewModel.modeReason, null)
+  assert.equal(viewModel.partialLabel, null)
 })
 
 test('getSpaceCleanupActionAvailability locks destructive actions while scanning', () => {

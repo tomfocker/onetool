@@ -129,6 +129,9 @@ export function buildSpaceCleanupViewModel({
   return {
     selectedNode,
     currentDirectory,
+    modeLabel: activeSession.scanMode === 'ntfs-fast' ? '极速扫描（NTFS）' : '普通扫描',
+    modeReason: activeSession.scanModeReason,
+    partialLabel: activeSession.isPartial ? '结果正在持续补全' : null,
     breadcrumbs: getNodeBreadcrumbs(activeSession.tree, selectedNode?.path ?? null),
     largestFiles: activeSession.largestFiles,
     summaryCards: [

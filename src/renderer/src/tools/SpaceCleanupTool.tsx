@@ -147,9 +147,17 @@ export default function SpaceCleanupTool() {
 
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="outline">状态：{session.status}</Badge>
+            <Badge variant="outline">{viewModel.modeLabel}</Badge>
+            {viewModel.partialLabel ? <Badge variant="outline">{viewModel.partialLabel}</Badge> : null}
             {session.startedAt ? <Badge variant="outline">开始：{new Date(session.startedAt).toLocaleString('zh-CN')}</Badge> : null}
             {session.finishedAt ? <Badge variant="outline">完成：{new Date(session.finishedAt).toLocaleString('zh-CN')}</Badge> : null}
           </div>
+
+          {viewModel.modeReason ? (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+              {viewModel.modeReason}
+            </div>
+          ) : null}
 
           <div className="grid gap-3 md:grid-cols-4">
             {viewModel.summaryCards.map((card) => (

@@ -240,6 +240,30 @@ test('createElectronBridge exposes explicit space cleanup subscriptions and unsu
   assert.equal(mocks.removed.at(-1)[0], 'space-cleanup-error')
 })
 
+test('createElectronBridge forwards fast scan mode metadata through space cleanup events', () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let progress = null
+  const unsubscribeProgress = bridge.spaceCleanup.onProgress((data) => {
+    progress = data
+  })
+
+  mocks.listeners.get('space-cleanup-progress')({}, {
+    status: 'scanning',
+    scanMode: 'ntfs-fast',
+    scanModeReason: null,
+    isPartial: true
+  })
+
+  assert.equal(progress.scanMode, 'ntfs-fast')
+  assert.equal(progress.scanModeReason, null)
+  assert.equal(progress.isPartial, true)
+
+  unsubscribeProgress()
+})
+
 test('createElectronBridge exposes an explicit direct-drag helper for prepared recorder selections', () => {
   const { createElectronBridge } = loadCreateElectronBridgeModule()
   const mocks = createMocks()
