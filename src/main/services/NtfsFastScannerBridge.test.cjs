@@ -200,3 +200,51 @@ test('NtfsFastScannerBridge wraps malformed JSON with scanner context', async ()
 
   await assert.rejects(run.done, /NtfsFastScannerBridge JSON parse error/)
 })
+
+test('NtfsFastScannerBridge rejects signaled termination as a failure', async () => {
+  const fakeChild = createFakeChildProcess()
+  const { NtfsFastScannerBridge } = loadNtfsFastScannerBridgeModule({
+    childProcessModule: {
+      spawn() {
+        return fakeChild
+      }
+    }
+  })
+
+  const bridge = new NtfsFastScannerBridge({
+    scannerPath: 'C:\\native\\ntfs-fast-scan.exe'
+  })
+
+  const run = bridge.start('D:\\', () => {})
+  fakeChild.stdout.write('{"type":"progress"}\n')
+  fakeChild.stdout.end()
+  fakeChild.stderr.end()
+  fakeChild.emit('close', null, 'SIGKILL')
+
+  await assert.rejects(run.done, /NtfsFastScannerBridge terminated by signal SIGKILL/)
+})
+
+test('NtfsFastScannerBridge preserves callback errors without mislabeling them as JSON parse failures', async () => {
+  const fakeChild = createFakeChildProcess()
+  const { NtfsFastScannerBridge } = loadNtfsFastScannerBridgeModule({
+    childProcessModule: {
+      spawn() {
+        return fakeChild
+      }
+    }
+  })
+
+  const bridge = new NtfsFastScannerBridge({
+    scannerPath: 'C:\\native\\ntfs-fast-scan.exe'
+  })
+
+  const run = bridge.start('D:\\', () => {
+    throw new Error('consumer exploded')
+  })
+  fakeChild.stdout.write('{"type":"progress"}\n')
+  fakeChild.stdout.end()
+  fakeChild.stderr.end()
+  fakeChild.emit('close', 0)
+
+  await assert.rejects(run.done, /NtfsFastScannerBridge event callback error on line 1: consumer exploded/)
+})

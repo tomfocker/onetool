@@ -60,16 +60,41 @@ export class NtfsFastScannerBridge {
         reject(error)
       }
 
-      const parseLine = (line: string, lineNumber: number) => {
+      const errorDetail = (error: unknown): string => {
+        if (error && typeof error === 'object' && 'message' in error) {
+          const message = (error as { message?: unknown }).message
+          if (typeof message === 'string') {
+            return message
+          }
+        }
+
+        return String(error)
+      }
+
+      const parseJsonLine = (line: string, lineNumber: number): NtfsFastScannerBridgeEvent | null => {
         if (!line) {
+          return null
+        }
+
+        try {
+          return JSON.parse(line) as NtfsFastScannerBridgeEvent
+        } catch (error) {
+          const detail = errorDetail(error)
+          settleReject(new Error(`NtfsFastScannerBridge JSON parse error on line ${lineNumber}: ${line} (${detail})`))
+          return null
+        }
+      }
+
+      const deliverEvent = (event: NtfsFastScannerBridgeEvent, lineNumber: number) => {
+        if (settled) {
           return
         }
 
         try {
-          onEvent(JSON.parse(line) as NtfsFastScannerBridgeEvent)
+          onEvent(event)
         } catch (error) {
-          const detail = error instanceof Error ? error.message : String(error)
-          settleReject(new Error(`NtfsFastScannerBridge JSON parse error on line ${lineNumber}: ${line} (${detail})`))
+          const detail = errorDetail(error)
+          settleReject(new Error(`NtfsFastScannerBridge event callback error on line ${lineNumber}: ${detail}`))
         }
       }
 
@@ -86,14 +111,17 @@ export class NtfsFastScannerBridge {
           const line = stdoutBuffer.slice(0, newlineIndex).trim()
           stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1)
           lineNumber += 1
-          parseLine(line, lineNumber)
+          const parsedEvent = parseJsonLine(line, lineNumber)
+          if (parsedEvent) {
+            deliverEvent(parsedEvent, lineNumber)
+          }
           newlineIndex = stdoutBuffer.indexOf('\n')
         }
       })
       child.stderr.on('data', (chunk: Buffer | string) => {
         stderr += chunk.toString()
       })
-      child.on('close', (code) => {
+      child.on('close', (code, signal) => {
         if (settled) {
           return
         }
@@ -103,16 +131,25 @@ export class NtfsFastScannerBridge {
           return
         }
 
+        if (signal != null) {
+          const suffix = stderr.trim() ? `: ${stderr.trim()}` : ''
+          settleRejectFn?.(new Error(`NtfsFastScannerBridge terminated by signal ${signal}${suffix}`))
+          return
+        }
+
         if ((code ?? 0) !== 0) {
           const suffix = stderr.trim() ? `: ${stderr.trim()}` : ''
-          settleRejectFn?.(new Error(`ntfs-fast-scan exited with code ${code ?? 0}${suffix}`))
+          settleRejectFn?.(new Error(`ntfs-fast-scan exited with code ${code}${suffix}`))
           return
         }
 
         const finalLine = stdoutBuffer.trim()
         if (finalLine) {
           lineNumber += 1
-          parseLine(finalLine, lineNumber)
+          const parsedEvent = parseJsonLine(finalLine, lineNumber)
+          if (parsedEvent) {
+            deliverEvent(parsedEvent, lineNumber)
+          }
           if (settled) {
             return
           }
