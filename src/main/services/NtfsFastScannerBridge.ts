@@ -10,6 +10,11 @@ export type NtfsFastScannerBridgeDependencies = {
   spawn?: typeof defaultSpawn
 }
 
+export type NtfsFastScannerRunHandle = {
+  done: Promise<void>
+  cancel: () => void
+}
+
 export class NtfsFastScannerBridge {
   private readonly scannerPath: string
   private readonly spawn: typeof defaultSpawn
@@ -19,32 +24,69 @@ export class NtfsFastScannerBridge {
     this.spawn = dependencies.spawn ?? defaultSpawn
   }
 
-  async start(rootPath: string, onEvent: (event: NtfsFastScannerBridgeEvent) => void): Promise<void> {
+  start(rootPath: string, onEvent: (event: NtfsFastScannerBridgeEvent) => void): NtfsFastScannerRunHandle {
     const child = this.spawn(this.scannerPath, ['scan', '--root', rootPath], {
       stdio: ['ignore', 'pipe', 'pipe']
     }) as ChildProcessWithoutNullStreams
 
     let stderr = ''
     let stdoutBuffer = ''
+    let settled = false
+    let cancelled = false
+    let settleRejectFn: ((error: Error) => void) | null = null
 
-    return await new Promise<void>((resolve, reject) => {
-      const finishWithError = (error: Error) => {
+    const done = new Promise<void>((resolve, reject) => {
+      settleRejectFn = (error: Error) => {
+        if (settled) {
+          return
+        }
+        settled = true
         reject(error)
       }
 
-      child.on('error', finishWithError)
+      const settleResolve = () => {
+        if (settled) {
+          return
+        }
+        settled = true
+        resolve()
+      }
+
+      const settleReject = (error: Error) => {
+        if (settled) {
+          return
+        }
+        settled = true
+        reject(error)
+      }
+
+      const parseLine = (line: string, lineNumber: number) => {
+        if (!line) {
+          return
+        }
+
+        try {
+          onEvent(JSON.parse(line) as NtfsFastScannerBridgeEvent)
+        } catch (error) {
+          const detail = error instanceof Error ? error.message : String(error)
+          settleReject(new Error(`NtfsFastScannerBridge JSON parse error on line ${lineNumber}: ${line} (${detail})`))
+        }
+      }
+
+      let lineNumber = 0
+
+      child.on('error', (error) => {
+        settleReject(error instanceof Error ? error : new Error(String(error)))
+      })
       child.stdout.on('data', (chunk: Buffer | string) => {
         stdoutBuffer += chunk.toString()
 
         let newlineIndex = stdoutBuffer.indexOf('\n')
-        while (newlineIndex !== -1) {
+        while (newlineIndex !== -1 && !settled) {
           const line = stdoutBuffer.slice(0, newlineIndex).trim()
           stdoutBuffer = stdoutBuffer.slice(newlineIndex + 1)
-
-          if (line) {
-            onEvent(JSON.parse(line) as NtfsFastScannerBridgeEvent)
-          }
-
+          lineNumber += 1
+          parseLine(line, lineNumber)
           newlineIndex = stdoutBuffer.indexOf('\n')
         }
       })
@@ -52,18 +94,54 @@ export class NtfsFastScannerBridge {
         stderr += chunk.toString()
       })
       child.on('close', (code) => {
-        if (stdoutBuffer.trim()) {
-          onEvent(JSON.parse(stdoutBuffer.trim()) as NtfsFastScannerBridgeEvent)
+        if (settled) {
+          return
+        }
+
+        if (cancelled) {
+          settleRejectFn?.(new Error('NtfsFastScannerBridge cancelled'))
+          return
         }
 
         if ((code ?? 0) !== 0) {
           const suffix = stderr.trim() ? `: ${stderr.trim()}` : ''
-          reject(new Error(`ntfs-fast-scan exited with code ${code ?? 0}${suffix}`))
+          settleRejectFn?.(new Error(`ntfs-fast-scan exited with code ${code ?? 0}${suffix}`))
           return
         }
 
-        resolve()
+        const finalLine = stdoutBuffer.trim()
+        if (finalLine) {
+          lineNumber += 1
+          parseLine(finalLine, lineNumber)
+          if (settled) {
+            return
+          }
+        }
+
+        settleResolve()
       })
     })
+
+    return {
+      done,
+      cancel: () => {
+        if (settled) {
+          return
+        }
+        cancelled = true
+        try {
+          child.kill()
+        } catch (error) {
+          if (!settled) {
+            settled = true
+            throw error
+          }
+        } finally {
+          if (!settled) {
+            settleRejectFn?.(new Error('NtfsFastScannerBridge cancelled'))
+          }
+        }
+      }
+    }
   }
 }
