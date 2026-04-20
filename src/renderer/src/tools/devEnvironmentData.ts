@@ -22,3 +22,13 @@ export function getDevEnvironmentActionLabel(action: 'install' | 'update' | 'ref
   if (action === 'open-related-tool') return '前往 WSL 管理'
   return '重新检测'
 }
+
+export function getDevEnvironmentStatusLabel(status: string) {
+  if (status === 'installed') return '已安装'
+  if (status === 'missing') return '未安装'
+  if (status === 'broken') return '异常'
+  if (status === 'available-update') return '可更新'
+  if (status === 'linked') return '附属'
+  if (status === 'external') return '外部'
+  return status
+}

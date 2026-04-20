@@ -44,6 +44,12 @@ export type DevEnvironmentOverview = {
   wingetAvailable: boolean
 }
 
+const UNREADABLE_PATH_PATTERNS = [
+  /�/,
+  /[\u0000-\u001f]/,
+  /^\?+$/
+]
+
 export const DEV_ENVIRONMENT_WINGET_TARGETS: Record<string, string> = {
   nodejs: 'OpenJS.NodeJS.LTS',
   git: 'Git.Git',
@@ -84,7 +90,12 @@ export function normalizePinnedToolIds(
 export function getDevEnvironmentSummary(records: Array<{ status: DevEnvironmentStatus }>) {
   return records.reduce(
     (summary, record) => {
-      if (record.status === 'installed') summary.installedCount += 1
+      if (
+        record.status === 'installed' ||
+        record.status === 'available-update' ||
+        record.status === 'linked' ||
+        record.status === 'external'
+      ) summary.installedCount += 1
       if (record.status === 'missing') summary.missingCount += 1
       if (record.status === 'broken') summary.brokenCount += 1
       if (record.status === 'available-update') summary.updateCount += 1
@@ -101,4 +112,17 @@ export function getDevEnvironmentSummary(records: Array<{ status: DevEnvironment
       externalCount: 0
     }
   )
+}
+
+export function sanitizeDevEnvironmentPath(value: string | null | undefined) {
+  const trimmed = value?.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  if (UNREADABLE_PATH_PATTERNS.some((pattern) => pattern.test(trimmed))) {
+    return null
+  }
+
+  return trimmed
 }

@@ -9,6 +9,35 @@ export enum LogLevel {
   ERROR = 'ERROR'
 }
 
+type ConsoleLike = Pick<typeof console, 'log' | 'warn' | 'error'>
+
+function isBrokenPipeLikeError(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    ('code' in error) &&
+    (((error as NodeJS.ErrnoException).code === 'EPIPE') ||
+      ((error as NodeJS.ErrnoException).code === 'ERR_STREAM_DESTROYED'))
+  )
+}
+
+export function writeConsoleEntry(level: LogLevel, logEntry: string, consoleLike: ConsoleLike = console) {
+  try {
+    if (level === LogLevel.ERROR) {
+      consoleLike.error(logEntry)
+    } else if (level === LogLevel.WARN) {
+      consoleLike.warn(logEntry)
+    } else {
+      consoleLike.log(logEntry)
+    }
+  } catch (error) {
+    if (isBrokenPipeLikeError(error)) {
+      return
+    }
+    throw error
+  }
+}
+
 class Logger {
   private logPath: string
 
@@ -29,14 +58,7 @@ class Logger {
     const logEntry = `[${timestamp}] [${level}] ${message} ${formattedArgs}
 `
 
-    // Output to console
-    if (level === LogLevel.ERROR) {
-      console.error(logEntry)
-    } else if (level === LogLevel.WARN) {
-      console.warn(logEntry)
-    } else {
-      console.log(logEntry)
-    }
+    writeConsoleEntry(level, logEntry)
 
     // Persist to file asynchronously
     this.queueLog(logEntry)

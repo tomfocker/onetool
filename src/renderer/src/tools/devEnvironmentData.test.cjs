@@ -38,7 +38,11 @@ function loadDevEnvironmentDataModule() {
   return module.exports
 }
 
-const { DEV_ENVIRONMENT_DISPLAY_LIST, getDevEnvironmentActionLabel } = loadDevEnvironmentDataModule()
+const {
+  DEV_ENVIRONMENT_DISPLAY_LIST,
+  getDevEnvironmentActionLabel,
+  getDevEnvironmentStatusLabel
+} = loadDevEnvironmentDataModule()
 
 test('dev environment display list keeps WSL in the overview but marks it as managed elsewhere', () => {
   const wsl = DEV_ENVIRONMENT_DISPLAY_LIST.find((item) => item.id === 'wsl')
@@ -53,4 +57,10 @@ test('getDevEnvironmentActionLabel maps supported card actions', () => {
   assert.equal(getDevEnvironmentActionLabel('update'), '更新')
   assert.equal(getDevEnvironmentActionLabel('open-related-tool'), '前往 WSL 管理')
   assert.equal(getDevEnvironmentActionLabel('refresh'), '重新检测')
+})
+
+test('getDevEnvironmentStatusLabel maps internal statuses to readable Chinese labels', () => {
+  assert.equal(getDevEnvironmentStatusLabel('available-update'), '可更新')
+  assert.equal(getDevEnvironmentStatusLabel('broken'), '异常')
+  assert.equal(getDevEnvironmentStatusLabel('linked'), '附属')
 })

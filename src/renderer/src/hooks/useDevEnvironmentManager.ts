@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
-import { getDevEnvironmentSummary } from '../../../shared/devEnvironment'
+import { getDevEnvironmentSummary, sanitizeDevEnvironmentPath } from '../../../shared/devEnvironment'
 
 export function resolveDevEnvironmentActionAvailability(record: Pick<DevEnvironmentRecord, 'id' | 'status' | 'canInstall' | 'canUpdate'>) {
   return {
@@ -13,8 +13,12 @@ export function resolveDevEnvironmentActionAvailability(record: Pick<DevEnvironm
 
 export function buildDevEnvironmentViewModel(overview: DevEnvironmentOverview | null) {
   const summary = overview?.summary ?? getDevEnvironmentSummary([])
+  const records = (overview?.records ?? []).map((record) => ({
+    ...record,
+    resolvedPath: sanitizeDevEnvironmentPath(record.resolvedPath)
+  }))
   return {
-    records: overview?.records ?? [],
+    records,
     summaryCards: [
       { id: 'installed', label: '已安装', value: summary.installedCount },
       { id: 'missing', label: '缺失', value: summary.missingCount },

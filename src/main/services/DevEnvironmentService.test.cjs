@@ -18,6 +18,9 @@ function loadDevEnvironmentServiceModule(overrides = {}) {
   }).outputText
 
   const module = { exports: {} }
+  const exec = overrides.exec || (() => {
+    throw new Error('exec stub not provided')
+  })
   const execSync = overrides.execSync || (() => { throw new Error('missing command') })
   const spawn = overrides.spawn || (() => ({ stdout: { on() {} }, stderr: { on() {} }, on() {} }))
   const logger = overrides.logger || { info() {}, warn() {}, error() {} }
@@ -27,11 +30,15 @@ function loadDevEnvironmentServiceModule(overrides = {}) {
 
   const customRequire = (specifier) => {
     if (specifier === 'child_process') {
-      return { execSync, spawn }
+      return { exec, execSync, spawn }
     }
 
     if (specifier === '../utils/logger') {
       return { logger }
+    }
+
+    if (specifier === '../utils/processUtils.helpers') {
+      return require(path.join(__dirname, '../utils/processUtils.helpers.ts'))
     }
 
     if (specifier === './wslUtils') {
@@ -98,6 +105,17 @@ test('inspectAll returns installed linked and external environment states with p
   }
 
   const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
+    exec(command, _options, callback) {
+      const done = typeof _options === 'function' ? _options : callback
+      if (!(command in commandOutputs)) {
+        done(new Error(`unexpected async command: ${command}`), Buffer.alloc(0), Buffer.alloc(0))
+        return { pid: 1234 }
+      }
+      setImmediate(() => {
+        done(null, Buffer.from(commandOutputs[command]), Buffer.alloc(0))
+      })
+      return { pid: 1234 }
+    },
     execSync(command) {
       if (!(command in commandOutputs)) {
         throw new Error(`unexpected command: ${command}`)
@@ -124,8 +142,73 @@ test('inspectAll returns installed linked and external environment states with p
   assert.equal(result.data.wingetAvailable, true)
 })
 
+test('inspectAll can complete through async process execution without execSync', async () => {
+  const commandOutputs = {
+    'winget --version': 'v1.8.1911\r\n',
+    'node --version': 'v22.15.0\r\n',
+    'where.exe node': 'C:\\Program Files\\nodejs\\node.exe\r\n',
+    'npm --version': '10.9.2\r\n',
+    'where.exe npm': 'C:\\Program Files\\nodejs\\npm.cmd\r\n',
+    'git --version': 'git version 2.49.0.windows.1\r\n',
+    'where.exe git': 'C:\\Program Files\\Git\\cmd\\git.exe\r\n',
+    'python --version': 'Python 3.12.9\r\n',
+    'where.exe python': 'C:\\Python312\\python.exe\r\n',
+    'pip --version': 'pip 24.0 from C:\\Python312\\Lib\\site-packages\\pip (python 3.12)\r\n',
+    'where.exe pip': 'C:\\Python312\\Scripts\\pip.exe\r\n',
+    'go version': 'go version go1.24.2 windows/amd64\r\n',
+    'where.exe go': 'C:\\Go\\bin\\go.exe\r\n',
+    'java -version 2>&1': 'openjdk version "17.0.14" 2025-01-21\r\n',
+    'where.exe java': 'C:\\Program Files\\Microsoft\\jdk-17\\bin\\java.exe\r\n',
+    'winget upgrade --id OpenJS.NodeJS.LTS --accept-source-agreements': 'No available upgrade found.\r\n',
+    'winget upgrade --id Git.Git --accept-source-agreements': 'Git.Git  2.49.0  2.50.0 winget\r\n',
+    'winget upgrade --id Python.Python.3.12 --accept-source-agreements': 'No available upgrade found.\r\n',
+    'winget upgrade --id GoLang.Go --accept-source-agreements': 'No available upgrade found.\r\n',
+    'winget upgrade --id Microsoft.OpenJDK.17 --accept-source-agreements': 'No available upgrade found.\r\n'
+  }
+
+  const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
+    exec(_command, _options, callback) {
+      const command = typeof _options === 'function' ? _command : _command
+      const done = typeof _options === 'function' ? _options : callback
+      if (!(command in commandOutputs)) {
+        done(new Error(`unexpected async command: ${command}`), Buffer.alloc(0), Buffer.alloc(0))
+        return { pid: 1234 }
+      }
+      setImmediate(() => {
+        done(null, Buffer.from(commandOutputs[command]), Buffer.alloc(0))
+      })
+      return { pid: 1234 }
+    },
+    execSync() {
+      throw new Error('sync commands are not allowed in inspectAll')
+    },
+    wslService: {
+      getOverview: async () => ({
+        success: true,
+        data: { available: true, distros: [{ name: 'Ubuntu', state: 'Running' }], defaultDistro: 'Ubuntu' }
+      })
+    }
+  })
+
+  const service = new DevEnvironmentService()
+  const result = await service.inspectAll()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.records.find((item) => item.id === 'nodejs').detectedVersion, '22.15.0')
+  assert.equal(result.data.records.find((item) => item.id === 'git').status, 'available-update')
+})
+
 test('inspectOne marks a missing command as missing', async () => {
   const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
+    exec(command, _options, callback) {
+      const done = typeof _options === 'function' ? _options : callback
+      if (command === 'winget --version') {
+        setImmediate(() => done(null, Buffer.from('v1.8.1911\r\n'), Buffer.alloc(0)))
+        return { pid: 1234 }
+      }
+      setImmediate(() => done(new Error('command not found'), Buffer.alloc(0), Buffer.alloc(0)))
+      return { pid: 1234 }
+    },
     execSync(command) {
       if (command === 'winget --version') return Buffer.from('v1.8.1911\r\n')
       throw new Error('command not found')
@@ -141,6 +224,23 @@ test('inspectOne marks a missing command as missing', async () => {
 
 test('inspectOne marks an unparseable but reachable command as broken', async () => {
   const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
+    exec(command, _options, callback) {
+      const done = typeof _options === 'function' ? _options : callback
+      if (command === 'winget --version') {
+        setImmediate(() => done(null, Buffer.from('v1.8.1911\r\n'), Buffer.alloc(0)))
+        return { pid: 1234 }
+      }
+      if (command === 'go version') {
+        setImmediate(() => done(null, Buffer.from('garbled output'), Buffer.alloc(0)))
+        return { pid: 1234 }
+      }
+      if (command === 'where.exe go') {
+        setImmediate(() => done(null, Buffer.from('C:\\Go\\bin\\go.exe\r\n'), Buffer.alloc(0)))
+        return { pid: 1234 }
+      }
+      setImmediate(() => done(new Error(`unexpected command: ${command}`), Buffer.alloc(0), Buffer.alloc(0)))
+      return { pid: 1234 }
+    },
     execSync(command) {
       if (command === 'winget --version') return Buffer.from('v1.8.1911\r\n')
       if (command === 'go version') return Buffer.from('garbled output')

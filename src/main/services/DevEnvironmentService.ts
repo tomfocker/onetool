@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
 import { EventEmitter } from 'events'
-import { execSync, spawn } from 'child_process'
+import { exec, spawn } from 'child_process'
 import type { ChildProcessWithoutNullStreams } from 'child_process'
 import type { IpcResponse } from '../../shared/types'
 import {
@@ -12,7 +12,7 @@ import {
   type DevEnvironmentOverview,
   type DevEnvironmentRecord
 } from '../../shared/devEnvironment'
-import { logger } from '../utils/logger'
+import { selectCommandTextOutput } from '../utils/processUtils.helpers'
 import { wslService } from './WslService'
 
 type ManagedEnvironmentId = Extract<DevEnvironmentId, 'nodejs' | 'git' | 'python' | 'go' | 'java'>
@@ -48,9 +48,27 @@ function getVersionCommand(id: Exclude<DevEnvironmentId, 'wsl'>) {
   return 'java -version 2>&1'
 }
 
-function getResolvedPath(commandName: string) {
+function execText(command: string) {
+  return new Promise<string>((resolve, reject) => {
+    exec(command, {
+      windowsHide: true,
+      encoding: 'buffer',
+      timeout: 10000,
+      maxBuffer: 1024 * 1024
+    }, (error, stdout, stderr) => {
+      const output = selectCommandTextOutput(stdout, stderr)
+      if (error && !output) {
+        reject(error)
+        return
+      }
+      resolve(output)
+    })
+  })
+}
+
+async function getResolvedPath(commandName: string) {
   try {
-    const output = execSync(`where.exe ${commandName}`, { windowsHide: true }).toString().trim()
+    const output = await execText(`where.exe ${commandName}`)
     return output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)[0] ?? null
   } catch {
     return null
@@ -94,22 +112,22 @@ export class DevEnvironmentService extends EventEmitter {
     }
   }
 
-  private isWingetAvailable() {
+  private async isWingetAvailable() {
     try {
-      execSync('winget --version', { windowsHide: true })
+      await execText('winget --version')
       return true
     } catch {
       return false
     }
   }
 
-  private inspectManagedEnvironment(id: Exclude<DevEnvironmentId, 'npm' | 'pip' | 'wsl'>, wingetAvailable: boolean): DevEnvironmentRecord {
+  private async inspectManagedEnvironment(id: Exclude<DevEnvironmentId, 'npm' | 'pip' | 'wsl'>, wingetAvailable: boolean): Promise<DevEnvironmentRecord> {
     const commandName = id === 'nodejs' ? 'node' : id
-    const resolvedPath = getResolvedPath(commandName)
+    const resolvedPath = await getResolvedPath(commandName)
     const notes: string[] = []
 
     try {
-      const versionOutput = execSync(getVersionCommand(id), { windowsHide: true }).toString()
+      const versionOutput = await execText(getVersionCommand(id))
       const detectedVersion = parseVersion(id, versionOutput)
       if (!detectedVersion) {
         return {
@@ -130,7 +148,7 @@ export class DevEnvironmentService extends EventEmitter {
         const wingetId = DEV_ENVIRONMENT_WINGET_TARGETS[id]
         if (wingetId) {
           try {
-            const upgradeOutput = execSync(`winget upgrade --id ${wingetId} --accept-source-agreements`, { windowsHide: true }).toString()
+            const upgradeOutput = await execText(`winget upgrade --id ${wingetId} --accept-source-agreements`)
             if (hasWingetUpgrade(upgradeOutput)) {
               status = 'available-update'
               canUpdate = true
@@ -178,13 +196,13 @@ export class DevEnvironmentService extends EventEmitter {
     }
   }
 
-  private buildLinkedEnvironment(id: 'npm' | 'pip', parent: DevEnvironmentRecord): DevEnvironmentRecord {
+  private async buildLinkedEnvironment(id: 'npm' | 'pip', parent: DevEnvironmentRecord): Promise<DevEnvironmentRecord> {
     const config = LINKED_ENVIRONMENT_CONFIG[id]
     const commandName = id
-    const resolvedPath = getResolvedPath(commandName)
+    const resolvedPath = await getResolvedPath(commandName)
 
     try {
-      const versionOutput = execSync(getVersionCommand(id), { windowsHide: true }).toString()
+      const versionOutput = await execText(getVersionCommand(id))
       const detectedVersion = parseVersion(id, versionOutput)
       return {
         id,
@@ -254,40 +272,53 @@ export class DevEnvironmentService extends EventEmitter {
   }
 
   async inspectOne(id: DevEnvironmentId): Promise<IpcResponse<DevEnvironmentRecord>> {
-    const wingetAvailable = this.isWingetAvailable()
+    const wingetAvailable = await this.isWingetAvailable()
     if (id === 'npm') {
-      return { success: true, data: this.buildLinkedEnvironment('npm', this.inspectManagedEnvironment('nodejs', wingetAvailable)) }
+      const nodeRecord = await this.inspectManagedEnvironment('nodejs', wingetAvailable)
+      return { success: true, data: await this.buildLinkedEnvironment('npm', nodeRecord) }
     }
     if (id === 'pip') {
-      return { success: true, data: this.buildLinkedEnvironment('pip', this.inspectManagedEnvironment('python', wingetAvailable)) }
+      const pythonRecord = await this.inspectManagedEnvironment('python', wingetAvailable)
+      return { success: true, data: await this.buildLinkedEnvironment('pip', pythonRecord) }
     }
     if (id === 'wsl') {
       return { success: true, data: await this.buildWslRecord() }
     }
-    return { success: true, data: this.inspectManagedEnvironment(id, wingetAvailable) }
+    return { success: true, data: await this.inspectManagedEnvironment(id, wingetAvailable) }
   }
 
   async inspectAll(): Promise<IpcResponse<DevEnvironmentOverview>> {
-    const wingetAvailable = this.isWingetAvailable()
+    const wingetAvailable = await this.isWingetAvailable()
+    const [
+      nodejsRecord,
+      gitRecord,
+      pythonRecord,
+      goRecord,
+      javaRecord,
+      wslRecord
+    ] = await Promise.all([
+      this.inspectManagedEnvironment('nodejs', wingetAvailable),
+      this.inspectManagedEnvironment('git', wingetAvailable),
+      this.inspectManagedEnvironment('python', wingetAvailable),
+      this.inspectManagedEnvironment('go', wingetAvailable),
+      this.inspectManagedEnvironment('java', wingetAvailable),
+      this.buildWslRecord()
+    ])
+    const [npmRecord, pipRecord] = await Promise.all([
+      this.buildLinkedEnvironment('npm', nodejsRecord),
+      this.buildLinkedEnvironment('pip', pythonRecord)
+    ])
+
     const records: DevEnvironmentRecord[] = []
-
-    const nodejsRecord = this.inspectManagedEnvironment('nodejs', wingetAvailable)
-    const pythonRecord = this.inspectManagedEnvironment('python', wingetAvailable)
-
     for (const id of DEV_ENVIRONMENT_IDS) {
-      if (id === 'nodejs') {
-        records.push(nodejsRecord)
-      } else if (id === 'python') {
-        records.push(pythonRecord)
-      } else if (id === 'npm') {
-        records.push(this.buildLinkedEnvironment('npm', nodejsRecord))
-      } else if (id === 'pip') {
-        records.push(this.buildLinkedEnvironment('pip', pythonRecord))
-      } else if (id === 'wsl') {
-        records.push(await this.buildWslRecord())
-      } else {
-        records.push(this.inspectManagedEnvironment(id, wingetAvailable))
-      }
+      if (id === 'nodejs') records.push(nodejsRecord)
+      else if (id === 'npm') records.push(npmRecord)
+      else if (id === 'git') records.push(gitRecord)
+      else if (id === 'python') records.push(pythonRecord)
+      else if (id === 'pip') records.push(pipRecord)
+      else if (id === 'go') records.push(goRecord)
+      else if (id === 'java') records.push(javaRecord)
+      else if (id === 'wsl') records.push(wslRecord)
     }
 
     return {
@@ -302,55 +333,58 @@ export class DevEnvironmentService extends EventEmitter {
   }
 
   private runWingetAction(action: OperationAction, id: ManagedEnvironmentId): Promise<IpcResponse> {
-    if (!this.isWingetAvailable()) {
-      return Promise.resolve({ success: false, error: '未检测到 winget，无法执行安装或更新' })
-    }
-
-    const wingetId = DEV_ENVIRONMENT_WINGET_TARGETS[id]
-    if (!wingetId) {
-      return Promise.resolve({ success: false, error: '当前环境不支持通过 winget 管理' })
-    }
-
-    const args = action === 'install'
-      ? ['install', '--id', wingetId, '--accept-package-agreements', '--accept-source-agreements', '--silent']
-      : ['upgrade', '--id', wingetId, '--accept-package-agreements', '--accept-source-agreements', '--silent']
-
-    this.emitLog('info', `正在${action === 'install' ? '安装' : '更新'} ${id}...`)
-
     return new Promise((resolve) => {
-      this.currentProcess = spawn('winget', args, { windowsHide: true }) as ChildProcessWithoutNullStreams
-
-      this.currentProcess.stdout.on('data', (data) => {
-        const message = data.toString().trim()
-        if (message) this.emitLog('stdout', message)
-      })
-      this.currentProcess.stderr.on('data', (data) => {
-        const message = data.toString().trim()
-        if (message) this.emitLog('stderr', message)
-      })
-
-      this.currentProcess.on('close', (code) => {
-        this.currentProcess = null
-        if (code === 0) {
-          const message = `${id} ${action === 'install' ? '安装' : '更新'}完成`
-          this.emitLog('success', message)
-          this.emitComplete(true, message)
-          resolve({ success: true })
+      void this.isWingetAvailable().then((wingetAvailable) => {
+        if (!wingetAvailable) {
+          resolve({ success: false, error: '未检测到 winget，无法执行安装或更新' })
           return
         }
 
-        const message = `${id} ${action === 'install' ? '安装' : '更新'}失败`
-        this.emitLog('error', message)
-        this.emitComplete(false, message)
-        resolve({ success: false, error: message })
-      })
+        const wingetId = DEV_ENVIRONMENT_WINGET_TARGETS[id]
+        if (!wingetId) {
+          resolve({ success: false, error: '当前环境不支持通过 winget 管理' })
+          return
+        }
 
-      this.currentProcess.on('error', (error) => {
-        this.currentProcess = null
-        const message = error instanceof Error ? error.message : String(error)
-        this.emitLog('error', message)
-        this.emitComplete(false, message)
-        resolve({ success: false, error: message })
+        const args = action === 'install'
+          ? ['install', '--id', wingetId, '--accept-package-agreements', '--accept-source-agreements', '--silent']
+          : ['upgrade', '--id', wingetId, '--accept-package-agreements', '--accept-source-agreements', '--silent']
+
+        this.emitLog('info', `正在${action === 'install' ? '安装' : '更新'} ${id}...`)
+        this.currentProcess = spawn('winget', args, { windowsHide: true }) as ChildProcessWithoutNullStreams
+
+        this.currentProcess.stdout.on('data', (data) => {
+          const message = data.toString().trim()
+          if (message) this.emitLog('stdout', message)
+        })
+        this.currentProcess.stderr.on('data', (data) => {
+          const message = data.toString().trim()
+          if (message) this.emitLog('stderr', message)
+        })
+
+        this.currentProcess.on('close', (code) => {
+          this.currentProcess = null
+          if (code === 0) {
+            const message = `${id} ${action === 'install' ? '安装' : '更新'}完成`
+            this.emitLog('success', message)
+            this.emitComplete(true, message)
+            resolve({ success: true })
+            return
+          }
+
+          const message = `${id} ${action === 'install' ? '安装' : '更新'}失败`
+          this.emitLog('error', message)
+          this.emitComplete(false, message)
+          resolve({ success: false, error: message })
+        })
+
+        this.currentProcess.on('error', (error) => {
+          this.currentProcess = null
+          const message = error instanceof Error ? error.message : String(error)
+          this.emitLog('error', message)
+          this.emitComplete(false, message)
+          resolve({ success: false, error: message })
+        })
       })
     })
   }

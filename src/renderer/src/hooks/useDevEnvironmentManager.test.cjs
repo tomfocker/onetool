@@ -63,13 +63,13 @@ function toPlainObject(value) {
 test('buildDevEnvironmentViewModel exposes summary cards and keeps record ordering', () => {
   const viewModel = buildDevEnvironmentViewModel({
     records: [
-      { id: 'nodejs', status: 'installed' },
-      { id: 'npm', status: 'linked' },
-      { id: 'git', status: 'available-update' },
-      { id: 'wsl', status: 'external' }
+      { id: 'nodejs', status: 'installed', resolvedPath: 'C:\\Program Files\\nodejs\\node.exe' },
+      { id: 'npm', status: 'linked', resolvedPath: null },
+      { id: 'git', status: 'available-update', resolvedPath: 'C:\\Program Files\\Git\\cmd\\git.exe' },
+      { id: 'wsl', status: 'external', resolvedPath: null }
     ],
     summary: {
-      installedCount: 1,
+      installedCount: 4,
       missingCount: 0,
       brokenCount: 0,
       updateCount: 1,
@@ -80,9 +80,38 @@ test('buildDevEnvironmentViewModel exposes summary cards and keeps record orderi
     wingetAvailable: true
   })
 
-  assert.equal(viewModel.summaryCards[0].value, 1)
+  assert.equal(viewModel.summaryCards[0].value, 4)
   assert.equal(viewModel.records[0].id, 'nodejs')
   assert.equal(viewModel.records[1].id, 'npm')
+})
+
+test('buildDevEnvironmentViewModel sanitizes unreadable paths before rendering', () => {
+  const viewModel = buildDevEnvironmentViewModel({
+    records: [
+      {
+        id: 'go',
+        status: 'broken',
+        detectedVersion: null,
+        resolvedPath: '��U: ����s���g�',
+        manager: 'winget',
+        canInstall: false,
+        canUpdate: false,
+        notes: ['命令可执行，但版本输出无法解析']
+      }
+    ],
+    summary: {
+      installedCount: 0,
+      missingCount: 0,
+      brokenCount: 1,
+      updateCount: 0,
+      linkedCount: 0,
+      externalCount: 0
+    },
+    checkedAt: '2026-04-20T12:00:00.000Z',
+    wingetAvailable: true
+  })
+
+  assert.equal(viewModel.records[0].resolvedPath, null)
 })
 
 test('resolveDevEnvironmentActionAvailability hides install and update for linked environments', () => {

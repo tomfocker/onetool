@@ -6,7 +6,8 @@ const {
   DEV_ENVIRONMENT_WINGET_TARGETS,
   DEFAULT_PINNED_TOOL_IDS,
   getDevEnvironmentSummary,
-  normalizePinnedToolIds
+  normalizePinnedToolIds,
+  sanitizeDevEnvironmentPath
 } = require('./devEnvironment.ts')
 
 test('supported dev environment ids stay in the expected first-version order', () => {
@@ -46,7 +47,7 @@ test('normalizePinnedToolIds removes duplicates, invalid ids, and respects the m
   )
 })
 
-test('getDevEnvironmentSummary counts installed, missing, broken, update, linked, and external states correctly', () => {
+test('getDevEnvironmentSummary treats linked, external, and updatable tools as already present', () => {
   assert.deepEqual(
     getDevEnvironmentSummary([
       { status: 'installed' },
@@ -57,7 +58,7 @@ test('getDevEnvironmentSummary counts installed, missing, broken, update, linked
       { status: 'external' }
     ]),
     {
-      installedCount: 1,
+      installedCount: 4,
       missingCount: 1,
       brokenCount: 1,
       updateCount: 1,
@@ -65,4 +66,10 @@ test('getDevEnvironmentSummary counts installed, missing, broken, update, linked
       externalCount: 1
     }
   )
+})
+
+test('sanitizeDevEnvironmentPath hides unreadable paths and preserves valid ones', () => {
+  assert.equal(sanitizeDevEnvironmentPath('C:\\Program Files\\Go\\bin\\go.exe'), 'C:\\Program Files\\Go\\bin\\go.exe')
+  assert.equal(sanitizeDevEnvironmentPath('��U: ����s���g�\u0000��'), null)
+  assert.equal(sanitizeDevEnvironmentPath('   '), null)
 })

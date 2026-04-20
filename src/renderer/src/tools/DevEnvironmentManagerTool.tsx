@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { useGlobalStore } from '@/store'
-import { DEV_ENVIRONMENT_DISPLAY_LIST, getDevEnvironmentActionLabel } from './devEnvironmentData'
+import { DEV_ENVIRONMENT_DISPLAY_LIST, getDevEnvironmentActionLabel, getDevEnvironmentStatusLabel } from './devEnvironmentData'
 import { useDevEnvironmentManager, resolveDevEnvironmentActionAvailability } from '../hooks/useDevEnvironmentManager'
 
 export default function DevEnvironmentManagerTool() {
@@ -24,9 +24,9 @@ export default function DevEnvironmentManagerTool() {
   const recordsById = new Map(viewModel.records.map((record) => [record.id, record]))
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
+    <div className="space-y-5">
+      <div className="space-y-1">
+        <h2 className="text-2xl font-bold flex items-center gap-2">
           <Code className="w-6 h-6 text-primary" />
           开发环境
         </h2>
@@ -34,43 +34,43 @@ export default function DevEnvironmentManagerTool() {
       </div>
 
       <Card className="border-0 shadow-md">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between pb-4">
           <div>
             <CardTitle>环境总览</CardTitle>
             <CardDescription>
               {viewModel.checkedAt ? `最近检测 ${new Date(viewModel.checkedAt).toLocaleString('zh-CN')}` : '等待首次检测'}
             </CardDescription>
           </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={() => void refreshAll()} disabled={pendingAction === 'refresh-all'}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => void refreshAll()} disabled={pendingAction === 'refresh-all'}>
               <RefreshCw className="w-4 h-4 mr-2" />
               重新检测全部
             </Button>
-            <Button onClick={() => void updateAll()} disabled={!viewModel.wingetAvailable || pendingAction === 'update-all'}>
+            <Button size="sm" onClick={() => void updateAll()} disabled={!viewModel.wingetAvailable || pendingAction === 'update-all'}>
               <Download className="w-4 h-4 mr-2" />
               更新全部可更新项
             </Button>
           </div>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
             {viewModel.summaryCards.map((card) => (
-              <div key={card.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 p-4">
+              <div key={card.id} className="rounded-2xl border border-zinc-200 dark:border-zinc-800 px-4 py-3">
                 <div className="text-xs uppercase tracking-widest text-muted-foreground">{card.label}</div>
-                <div className="text-3xl font-black mt-2">{card.value}</div>
+                <div className="text-3xl font-black mt-1">{card.value}</div>
               </div>
             ))}
           </div>
           {!viewModel.wingetAvailable && (
-            <div className="mt-4 rounded-2xl border border-amber-400/30 bg-amber-500/5 p-4 text-sm text-amber-700 dark:text-amber-300 flex gap-2">
-              <AlertTriangle className="w-4 h-4 mt-0.5" />
+            <div className="mt-3 rounded-2xl border border-amber-400/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-300 flex gap-2">
+              <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
               未检测到 winget，当前仍可查看环境状态，但安装和更新按钮会禁用。
             </div>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <div className="grid gap-3 xl:grid-cols-2">
         {DEV_ENVIRONMENT_DISPLAY_LIST.map((item) => {
           const record = recordsById.get(item.id)
           const actions = resolveDevEnvironmentActionAvailability(record ?? {
@@ -82,22 +82,30 @@ export default function DevEnvironmentManagerTool() {
 
           return (
             <Card key={item.id} className="border-0 shadow-sm">
-              <CardHeader>
+              <CardHeader className="pb-3">
                 <div className="flex items-center justify-between gap-3">
                   <div>
-                    <CardTitle className="text-lg">{item.name}</CardTitle>
+                    <CardTitle className="text-xl">{item.name}</CardTitle>
                     <CardDescription>{item.description}</CardDescription>
                   </div>
-                  <Badge variant="outline">{record?.status ?? 'missing'}</Badge>
+                  <Badge variant="outline">{getDevEnvironmentStatusLabel(record?.status ?? 'missing')}</Badge>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="text-sm">
-                  <div>版本：{record?.detectedVersion ?? '未检测到'}</div>
-                  <div className="truncate">路径：{record?.resolvedPath ?? '未检测到'}</div>
+              <CardContent className="space-y-3 pt-0">
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div className="rounded-xl bg-zinc-50/80 dark:bg-zinc-900/60 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-widest text-muted-foreground">版本</div>
+                    <div className="mt-1 font-medium">{record?.detectedVersion ?? '未检测到'}</div>
+                  </div>
+                  <div className="rounded-xl bg-zinc-50/80 dark:bg-zinc-900/60 px-3 py-2">
+                    <div className="text-[11px] uppercase tracking-widest text-muted-foreground">路径</div>
+                    <div className="mt-1 truncate font-medium" title={record?.resolvedPath ?? '未检测到'}>
+                      {record?.resolvedPath ?? '未检测到'}
+                    </div>
+                  </div>
                 </div>
                 {record?.notes?.length ? (
-                  <div className="text-xs text-muted-foreground">{record.notes.join(' / ')}</div>
+                  <div className="text-xs text-muted-foreground leading-5">{record.notes.join(' / ')}</div>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
                   <Button variant="outline" size="sm" onClick={() => void refreshOne(item.id)}>
@@ -135,7 +143,7 @@ export default function DevEnvironmentManagerTool() {
       </div>
 
       <Card className="border-0 shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-row items-center justify-between pb-3">
           <div>
             <CardTitle>运行日志</CardTitle>
             <CardDescription>显示检测、安装和更新过程中的即时输出。</CardDescription>
@@ -143,7 +151,7 @@ export default function DevEnvironmentManagerTool() {
           <Button variant="outline" size="sm" onClick={clearLogs}>清空日志</Button>
         </CardHeader>
         <CardContent>
-          <div className="rounded-2xl bg-zinc-950 text-zinc-100 p-4 font-mono text-xs h-72 overflow-auto space-y-2">
+          <div className="rounded-2xl bg-zinc-950 text-zinc-100 p-4 font-mono text-xs h-56 overflow-auto space-y-2">
             {logs.length === 0 ? (
               <div className="text-zinc-500">暂无日志输出</div>
             ) : logs.map((entry, index) => (
