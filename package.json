@@ -22,7 +22,7 @@
     "build": "npm run typecheck && electron-vite build",
     "build:ntfs-fast-scan": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build-ntfs-fast-scan.ps1",
     "postinstall": "electron-builder install-app-deps",
-    "build:unpack": "npm run build && electron-builder --dir",
+    "build:unpack": "npm run build:ntfs-fast-scan && npm run build && electron-builder --dir",
     "build:win": "npm run build:ntfs-fast-scan && npm run build && electron-builder --win",
     "release:win": "npm run build:ntfs-fast-scan && npm run build && electron-builder --win nsis portable --publish never",
     "build:mac": "npm run build && electron-builder --mac",
@@ -65,7 +65,7 @@
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
-    "electron": "^33.2.1",
+    "electron": "33.2.1",
     "electron-builder": "^25.1.8",
     "electron-vite": "^2.3.0",
     "eslint": "^9.15.0",
@@ -110,15 +110,17 @@
       {
         "from": "node_modules/ffmpeg-static/ffmpeg.exe",
         "to": "ffmpeg.exe"
-      },
-      {
-        "from": "resources/space-scan/ntfs-fast-scan.exe",
-        "to": "space-scan/ntfs-fast-scan.exe"
       }
     ],
     "win": {
       "target": "nsis",
-      "icon": "resources/icon.png"
+      "icon": "resources/icon.png",
+      "extraResources": [
+        {
+          "from": "resources/space-scan/ntfs-fast-scan.exe",
+          "to": "space-scan/ntfs-fast-scan.exe"
+        }
+      ]
     },
     "nsis": {
       "artifactName": "${productName}-${version}-win-${arch}-setup.${ext}",

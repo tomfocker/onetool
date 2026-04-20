@@ -2,7 +2,7 @@ import fs from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { BrowserWindow, clipboard, dialog, shell } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, shell } from 'electron'
 import type { IpcResponse } from '../../shared/types'
 import {
   createEmptySpaceCleanupSummary,
@@ -43,6 +43,12 @@ type TraversalState = {
 type MutableSummary = ReturnType<typeof createEmptySpaceCleanupSummary>
 
 function resolveNtfsFastScannerPath(pathModule: typeof path) {
+  const isPackaged = typeof app?.isPackaged === 'boolean' ? app.isPackaged : false
+
+  if (!isPackaged) {
+    return pathModule.join(process.cwd(), 'resources', 'space-scan', 'ntfs-fast-scan.exe')
+  }
+
   const resourcesPath = typeof process.resourcesPath === 'string' ? process.resourcesPath : process.cwd()
   return pathModule.join(resourcesPath, 'space-scan', 'ntfs-fast-scan.exe')
 }

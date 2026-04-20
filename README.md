@@ -65,6 +65,12 @@ npm install
 npm run dev
 ```
 
+如果要在开发环境里验证“空间清理”的 `NTFS` 极速扫描，请先执行一次：
+
+```bash
+npm run build:ntfs-fast-scan
+```
+
 ### 构建应用
 
 ```bash
@@ -96,6 +102,7 @@ Windows 发布链路说明见 [docs/distribution/windows-release.md](docs/distri
 - 仅支持 `Windows` 本地 `NTFS` 根盘，例如 `C:\`、`D:\`
 - 普通目录、网络盘、`exFAT`/`FAT32`/`ReFS` 等文件系统不会启用极速模式
 - 不满足条件或原生扫描失败时，会自动回退到普通扫描并显示原因
+- 开发环境下需要先运行 `npm run build:ntfs-fast-scan`，主进程才会从仓库内的 `resources/space-scan` 加载原生扫描器
 
 ## 📂 项目结构
 
