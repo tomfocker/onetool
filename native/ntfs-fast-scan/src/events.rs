@@ -223,3 +223,78 @@ fn json_string(value: &str) -> String {
     output.push('"');
     output
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ntfs::{EntryKind, ScanEntry, ScanSnapshot};
+
+    fn sample_snapshot() -> ScanSnapshot {
+        ScanSnapshot {
+            root_path: r"C:\".to_owned(),
+            filesystem: "NTFS".to_owned(),
+            root: ScanEntry {
+                path: r"C:\".to_owned(),
+                name: r"C:\".to_owned(),
+                kind: EntryKind::Directory,
+                size_bytes: 40,
+                children: vec![
+                    ScanEntry {
+                        path: r"C:\Games".to_owned(),
+                        name: "Games".to_owned(),
+                        kind: EntryKind::Directory,
+                        size_bytes: 32,
+                        children: vec![ScanEntry {
+                            path: r"C:\Games\game.bin".to_owned(),
+                            name: "game.bin".to_owned(),
+                            kind: EntryKind::File,
+                            size_bytes: 32,
+                            children: Vec::new(),
+                        }],
+                    },
+                    ScanEntry {
+                        path: r"C:\notes.txt".to_owned(),
+                        name: "notes.txt".to_owned(),
+                        kind: EntryKind::File,
+                        size_bytes: 8,
+                        children: Vec::new(),
+                    },
+                ],
+            },
+            files_scanned: 2,
+        }
+    }
+
+    #[test]
+    fn emits_events_in_expected_sequence() {
+        let event_types = build_scan_events(&sample_snapshot())
+            .into_iter()
+            .map(|event| event.event_type().to_owned())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            event_types,
+            vec![
+                "volume-info".to_owned(),
+                "top-level-summary".to_owned(),
+                "largest-files".to_owned(),
+                "complete".to_owned(),
+            ]
+        );
+    }
+
+    #[test]
+    fn serializes_summary_payloads_as_json_lines() {
+        let events = build_scan_events(&sample_snapshot());
+        let top_level = events[1].to_json_line();
+        let largest_files = events[2].to_json_line();
+        let complete = events[3].to_json_line();
+
+        assert!(top_level.contains("\"directories\":["));
+        assert!(top_level.contains("\"filesScanned\":2"));
+        assert!(largest_files.contains("\"items\":["));
+        assert!(largest_files.contains(&json_string(r"C:\Games\game.bin")));
+        assert!(complete.contains("\"totalBytes\":40"));
+        assert!(complete.contains("\"type\":\"directory\""));
+    }
+}
