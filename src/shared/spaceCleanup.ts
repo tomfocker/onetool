@@ -5,6 +5,8 @@ export type SpaceCleanupScanStatus =
   | 'cancelled'
   | 'failed'
 
+export type SpaceCleanupScanMode = 'filesystem' | 'ntfs-fast'
+
 export type SpaceCleanupNodeType = 'file' | 'directory'
 
 export type SpaceCleanupLargestFile = {
@@ -40,6 +42,9 @@ export type SpaceCleanupSession = {
   sessionId: string
   rootPath: string | null
   status: SpaceCleanupScanStatus
+  scanMode: SpaceCleanupScanMode
+  scanModeReason: string | null
+  isPartial: boolean
   startedAt: string | null
   finishedAt: string | null
   summary: SpaceCleanupSummary
@@ -63,6 +68,9 @@ export function createIdleSpaceCleanupSession(): SpaceCleanupSession {
     sessionId: 'idle',
     rootPath: null,
     status: 'idle',
+    scanMode: 'filesystem',
+    scanModeReason: null,
+    isPartial: false,
     startedAt: null,
     finishedAt: null,
     summary: createEmptySpaceCleanupSummary(),

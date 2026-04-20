@@ -79,6 +79,15 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
   return module.exports
 }
 
+test('idle space cleanup session includes scan mode metadata', () => {
+  const { createIdleSpaceCleanupSession } = require('../../shared/spaceCleanup.ts')
+  const session = createIdleSpaceCleanupSession()
+
+  assert.equal(session.scanMode, 'filesystem')
+  assert.equal(session.scanModeReason, null)
+  assert.equal(session.isPartial, false)
+})
+
 test('startScan aggregates nested directory sizes and largest files', async () => {
   const entries = {
     'C:\\scan': [
