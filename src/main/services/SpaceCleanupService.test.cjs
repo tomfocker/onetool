@@ -14,7 +14,7 @@ function createDirent(name, kind) {
   }
 }
 
-function createTree(rootPath, sizeBytes) {
+function createTree(rootPath, sizeBytes, skippedChildren = 0) {
   return {
     id: rootPath,
     name: rootPath,
@@ -24,7 +24,7 @@ function createTree(rootPath, sizeBytes) {
     childrenCount: 0,
     fileCount: 0,
     directoryCount: 0,
-    skippedChildren: 0,
+    skippedChildren,
     children: []
   }
 }
@@ -160,6 +160,42 @@ test('startScan uses ntfs-fast mode for eligible NTFS root volumes', async () =>
   assert.equal(result.data.scanMode, 'ntfs-fast')
   assert.equal(result.data.summary.totalBytes, 123)
   assert.equal(result.data.tree.path, 'D:\\')
+})
+
+test('startScan keeps ntfs-fast sessions partial when native complete reports skipped entries', async () => {
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 456,
+            scannedFiles: 2,
+            scannedDirectories: 1,
+            skippedEntries: 3,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\', 456, 3)
+        })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 4500, createId: () => 'session-fast-partial-1' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.status, 'completed')
+  assert.equal(result.data.isPartial, true)
+  assert.equal(result.data.summary.skippedEntries, 3)
+  assert.equal(result.data.tree.skippedChildren, 3)
 })
 
 test('startScan keeps filesystem mode and ineligibility reason for non-eligible paths', async () => {

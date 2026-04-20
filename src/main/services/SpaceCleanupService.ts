@@ -55,6 +55,26 @@ function getErrorMessage(error: unknown) {
   return String(error)
 }
 
+function treeHasSkippedEntries(node: SpaceCleanupNode | null | undefined): boolean {
+  if (!node) {
+    return false
+  }
+
+  if (node.skippedChildren > 0) {
+    return true
+  }
+
+  if (!Array.isArray(node.children) || node.children.length === 0) {
+    return false
+  }
+
+  return node.children.some((child) => treeHasSkippedEntries(child))
+}
+
+function shouldKeepNtfsSessionPartial(session: Pick<SpaceCleanupSession, 'summary' | 'tree'>): boolean {
+  return session.summary.skippedEntries > 0 || treeHasSkippedEntries(session.tree)
+}
+
 export class SpaceCleanupService {
   private mainWindow: BrowserWindow | null = null
   private currentSession: SpaceCleanupSession = createIdleSpaceCleanupSession()
@@ -285,7 +305,10 @@ export class SpaceCleanupService {
         ...this.currentSession,
         status: this.currentSession.status === 'cancelled' ? 'cancelled' : 'completed',
         finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString(),
-        isPartial: this.currentSession.status === 'cancelled' ? this.currentSession.isPartial : false
+        isPartial:
+          this.currentSession.status === 'cancelled'
+            ? this.currentSession.isPartial
+            : shouldKeepNtfsSessionPartial(this.currentSession)
       }
       this.emit('space-cleanup-complete', this.currentSession)
       return { success: true, data: this.currentSession }
@@ -359,7 +382,7 @@ export class SpaceCleanupService {
     if (event.type === 'complete') {
       nextSession.status = this.cancelled || nextSession.status === 'cancelled' ? 'cancelled' : 'completed'
       nextSession.finishedAt = new Date(this.now()).toISOString()
-      nextSession.isPartial = false
+      nextSession.isPartial = shouldKeepNtfsSessionPartial(nextSession)
       nextSession.error = null
     }
 
