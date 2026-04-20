@@ -47,6 +47,14 @@ function resolveNtfsFastScannerPath(pathModule: typeof path) {
   return pathModule.join(resourcesPath, 'space-scan', 'ntfs-fast-scan.exe')
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return String(error)
+}
+
 export class SpaceCleanupService {
   private mainWindow: BrowserWindow | null = null
   private currentSession: SpaceCleanupSession = createIdleSpaceCleanupSession()
@@ -121,7 +129,23 @@ export class SpaceCleanupService {
     this.activeNtfsFastScanRun = null
     this.emit('space-cleanup-progress', this.currentSession)
 
-    const eligibility = await this.getFastScanEligibility(rootPath)
+    let eligibility
+    try {
+      eligibility = await this.getFastScanEligibility(rootPath)
+    } catch (error) {
+      logger.warn('SpaceCleanup: fast eligibility lookup failed, falling back to filesystem scan', error)
+      if (this.cancelled || this.currentSession.status === 'cancelled') {
+        this.currentSession = {
+          ...this.currentSession,
+          status: 'cancelled',
+          finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
+        }
+        this.emit('space-cleanup-complete', this.currentSession)
+        return { success: true, data: this.currentSession }
+      }
+
+      return this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${getErrorMessage(error)}`)
+    }
 
     if (this.cancelled || this.currentSession.status === 'cancelled') {
       this.currentSession = {
@@ -244,9 +268,15 @@ export class SpaceCleanupService {
     }
     this.emit('space-cleanup-progress', this.currentSession)
 
-    const run = this.ntfsFastScannerBridge.start(rootPath, (event) => {
-      this.handleNtfsFastScanEvent(event)
-    })
+    let run: NtfsFastScannerRunHandle
+    try {
+      run = this.ntfsFastScannerBridge.start(rootPath, (event) => {
+        this.handleNtfsFastScanEvent(event)
+      })
+    } catch (error) {
+      logger.warn('SpaceCleanup: ntfs-fast startup failed, falling back to filesystem scan', error)
+      return this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${getErrorMessage(error)}`)
+    }
     this.activeNtfsFastScanRun = run
 
     try {

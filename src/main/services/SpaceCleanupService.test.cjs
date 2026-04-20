@@ -188,6 +188,63 @@ test('startScan keeps filesystem mode and ineligibility reason for non-eligible 
   assert.equal(result.data.summary.totalBytes, 7)
 })
 
+test('startScan falls back to filesystem scan when fast eligibility lookup fails', async () => {
+  const entries = {
+    'D:\\': [createDirent('fallback.bin', 'file')]
+  }
+  const stats = {
+    'D:\\': { isDirectory: () => true, size: 0 },
+    'D:\\fallback.bin': { isDirectory: () => false, size: 11 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => {
+      throw new Error('fsutil exploded')
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5500, createId: () => 'session-filesystem-2' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.summary.totalBytes, 11)
+})
+
+test('startScan falls back to filesystem scan when ntfs-fast startup throws', async () => {
+  const entries = {
+    'D:\\': [createDirent('fallback.bin', 'file')]
+  }
+  const stats = {
+    'D:\\': { isDirectory: () => true, size: 0 },
+    'D:\\fallback.bin': { isDirectory: () => false, size: 13 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start() {
+        throw new Error('spawn failed')
+      }
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5750, createId: () => 'session-filesystem-3' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.summary.totalBytes, 13)
+})
+
 test('cancelScan cancels an active ntfs-fast run through the bridge handle', async () => {
   let cancelCalls = 0
   let releaseScan
