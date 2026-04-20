@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OneTool | 控制晶体</title>
-    <meta name="description" content="OneTool 首页采用水晶科技 campaign 语言：全屏视频、冷白冰蓝晶体材质、横向 3D 分解工具箱，以及更像硬件发布页的节奏。">
+    <title>OneTool | Windows 日常工具箱</title>
+    <meta name="description" content="OneTool 把截图、录屏、批量重命名、剪贴板、二维码和系统辅助工具集中进一个清爽顺手的 Windows 桌面工具箱。">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700;900&display=swap" rel="stylesheet">
@@ -12,19 +12,20 @@
 </head>
 <body>
     <header class="site-header" id="top">
-        <nav class="site-nav">
+        <nav class="site-nav" aria-label="主页导航">
             <a class="nav-brand" href="#top" aria-label="OneTool 首页">
                 <span class="brand-mark"></span>
                 <span class="brand-wording">
                     <strong>OneTool</strong>
-                    <span>Control Crystal</span>
+                    <span>Windows Toolbox</span>
                 </span>
             </a>
 
             <div class="nav-links">
-                <a href="#crystal">概念</a>
-                <a href="#system">系统层</a>
-                <a href="#modules">模块目录</a>
+                <a href="#hero">首页</a>
+                <a href="#scenarios">日常场景</a>
+                <a href="#tools">工具矩阵</a>
+                <a href="#system">系统支持</a>
                 <a href="#download">下载</a>
             </div>
 
@@ -33,196 +34,89 @@
     </header>
 
     <main>
-        <section class="hero-scroll" aria-label="OneTool 水晶科技首屏">
-            <div class="hero-sticky">
-                <video
-                    class="hero-video"
-                    autoplay
-                    muted
-                    loop
-                    playsinline
-                    preload="auto"
-                    poster="hero-poster.jpg"
-                >
-                    <source src="hero-ambient.mp4" type="video/mp4">
-                </video>
-                <div class="hero-film"></div>
-                <div class="hero-aurora"></div>
-
-                <div class="hero-layout">
-                    <div class="hero-copy">
-                        <p class="hero-kicker">OneTool / crystal control campaign</p>
-                        <h1>
-                            把桌面工具箱
-                            <span>重铸成一块</span>
-                            可见的控制晶体。
-                        </h1>
-                        <p class="hero-description">
-                            不是普通下载页，也不是模板式 SaaS Hero。OneTool 把代理、WSL、截图、录制、批量处理与高频效率动作压进同一块冷白核心里，再随着滚轮把它一层层拆开。
-                        </p>
-
-                        <div class="hero-ledger">
-                            <div>
-                                <strong>20+</strong>
-                                <span>高频桌面模块，被统一成一块前台表面</span>
-                            </div>
-                            <div>
-                                <strong>Proxy / WSL</strong>
-                                <span>系统深水区能力不再躲在设置页和终端背后</span>
-                            </div>
-                            <div>
-                                <strong>Local-first</strong>
-                                <span>像控制台而不是在线服务的外壳</span>
-                            </div>
-                        </div>
+        <section class="section hero-home" id="hero" aria-labelledby="hero-title">
+            <div class="hero-layout">
+                <div class="hero-copy">
+                    <p class="hero-kicker">OneTool / Windows desktop toolbox</p>
+                    <h1 id="hero-title">一个应用，收齐 Windows 日常高频工具。</h1>
+                    <p class="hero-description">
+                        截图、录屏、批量重命名、剪贴板、二维码等常用工具集中在一个清爽顺手的桌面工具箱里。
+                    </p>
+                    <div class="hero-actions">
+                        <a class="button button-primary" href="https://github.com/tomfocker/onetool/releases" target="_blank" rel="noreferrer">下载 Windows 版</a>
+                        <a class="button button-secondary" href="https://github.com/tomfocker/onetool" target="_blank" rel="noreferrer">查看 GitHub</a>
                     </div>
-
-                    <div class="hero-stage" aria-hidden="true">
-                        <div class="stage-axis stage-axis-x"></div>
-                        <div class="stage-axis stage-axis-y"></div>
-                        <div class="crystal-stage">
-                            <div class="orbital orbital-back"></div>
-                            <div class="orbital orbital-front"></div>
-                            <img class="crystal-core" src="icon-crystal.png" alt="">
-
-                            <div class="stage-piece stage-shell">
-                                <div class="shell-header"></div>
-                                <div class="shell-body">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
-                            </div>
-
-                            <div class="stage-piece stage-dashboard">
-                                <div class="piece-heading">Dashboard Surface</div>
-                                <div class="dash-lines">
-                                    <i></i>
-                                    <i></i>
-                                    <i></i>
-                                </div>
-                                <div class="dash-grid">
-                                    <span></span>
-                                    <span></span>
-                                    <span></span>
-                                </div>
-                            </div>
-
-                            <div class="stage-piece stage-proxy">
-                                <div class="piece-heading">Local Proxy</div>
-                                <strong>127.0.0.1:7897</strong>
-                                <span>HTTP / HTTPS / Bypass</span>
-                            </div>
-
-                            <div class="stage-piece stage-wsl">
-                                <div class="piece-heading">WSL Manager</div>
-                                <strong>Ubuntu · Running</strong>
-                                <span>Default / Launch / Terminate</span>
-                            </div>
-
-                            <div class="stage-piece stage-capture">
-                                <div class="piece-heading">Capture Layer</div>
-                                <div class="capture-window"></div>
-                            </div>
-
-                            <div class="stage-piece stage-utility">
-                                <div class="piece-heading">Utility Rail</div>
-                                <ul>
-                                    <li>Rename</li>
-                                    <li>Clipboard</li>
-                                    <li>Recorder</li>
-                                    <li>Translator</li>
-                                </ul>
-                            </div>
-
-                            <div class="stage-piece stage-floatball"></div>
-                        </div>
-
-                        <div class="stage-caption">
-                            <span>Exploded Crystal View</span>
-                            <strong>Scroll to pull every layer out of the core</strong>
-                        </div>
+                    <div class="hero-chips" aria-label="核心价值">
+                        <span class="value-chip">常用工具集中管理</span>
+                        <span class="value-chip">少切窗口，少找入口</span>
+                        <span class="value-chip">系统工具也能一键直达</span>
                     </div>
                 </div>
 
-                <div class="hero-footerline">
-                    <span>Scroll to deconstruct</span>
-                    <span class="scroll-meter"><i></i></span>
+                <div class="hero-media" aria-hidden="true">
+                    <img class="hero-backdrop" src="hero-backdrop-premium.png" alt="">
+                    <div class="hero-layer hero-layer-main"><img src="hero-shot-main.png" alt=""></div>
+                    <div class="hero-layer hero-layer-capture"><img src="hero-shot-capture.png" alt=""></div>
+                    <div class="hero-layer hero-layer-rename"><img src="hero-shot-rename.png" alt=""></div>
+                    <div class="hero-layer hero-layer-clipboard"><img src="hero-shot-clipboard.png" alt=""></div>
+                    <div class="hero-layer hero-layer-qr"><img src="hero-shot-qr.png" alt=""></div>
                 </div>
             </div>
         </section>
 
-        <section class="section crystal-manifesto reveal" id="crystal">
-            <div class="manifesto-copy">
-                <p class="section-tag">Crystal Concept</p>
-                <h2>它不是把工具堆在一起，而是把系统能力压成一块透明内核。</h2>
-                <p>
-                    OneTool 服务的是那些整天在桌面里切任务、切窗口、切系统状态的人。真正重要的不是功能条目有多少，而是这些动作能不能被压缩成一条更短的工作路径。
-                </p>
-            </div>
-
-            <div class="manifesto-stack">
-                <article class="glass-note glass-note-large">
-                    <span>Control</span>
-                    <strong>一块前台可见的桌面控制晶体</strong>
-                    <p>代理切换、WSL 状态、截图录制、批量处理与悬浮收纳，被重新放进同一块冷静表面里。</p>
+        <section class="section value-strip" aria-label="OneTool 价值摘要">
+            <div class="value-strip-grid">
+                <article class="value-strip-item">
+                    <strong>一个入口</strong>
+                    <p>把桌面高频工具收进同一个启动面板，日常动作不用再分散找。</p>
                 </article>
-                <article class="glass-note">
-                    <span>Material</span>
-                    <strong>冷白 / 冰蓝 / 微偏光</strong>
+                <article class="value-strip-item">
+                    <strong>上手直接</strong>
+                    <p>名字直白、功能清楚，下载后就能马上用，不需要先理解一套新概念。</p>
                 </article>
-                <article class="glass-note glass-note-quote">
-                    <p>“越靠近系统深水区，界面越应该透明、克制、能被一眼拆解。”</p>
+                <article class="value-strip-item">
+                    <strong>覆盖更广</strong>
+                    <p>从截图录屏到系统辅助能力，一次装好，少装多个小工具。</p>
                 </article>
             </div>
         </section>
 
-        <section class="section system-spread reveal" id="system">
-            <div class="spread-heading">
-                <p class="section-tag">System Layer</p>
-                <h2>深系统能力，不该继续藏在命令行和多层设置面板后面。</h2>
+        <section class="section scenario-section" id="scenarios" aria-labelledby="scenarios-title">
+            <div class="section-heading">
+                <p class="section-tag">Daily Use</p>
+                <h2 id="scenarios-title">每天都会遇到的事，尽量一次解决。</h2>
+                <p>OneTool 优先照顾真实桌面使用频率最高的几类动作，让它像顺手工具，而不是功能展厅。</p>
             </div>
 
-            <div class="spread-layout">
-                <article class="spread-card spread-card-wide">
-                    <span>Proxy Surface</span>
-                    <strong>本地代理管理</strong>
-                    <p>读取系统状态、切换 HTTP / HTTPS 或 SOCKS5、本地端口预设、旁路规则、快速打开系统代理页。</p>
+            <div class="scenario-grid">
+                <article class="scenario-card">
+                    <span>场景 01</span>
+                    <h3>截图、录屏、取色，开会和沟通时直接拿来用。</h3>
+                    <p>需要留证据、做演示、标问题时，不用再在多个应用之间来回切换。</p>
                 </article>
-                <article class="spread-card">
-                    <span>WSL Surface</span>
-                    <strong>WSL 虚拟机管理</strong>
-                    <p>查看发行版、默认项、运行状态，直接启动、终止、切换实例。</p>
+                <article class="scenario-card">
+                    <span>场景 02</span>
+                    <h3>批量重命名、剪贴板整理，处理文件时更省心。</h3>
+                    <p>重复动作交给工具做，临时复制的内容也能随时翻出来继续用。</p>
                 </article>
-                <article class="spread-card spread-card-tall">
-                    <span>Daily Flow</span>
-                    <strong>媒体捕获 + 高频效率</strong>
-                    <p>叠加截图、屏幕录制、屏幕取色、批量重命名、剪贴板管理和悬浮球一起组成真实桌面工作流。</p>
+                <article class="scenario-card">
+                    <span>场景 03</span>
+                    <h3>二维码、语音输入、悬浮收纳，零碎小事不用再单独装软件。</h3>
+                    <p>把看起来小、但每天都会点开的工具收在一起，桌面会清爽很多。</p>
                 </article>
             </div>
         </section>
 
-        <section class="section module-atlas reveal" id="modules">
-            <div class="atlas-heading">
-                <p class="section-tag">Module Atlas</p>
-                <h2>模块不再像菜单，而像一组被装进晶体机身里的能力切片。</h2>
+        <section class="section tool-matrix" id="tools" aria-labelledby="tools-title">
+            <div class="section-heading">
+                <p class="section-tag">Tool Matrix</p>
+                <h2 id="tools-title">常用工具按用途分组，找起来更快。</h2>
+                <p>先看到自己要解决的问题，再找到对应工具，比背功能名更自然。</p>
             </div>
 
-            <div class="atlas-grid">
-                <article class="atlas-card atlas-card-primary">
-                    <span>System Maintenance</span>
-                    <ul>
-                        <li>极速装机</li>
-                        <li>网络雷达</li>
-                        <li>本地代理管理</li>
-                        <li>WSL 管理</li>
-                        <li>配置检测</li>
-                        <li>服务器监控</li>
-                        <li>Windows 管理面板</li>
-                    </ul>
-                </article>
-                <article class="atlas-card">
-                    <span>Capture + Visual</span>
+            <div class="tool-matrix-grid">
+                <article class="tool-group tool-group-primary">
+                    <span>捕获与处理</span>
                     <ul>
                         <li>叠加截图</li>
                         <li>屏幕录制</li>
@@ -231,44 +125,82 @@
                         <li>截屏翻译</li>
                     </ul>
                 </article>
-                <article class="atlas-card atlas-card-offset">
-                    <span>Utility + Office</span>
+                <article class="tool-group">
+                    <span>文件与文本</span>
                     <ul>
                         <li>批量重命名</li>
                         <li>剪贴板管理</li>
-                        <li>文件暂存悬浮球</li>
-                        <li>网页激活</li>
-                        <li>连点器</li>
                         <li>语音输入</li>
                         <li>二维码</li>
+                        <li>网页激活</li>
+                    </ul>
+                </article>
+                <article class="tool-group">
+                    <span>桌面效率</span>
+                    <ul>
+                        <li>文件暂存悬浮球</li>
+                        <li>连点器</li>
                         <li>时钟屏保</li>
+                        <li>极速装机</li>
+                        <li>Windows 管理面板</li>
+                    </ul>
+                </article>
+                <article class="tool-group">
+                    <span>网络与系统</span>
+                    <ul>
+                        <li>本地代理管理</li>
+                        <li>网络雷达</li>
+                        <li>WSL 管理</li>
+                        <li>配置检测</li>
+                        <li>服务器监控</li>
                     </ul>
                 </article>
             </div>
         </section>
 
-        <section class="section download-panel reveal" id="download">
+        <section class="section system-strip" id="system" aria-labelledby="system-title">
+            <div class="system-strip-copy">
+                <p class="section-tag">Advanced Support</p>
+                <h2 id="system-title">不只照顾轻工具，也把系统层常见操作放到前台。</h2>
+                <p>如果你也会碰代理、网络状态、WSL 或基础运维动作，OneTool 可以让这些能力比原生入口更快到手。</p>
+            </div>
+
+            <div class="system-strip-grid">
+                <article class="system-card">
+                    <strong>代理与网络</strong>
+                    <p>本地代理切换、端口状态和网络排查，不用再翻多层设置页。</p>
+                </article>
+                <article class="system-card">
+                    <strong>WSL 与环境</strong>
+                    <p>常见实例状态、启动与切换入口集中展示，减少命令行记忆负担。</p>
+                </article>
+                <article class="system-card">
+                    <strong>系统辅助入口</strong>
+                    <p>把 Windows 常见管理动作收回来，遇到问题时少走弯路。</p>
+                </article>
+            </div>
+        </section>
+
+        <section class="section download-close" id="download" aria-labelledby="download-title">
             <div class="download-copy">
                 <p class="section-tag">Download</p>
-                <h2>把这块控制晶体放回你的桌面。</h2>
-                <p>
-                    当前主力体验面向 Windows，但核心思路是通用的：把原本分散在多个入口里的高频动作，重新压成一块可见、可调用、可快速切换的桌面核心。
-                </p>
+                <h2 id="download-title">想把桌面常用工具收得更整齐，现在就可以开始。</h2>
+                <p>OneTool 面向 Windows 日常使用场景打造，开源、可下载、入口明确，适合想把常用工具统一起来的人。</p>
             </div>
 
             <div class="download-actions">
                 <a class="download-card download-card-primary" href="https://github.com/tomfocker/onetool/releases" target="_blank" rel="noreferrer">
-                    <strong>Download for Windows</strong>
-                    <span>获取当前发布版本</span>
+                    <strong>下载 Windows 版</strong>
+                    <span>从 GitHub Releases 获取最新发布版本</span>
                 </a>
                 <a class="download-card" href="https://github.com/tomfocker/onetool" target="_blank" rel="noreferrer">
-                    <strong>Source Code</strong>
-                    <span>查看仓库、模块与构建链路</span>
+                    <strong>查看 GitHub</strong>
+                    <span>浏览仓库、功能列表和项目进展</span>
                 </a>
-                <a class="download-card" href="https://space.bilibili.com/35149135" target="_blank" rel="noreferrer">
-                    <strong>Bilibili</strong>
-                    <span>关注作者与后续工具演化</span>
-                </a>
+                <article class="download-card download-card-trust">
+                    <strong>开源可见</strong>
+                    <span>功能范围、发布记录与后续迭代都能直接查看。</span>
+                </article>
             </div>
         </section>
     </main>
@@ -277,7 +209,7 @@
         <div class="footer-inner">
             <div>
                 <strong>OneTool</strong>
-                <span>Crystal Control Campaign</span>
+                <span>Windows desktop toolbox</span>
             </div>
             <p>© 2026 八骏马 · local-first desktop workflows.</p>
         </div>
