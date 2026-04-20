@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { AppNotification } from '../../../shared/types'
+import { DEFAULT_PINNED_TOOL_IDS, normalizePinnedToolIds } from '../../../shared/devEnvironment'
 
 type Theme = 'light' | 'dark'
 
@@ -13,6 +14,10 @@ interface GlobalState {
     notifications: AppNotification[]
     showNotification: (notification: Omit<AppNotification, 'id'>) => void
     removeNotification: (id: string) => void
+
+    pinnedToolIds: string[]
+    hydratePinnedToolIds: (toolIds: string[], validToolIds: string[]) => void
+    togglePinnedToolId: (toolId: string, validToolIds: string[]) => Promise<void>
 }
 
 const getInitialTheme = (): Theme => {
@@ -69,7 +74,22 @@ export const useGlobalStore = create<GlobalState>((set) => ({
     }),
     removeNotification: (id) => set((state) => ({
         notifications: state.notifications.filter((n) => n.id !== id)
-    }))
+    })),
+
+    pinnedToolIds: [...DEFAULT_PINNED_TOOL_IDS],
+    hydratePinnedToolIds: (toolIds, validToolIds) => set(() => ({
+        pinnedToolIds: normalizePinnedToolIds(toolIds, validToolIds)
+    })),
+    togglePinnedToolId: async (toolId, validToolIds) => {
+        const currentPinnedToolIds = useGlobalStore.getState().pinnedToolIds
+        const nextPinnedToolIds = currentPinnedToolIds.includes(toolId)
+            ? currentPinnedToolIds.filter((id) => id !== toolId)
+            : [...currentPinnedToolIds, toolId]
+
+        const normalized = normalizePinnedToolIds(nextPinnedToolIds, validToolIds)
+        useGlobalStore.setState({ pinnedToolIds: normalized })
+        await window.electron.store.set('pinnedToolIds', normalized)
+    }
 }))
 
 // Theme initialization sidebar effect
@@ -93,5 +113,13 @@ if (typeof document !== 'undefined') {
 if (typeof window !== 'undefined' && window.electron?.app) {
     window.electron.app.onNotification((data: AppNotification) => {
         useGlobalStore.getState().showNotification(data)
+    })
+}
+
+if (typeof window !== 'undefined' && window.electron?.store) {
+    void window.electron.store.get('pinnedToolIds').then((result) => {
+        if (result.success && Array.isArray(result.data)) {
+            useGlobalStore.setState({ pinnedToolIds: result.data })
+        }
     })
 }

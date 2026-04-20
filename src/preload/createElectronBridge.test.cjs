@@ -122,6 +122,12 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   const bridge = createElectronBridge(mocks.deps)
 
   await bridge.doctor.runAudit()
+  await bridge.devEnvironment.getOverview()
+  await bridge.devEnvironment.refreshOne('nodejs')
+  await bridge.devEnvironment.install('git')
+  await bridge.devEnvironment.update('python')
+  await bridge.devEnvironment.updateAll()
+  await bridge.devEnvironment.openRelatedTool('wsl')
   await bridge.screenRecorder.getDefaultPath('gif')
   await bridge.screenRecorder.selectOutput('gif')
   await bridge.screenRecorder.openSelection()
@@ -133,6 +139,12 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
 
   assert.deepEqual(mocks.invokeCalls, [
     ['doctor-run-audit'],
+    ['dev-environment-get-overview'],
+    ['dev-environment-refresh-one', 'nodejs'],
+    ['dev-environment-install', 'git'],
+    ['dev-environment-update', 'python'],
+    ['dev-environment-update-all'],
+    ['dev-environment-open-related-tool', 'wsl'],
     ['screen-recorder-get-default-path', 'gif'],
     ['screen-recorder-select-output', 'gif'],
     ['recorder-selection-open'],
@@ -142,6 +154,41 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['screenshot-selection-close', null],
     ['settings-set-floatball-hotkey', 'Alt+Shift+F']
   ])
+})
+
+test('createElectronBridge exposes explicit dev environment subscriptions and unsubscribes cleanly', () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let log = null
+  let progress = null
+  let complete = null
+  const unsubscribeLog = bridge.devEnvironment.onLog((data) => {
+    log = data
+  })
+  const unsubscribeProgress = bridge.devEnvironment.onProgress((data) => {
+    progress = data
+  })
+  const unsubscribeComplete = bridge.devEnvironment.onComplete((data) => {
+    complete = data
+  })
+
+  mocks.listeners.get('dev-environment-log')({}, { type: 'info', message: 'refreshing' })
+  mocks.listeners.get('dev-environment-progress')({}, { current: 1, total: 2, currentName: 'nodejs' })
+  mocks.listeners.get('dev-environment-operation-complete')({}, { success: true, message: 'done' })
+
+  assert.equal(log.message, 'refreshing')
+  assert.equal(progress.currentName, 'nodejs')
+  assert.equal(complete.success, true)
+
+  unsubscribeLog()
+  unsubscribeProgress()
+  unsubscribeComplete()
+
+  assert.equal(mocks.removed.at(-3)[0], 'dev-environment-log')
+  assert.equal(mocks.removed.at(-2)[0], 'dev-environment-progress')
+  assert.equal(mocks.removed.at(-1)[0], 'dev-environment-operation-complete')
 })
 
 test('createElectronBridge exposes an explicit direct-drag helper for prepared recorder selections', () => {

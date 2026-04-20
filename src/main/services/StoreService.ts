@@ -4,6 +4,7 @@ import path from 'path'
 import { EventEmitter } from 'events'
 import { GlobalStore } from '../../shared/types'
 import { logger } from '../utils/logger'
+import { DEFAULT_PINNED_TOOL_IDS } from '../../shared/devEnvironment'
 
 const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
   'control',
@@ -48,6 +49,7 @@ export class StoreService extends EventEmitter {
       renamePresets: [],
       webActivatorConfigs: [],
       toolUsages: [],
+      pinnedToolIds: [...DEFAULT_PINNED_TOOL_IDS],
       windowsManagerFavorites: [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
       clipboardHistory: [],
       version: app.getVersion()
@@ -63,7 +65,14 @@ export class StoreService extends EventEmitter {
         this.store = {
           ...this.getInitialData(),
           ...parsed,
+          pinnedToolIds: Array.isArray(parsed.pinnedToolIds)
+            ? Array.from(new Set(parsed.pinnedToolIds.filter((item: unknown): item is string => typeof item === 'string'))).slice(0, 6)
+            : [...DEFAULT_PINNED_TOOL_IDS],
           settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) }
+        }
+
+        if (this.store.pinnedToolIds.length === 0) {
+          this.store.pinnedToolIds = [...DEFAULT_PINNED_TOOL_IDS]
         }
         logger.info('StoreService: Data loaded successfully.')
       } else {

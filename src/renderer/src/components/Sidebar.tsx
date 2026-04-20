@@ -1,10 +1,12 @@
 import React from 'react'
 import {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tools } from '@/data/tools'
+import { useGlobalStore } from '@/store'
+import { normalizePinnedToolIds } from '../../../shared/devEnvironment'
 
 interface SidebarProps {
   currentPage: string
@@ -13,12 +15,47 @@ interface SidebarProps {
 
 const iconMap: Record<string, any> = {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code
+}
+
+const categories = ['系统维护', '日常办公', '媒体处理', '实用工具']
+
+export function buildSidebarSections(
+  toolList: Array<{ id: string; name: string; category: string; icon: string }>,
+  pinnedToolIds: string[]
+) {
+  const validToolIds = toolList.map((tool) => tool.id)
+  const normalizedPinnedToolIds = normalizePinnedToolIds(pinnedToolIds, validToolIds)
+  const pinnedIdSet = new Set(normalizedPinnedToolIds)
+  const pinnedItems = normalizedPinnedToolIds
+    .map((id) => toolList.find((tool) => tool.id === id))
+    .filter(Boolean)
+
+  const sections: Array<{
+    id: string
+    label: string
+    items: Array<{ id: string; name: string; category: string; icon: string }>
+  }> = []
+  if (pinnedItems.length > 0) {
+    sections.push({ id: 'pinned', label: '常用工具', items: pinnedItems as Array<{ id: string; name: string; category: string; icon: string }> })
+  }
+
+  categories.forEach((category) => {
+    sections.push({
+      id: `category-${category}`,
+      label: category,
+      items: toolList.filter((tool) => tool.category === category && !pinnedIdSet.has(tool.id))
+    })
+  })
+
+  return sections
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => {
-  // 按分类对工具进行分组
-  const categories = ['系统维护', '日常办公', '媒体处理', '实用工具']
+  const pinnedToolIds = useGlobalStore((state) => state.pinnedToolIds)
+  const togglePinnedToolId = useGlobalStore((state) => state.togglePinnedToolId)
+  const sections = buildSidebarSections(tools, pinnedToolIds)
+  const validToolIds = tools.map((tool) => tool.id)
 
   return (
     <aside className="w-64 h-full bg-white/80 dark:bg-zinc-900/60 backdrop-blur-2xl border-r border-zinc-200 dark:border-zinc-800/50 flex flex-col z-20">
@@ -52,16 +89,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
             <span className="text-sm font-bold tracking-tight">仪表盘总览</span>
           </button>
 
-          {categories.map(category => (
-            <div key={category} className="space-y-1">
+          {sections.map(section => (
+            <div key={section.id} className="space-y-1">
               <div className="px-4 pt-6 pb-2">
                 <span className="text-[10px] font-black text-muted-foreground/50 uppercase tracking-[0.2em]">
-                  {category}
+                  {section.label}
                 </span>
               </div>
-              {tools.filter(t => t.category === category).map(tool => {
+              {section.items.map(tool => {
                 const Icon = iconMap[tool.icon] || Package
                 const active = currentPage === tool.id
+                const pinned = pinnedToolIds.includes(tool.id)
                 return (
                   <button
                     key={tool.id}
@@ -75,6 +113,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentPage, onNavigate }) => 
                   >
                     <Icon size={18} />
                     <span className="text-sm font-bold tracking-tight">{tool.name}</span>
+                    <span
+                      className={cn(
+                        "ml-auto mr-4 rounded-full p-1 transition-colors",
+                        pinned ? "text-yellow-300" : "text-muted-foreground/50 hover:text-foreground"
+                      )}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        void togglePinnedToolId(tool.id, validToolIds)
+                      }}
+                    >
+                      <Star size={14} fill={pinned ? 'currentColor' : 'none'} />
+                    </span>
                     {active && <div className="absolute right-3 w-1.5 h-1.5 bg-white rounded-full" />}
                   </button>
                 )

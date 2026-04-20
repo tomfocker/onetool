@@ -10,6 +10,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'QuickInstaller'
   },
   {
+    id: 'dev-environment-manager',
+    name: '开发环境',
+    description: '检测、安装和更新常见开发环境',
+    category: '系统维护',
+    icon: 'Code',
+    componentPath: 'DevEnvironmentManagerTool'
+  },
+  {
     id: 'network-radar',
     name: '网络雷达',
     description: '局域网设备扫描与网络延迟监控',

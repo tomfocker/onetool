@@ -41,6 +41,7 @@ import { registerScreenSaverIpc } from './ipc/screenSaverIpc'
 import { registerSettingsIpc } from './ipc/settingsIpc'
 import { registerStoreIpc } from './ipc/storeIpc'
 import { registerDoctorIpc } from './ipc/doctorIpc'
+import { registerDevEnvironmentIpc } from './ipc/devEnvironmentIpc'
 import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
@@ -83,6 +84,7 @@ function createWindow(): void {
   colorPickerService.setMainWindow(mainWindow)
   webActivatorService.setMainWindow(mainWindow)
   quickInstallerService.setMainWindow(mainWindow)
+  // DevEnvironmentService receives the window via IPC registration refresh.
   windowManagerService.setMainWindow(mainWindow)
   screenshotService.setMainWindow(mainWindow)
 
@@ -179,6 +181,7 @@ app.whenReady().then(() => {
   registerSettingsIpc(() => mainWindow)
   registerStoreIpc(() => mainWindow)
   registerDoctorIpc()
+  registerDevEnvironmentIpc(() => mainWindow)
   registerSystemIpc(() => mainWindow)
   registerScreenshotIpc()
   registerFloatBallIpc()

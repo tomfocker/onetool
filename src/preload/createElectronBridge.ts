@@ -8,6 +8,7 @@ import {
   WebActivatorShortcutSchema
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
+import type { DevEnvironmentId } from '../shared/devEnvironment'
 import { LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
@@ -281,6 +282,25 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     runAudit: () => ipcRenderer.invoke('doctor-run-audit')
   }
 
+  const devEnvironmentAPI = {
+    getOverview: () => ipcRenderer.invoke('dev-environment-get-overview'),
+    refreshAll: () => ipcRenderer.invoke('dev-environment-refresh-all'),
+    refreshOne: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-refresh-one', id),
+    install: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-install', id),
+    update: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-update', id),
+    updateAll: () => ipcRenderer.invoke('dev-environment-update-all'),
+    openRelatedTool: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-open-related-tool', id),
+    onLog: (callback: (data: { type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'; message: string }) => void) => {
+      return onChannel('dev-environment-log', callback)
+    },
+    onProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => {
+      return onChannel('dev-environment-progress', callback)
+    },
+    onComplete: (callback: (data: { success: boolean; message: string }) => void) => {
+      return onChannel('dev-environment-operation-complete', callback)
+    }
+  }
+
   const updatesAPI = {
     getState: () => ipcRenderer.invoke('updates-get-state'),
     checkForUpdates: () => ipcRenderer.invoke('updates-check'),
@@ -292,6 +312,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   return {
     app: appAPI,
     doctor: doctorAPI,
+    devEnvironment: devEnvironmentAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,
     rename: renameAPI,

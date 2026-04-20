@@ -73,6 +73,10 @@ function loadStoreServiceModule(overrides = {}) {
       return {}
     }
 
+    if (specifier === '../../shared/devEnvironment') {
+      return require(path.join(__dirname, '../../shared/devEnvironment.ts'))
+    }
+
     if (specifier === '../utils/logger') {
       return { logger }
     }

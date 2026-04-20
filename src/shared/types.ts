@@ -257,6 +257,7 @@ export interface GlobalStore {
   renamePresets: RenamePreset[]
   webActivatorConfigs: ActivatorConfig[]
   toolUsages: ToolUsageRecord[]
+  pinnedToolIds: string[]
   windowsManagerFavorites: string[]
   clipboardHistory: ClipboardItem[]
   version: string

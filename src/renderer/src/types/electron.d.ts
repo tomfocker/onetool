@@ -19,6 +19,7 @@ import {
   AppNotification
 } from '../../../shared/types'
 import type { UpdateState } from '../../../shared/appUpdate'
+import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 
 declare global {
@@ -30,6 +31,18 @@ declare global {
       }
       doctor: {
         runAudit: () => Promise<IpcResponse<any>>
+      }
+      devEnvironment: {
+        getOverview: () => Promise<IpcResponse<DevEnvironmentOverview>>
+        refreshAll: () => Promise<IpcResponse<DevEnvironmentOverview>>
+        refreshOne: (id: DevEnvironmentId) => Promise<IpcResponse<DevEnvironmentRecord>>
+        install: (id: DevEnvironmentId) => Promise<IpcResponse>
+        update: (id: DevEnvironmentId) => Promise<IpcResponse>
+        updateAll: () => Promise<IpcResponse<{ updated: number }>>
+        openRelatedTool: (id: DevEnvironmentId) => Promise<IpcResponse<{ toolId: string }>>
+        onLog: (callback: (data: { type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'; message: string }) => void) => () => void
+        onProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => () => void
+        onComplete: (callback: (data: { success: boolean; message: string }) => void) => () => void
       }
       updates: {
         getState: () => Promise<IpcResponse<UpdateState>>
