@@ -15,14 +15,14 @@ use std::ptr::{null, null_mut};
 
 #[cfg(windows)]
 use self::win32::{
-    CloseHandle, CreateFileW, DeviceIoControl, FileIdInfo, FileIdType, FileStandardInfo,
-    GetDriveTypeW, GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
-    OpenFileById, BY_HANDLE_FILE_INFORMATION, DRIVE_FIXED, ERROR_HANDLE_EOF,
-    ERROR_NO_MORE_FILES, FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128,
-    FILE_ID_DESCRIPTOR, FILE_ID_INFO, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
-    FILE_STANDARD_INFO, FILE_SUPPORTS_USN_JOURNAL, FSCTL_ENUM_USN_DATA, HANDLE,
-    INVALID_HANDLE_VALUE, MFT_ENUM_DATA_V0, OPEN_EXISTING, USN_RECORD_V2, USN_RECORD_V3,
-    ExtendedFileIdType,
+    CloseHandle, CreateFileW, DeviceIoControl, FileIdInfo, GetDriveTypeW,
+    GetFileInformationByHandle, GetFileInformationByHandleEx, GetVolumeInformationW,
+    BY_HANDLE_FILE_INFORMATION, DRIVE_FIXED, ERROR_HANDLE_EOF, ERROR_NO_MORE_FILES,
+    FILE_ATTRIBUTE_DIRECTORY, FILE_FLAG_BACKUP_SEMANTICS, FILE_ID_128, FILE_ID_INFO,
+    FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE, FILE_SUPPORTS_USN_JOURNAL,
+    FSCTL_ENUM_USN_DATA, FSCTL_GET_NTFS_FILE_RECORD, HANDLE, INVALID_HANDLE_VALUE,
+    MFT_ENUM_DATA_V0, NTFS_FILE_RECORD_INPUT_BUFFER, OPEN_EXISTING, USN_RECORD_V2,
+    USN_RECORD_V3,
 };
 
 const ROOT_PATH_ERROR: &str = "root path must be a fixed local NTFS volume root like C:\\";
@@ -56,12 +56,10 @@ mod win32 {
     pub const DRIVE_CDROM: u32 = 5;
     pub const DRIVE_RAMDISK: u32 = 6;
 
-    pub const FileStandardInfo: u32 = 1;
     pub const FileIdInfo: u32 = 18;
-    pub const FileIdType: u32 = 0;
-    pub const ExtendedFileIdType: u32 = 2;
 
     pub const FSCTL_ENUM_USN_DATA: u32 = 590_003;
+    pub const FSCTL_GET_NTFS_FILE_RECORD: u32 = 589_928;
 
     #[repr(C)]
     #[derive(Clone, Copy)]
@@ -102,35 +100,16 @@ mod win32 {
 
     #[repr(C)]
     #[derive(Clone, Copy)]
-    pub struct FILE_STANDARD_INFO {
-        pub AllocationSize: i64,
-        pub EndOfFile: i64,
-        pub NumberOfLinks: u32,
-        pub DeletePending: u8,
-        pub Directory: u8,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    pub union FILE_ID_DESCRIPTOR_0 {
-        pub FileId: i64,
-        pub ExtendedFileId: FILE_ID_128,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
-    pub struct FILE_ID_DESCRIPTOR {
-        pub dwSize: u32,
-        pub Type: u32,
-        pub Anonymous: FILE_ID_DESCRIPTOR_0,
-    }
-
-    #[repr(C)]
-    #[derive(Clone, Copy)]
     pub struct MFT_ENUM_DATA_V0 {
         pub StartFileReferenceNumber: u64,
         pub LowUsn: i64,
         pub HighUsn: i64,
+    }
+
+    #[repr(C)]
+    #[derive(Clone, Copy)]
+    pub struct NTFS_FILE_RECORD_INPUT_BUFFER {
+        pub FileReferenceNumber: i64,
     }
 
     #[repr(C)]
@@ -214,14 +193,6 @@ mod win32 {
             lpfilesystemnamebuffer: *mut u16,
             nfilesystemnamebuffersize: u32,
         ) -> i32;
-        pub fn OpenFileById(
-            hvolumehint: HANDLE,
-            lpfileid: *const FILE_ID_DESCRIPTOR,
-            dwdesiredaccess: u32,
-            dwsharemode: u32,
-            lpsecurityattributes: *const c_void,
-            dwflagsandattributes: u32,
-        ) -> HANDLE;
     }
 }
 
@@ -237,6 +208,7 @@ pub struct ScanEntry {
     pub name: String,
     pub kind: EntryKind,
     pub size_bytes: u64,
+    pub skipped_children: u64,
     pub children: Vec<ScanEntry>,
 }
 
@@ -246,6 +218,7 @@ pub struct ScanSnapshot {
     pub filesystem: String,
     pub root: ScanEntry,
     pub files_scanned: u64,
+    pub skipped_entries: u64,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -262,6 +235,11 @@ impl FileReference {
     fn from_file_id_128(value: FILE_ID_128) -> Self {
         Self(value.Identifier)
     }
+
+    #[cfg(windows)]
+    fn legacy_part(self) -> u64 {
+        u64::from_le_bytes(self.0[..8].try_into().expect("legacy file reference"))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -270,7 +248,7 @@ struct EnumeratedEntry {
     parent_id: FileReference,
     name: String,
     kind: EntryKind,
-    size_bytes: u64,
+    size_bytes: Option<u64>,
 }
 
 impl EnumeratedEntry {
@@ -281,7 +259,7 @@ impl EnumeratedEntry {
             parent_id: FileReference::from_u64(parent_id),
             name: name.into(),
             kind: EntryKind::File,
-            size_bytes,
+            size_bytes: Some(size_bytes),
         }
     }
 
@@ -292,7 +270,18 @@ impl EnumeratedEntry {
             parent_id: FileReference::from_u64(parent_id),
             name: name.into(),
             kind: EntryKind::Directory,
-            size_bytes: 0,
+            size_bytes: Some(0),
+        }
+    }
+
+    #[cfg(test)]
+    fn unresolved_file(id: u64, parent_id: u64, name: impl Into<String>) -> Self {
+        Self {
+            id: FileReference::from_u64(id),
+            parent_id: FileReference::from_u64(parent_id),
+            name: name.into(),
+            kind: EntryKind::File,
+            size_bytes: None,
         }
     }
 
@@ -302,7 +291,7 @@ impl EnumeratedEntry {
         parent_id: FileReference,
         name: String,
         kind: EntryKind,
-        size_bytes: u64,
+        size_bytes: Option<u64>,
     ) -> Self {
         Self {
             id,
@@ -381,17 +370,25 @@ fn build_snapshot_from_entries(
 
     let mut visited = HashSet::new();
     let mut files_scanned = 0u64;
+    let mut skipped_entries = 0u64;
+    let mut root_skipped_children = 0u64;
     let mut built_children = Vec::with_capacity(root_children.len());
 
     for child_id in root_children {
-        let entry = build_entry(
+        match build_entry(
             child_id,
             Path::new(&root_path_string),
             &nodes,
             &mut visited,
             &mut files_scanned,
-        )?;
-        built_children.push(entry);
+            &mut skipped_entries,
+        )? {
+            Some(entry) => {
+                root_skipped_children += entry.skipped_children;
+                built_children.push(entry);
+            }
+            None => root_skipped_children += 1,
+        }
     }
 
     let root_size = built_children.iter().map(|child| child.size_bytes).sum();
@@ -404,9 +401,11 @@ fn build_snapshot_from_entries(
             name: root_path_string,
             kind: EntryKind::Directory,
             size_bytes: root_size,
+            skipped_children: root_skipped_children,
             children: built_children,
         },
         files_scanned,
+        skipped_entries,
     })
 }
 
@@ -416,7 +415,8 @@ fn build_entry(
     nodes: &HashMap<FileReference, NodeRecord>,
     visited: &mut HashSet<FileReference>,
     files_scanned: &mut u64,
-) -> io::Result<ScanEntry> {
+    skipped_entries: &mut u64,
+) -> io::Result<Option<ScanEntry>> {
     if !visited.insert(node_id) {
         return Err(io::Error::other("cycle detected while materializing NTFS tree"));
     }
@@ -431,12 +431,18 @@ fn build_entry(
 
     let entry = match node.kind {
         EntryKind::File => {
+            let Some(size_bytes) = node.size_bytes else {
+                *skipped_entries += 1;
+                return Ok(None);
+            };
+
             *files_scanned += 1;
             ScanEntry {
                 path: absolute_path_string,
                 name: node.name.clone(),
                 kind: EntryKind::File,
-                size_bytes: node.size_bytes,
+                size_bytes,
+                skipped_children: 0,
                 children: Vec::new(),
             }
         }
@@ -445,14 +451,22 @@ fn build_entry(
             sort_children(nodes, &mut child_ids);
 
             let mut children = Vec::with_capacity(child_ids.len());
+            let mut skipped_children = 0u64;
             for child_id in child_ids {
-                children.push(build_entry(
+                match build_entry(
                     child_id,
                     Path::new(&absolute_path_string),
                     nodes,
                     visited,
                     files_scanned,
-                )?);
+                    skipped_entries,
+                )? {
+                    Some(child) => {
+                        skipped_children += child.skipped_children;
+                        children.push(child);
+                    }
+                    None => skipped_children += 1,
+                }
             }
 
             let size_bytes = children.iter().map(|child| child.size_bytes).sum();
@@ -462,12 +476,13 @@ fn build_entry(
                 name: node.name.clone(),
                 kind: EntryKind::Directory,
                 size_bytes,
+                skipped_children,
                 children,
             }
         }
     };
 
-    Ok(entry)
+    Ok(Some(entry))
 }
 
 fn sort_children(nodes: &HashMap<FileReference, NodeRecord>, children: &mut [FileReference]) {
@@ -507,7 +522,7 @@ struct NodeRecord {
     parent_id: FileReference,
     name: String,
     kind: EntryKind,
-    size_bytes: u64,
+    size_bytes: Option<u64>,
     children: Vec<FileReference>,
 }
 
@@ -539,14 +554,7 @@ struct RawRecord {
     parent_id: FileReference,
     name: String,
     kind: EntryKind,
-    open_reference: OpenReference,
-}
-
-#[cfg(windows)]
-#[derive(Clone, Copy, Debug)]
-enum OpenReference {
-    Legacy(u64),
-    Extended([u8; 16]),
+    file_reference_number: u64,
 }
 
 #[cfg(windows)]
@@ -595,8 +603,8 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
         .into_iter()
         .map(|record| {
             let size_bytes = match record.kind {
-                EntryKind::File => query_file_size(root_handle.raw, record.open_reference),
-                EntryKind::Directory => 0,
+                EntryKind::File => resolve_file_size(volume_handle.raw, record.file_reference_number),
+                EntryKind::Directory => Some(0),
             };
 
             EnumeratedEntry::from_parts(
@@ -896,7 +904,7 @@ fn parse_raw_record(bytes: &[u8]) -> io::Result<(RawRecord, usize, IdFormat)> {
                     parent_id: FileReference::from_u64(record.ParentFileReferenceNumber),
                     name,
                     kind: entry_kind_from_attributes(record.FileAttributes),
-                    open_reference: OpenReference::Legacy(record.FileReferenceNumber),
+                    file_reference_number: record.FileReferenceNumber,
                 },
                 record_length,
                 IdFormat::Legacy64,
@@ -910,13 +918,15 @@ fn parse_raw_record(bytes: &[u8]) -> io::Result<(RawRecord, usize, IdFormat)> {
                 record.FileNameLength as usize,
             )?;
 
+            let id = FileReference::from_file_id_128(record.FileReferenceNumber);
+
             Ok((
                 RawRecord {
-                    id: FileReference::from_file_id_128(record.FileReferenceNumber),
+                    id,
                     parent_id: FileReference::from_file_id_128(record.ParentFileReferenceNumber),
                     name,
                     kind: entry_kind_from_attributes(record.FileAttributes),
-                    open_reference: OpenReference::Extended(record.FileReferenceNumber.Identifier),
+                    file_reference_number: id.legacy_part(),
                 },
                 record_length,
                 IdFormat::Extended128,
@@ -952,57 +962,188 @@ fn entry_kind_from_attributes(attributes: u32) -> EntryKind {
 }
 
 #[cfg(windows)]
-fn query_file_size(root_handle: HANDLE, open_reference: OpenReference) -> u64 {
-    let file_handle = match open_file_by_id(root_handle, open_reference) {
-        Ok(handle) => handle,
-        Err(_) => return 0,
-    };
-
-    let mut file_info: FILE_STANDARD_INFO = unsafe { zeroed() };
-    let ok = unsafe {
-        GetFileInformationByHandleEx(
-            file_handle.raw,
-            FileStandardInfo,
-            &mut file_info as *mut _ as *mut _,
-            size_of::<FILE_STANDARD_INFO>() as u32,
-        )
-    };
-
-    if ok == 0 || file_info.EndOfFile < 0 {
-        0
-    } else {
-        file_info.EndOfFile as u64
-    }
+fn resolve_file_size(volume_handle: HANDLE, file_reference_number: u64) -> Option<u64> {
+    query_file_size_from_file_record(volume_handle, file_reference_number).ok()
 }
 
 #[cfg(windows)]
-fn open_file_by_id(root_handle: HANDLE, open_reference: OpenReference) -> io::Result<OwnedHandle> {
-    let mut descriptor: FILE_ID_DESCRIPTOR = unsafe { zeroed() };
-    descriptor.dwSize = size_of::<FILE_ID_DESCRIPTOR>() as u32;
-
-    match open_reference {
-        OpenReference::Legacy(file_id) => {
-            descriptor.Type = FileIdType;
-            descriptor.Anonymous.FileId = file_id as i64;
-        }
-        OpenReference::Extended(file_id) => {
-            descriptor.Type = ExtendedFileIdType;
-            descriptor.Anonymous.ExtendedFileId = FILE_ID_128 { Identifier: file_id };
-        }
-    }
-
-    let handle = unsafe {
-        OpenFileById(
-            root_handle,
-            &descriptor,
-            0,
-            FILE_SHARES,
-            null(),
-            FILE_FLAG_BACKUP_SEMANTICS,
+fn query_file_size_from_file_record(volume_handle: HANDLE, file_reference_number: u64) -> io::Result<u64> {
+    let mut input = NTFS_FILE_RECORD_INPUT_BUFFER {
+        FileReferenceNumber: file_reference_number as i64,
+    };
+    let mut output = vec![0u8; 64 * 1024];
+    let mut bytes_returned = 0u32;
+    let ok = unsafe {
+        DeviceIoControl(
+            volume_handle,
+            FSCTL_GET_NTFS_FILE_RECORD,
+            &mut input as *mut _ as *mut _,
+            size_of::<NTFS_FILE_RECORD_INPUT_BUFFER>() as u32,
+            output.as_mut_ptr() as *mut _,
+            output.len() as u32,
+            &mut bytes_returned,
+            null_mut(),
         )
     };
 
-    OwnedHandle::new(handle)
+    if ok == 0 {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "FSCTL_GET_NTFS_FILE_RECORD failed for file reference {file_reference_number}: {}",
+                io::Error::last_os_error()
+            ),
+        ));
+    }
+
+    parse_file_record_output(&output[..bytes_returned as usize])
+}
+
+#[cfg(windows)]
+fn parse_file_record_output(bytes: &[u8]) -> io::Result<u64> {
+    const OUTPUT_HEADER_SIZE: usize = size_of::<i64>() + size_of::<u32>();
+    if bytes.len() < OUTPUT_HEADER_SIZE {
+        return Err(io::Error::other("truncated NTFS file record output"));
+    }
+
+    let file_record_length =
+        u32::from_le_bytes(bytes[size_of::<i64>()..OUTPUT_HEADER_SIZE].try_into().expect("file record length"))
+            as usize;
+    if bytes.len() < OUTPUT_HEADER_SIZE + file_record_length {
+        return Err(io::Error::other("incomplete NTFS file record payload"));
+    }
+
+    parse_file_record_size(&bytes[OUTPUT_HEADER_SIZE..OUTPUT_HEADER_SIZE + file_record_length])
+}
+
+#[cfg(windows)]
+fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
+    const ATTR_TYPE_ATTRIBUTE_LIST: u32 = 0x20;
+    const ATTR_TYPE_FILE_NAME: u32 = 0x30;
+    const ATTR_TYPE_DATA: u32 = 0x80;
+    const ATTR_TYPE_END: u32 = 0xFFFF_FFFF;
+    const FILE_RECORD_SIGNATURE: &[u8; 4] = b"FILE";
+
+    if record.len() < 24 {
+        return Err(io::Error::other("truncated file record header"));
+    }
+    if &record[..4] != FILE_RECORD_SIGNATURE {
+        return Err(io::Error::other("invalid file record signature"));
+    }
+
+    let first_attribute_offset =
+        u16::from_le_bytes(record[20..22].try_into().expect("first attribute offset")) as usize;
+    if first_attribute_offset >= record.len() {
+        return Err(io::Error::other("invalid first attribute offset"));
+    }
+
+    let mut attribute_list_present = false;
+    let mut unnamed_data_size = None::<u64>;
+    let mut file_name_size = None::<u64>;
+    let mut offset = first_attribute_offset;
+
+    while offset + 16 <= record.len() {
+        let attribute_type =
+            u32::from_le_bytes(record[offset..offset + 4].try_into().expect("attribute type"));
+        if attribute_type == ATTR_TYPE_END {
+            break;
+        }
+
+        let record_length =
+            u32::from_le_bytes(record[offset + 4..offset + 8].try_into().expect("attribute length"))
+                as usize;
+        if record_length == 0 || offset + record_length > record.len() {
+            return Err(io::Error::other("invalid attribute record length"));
+        }
+
+        let non_resident = record[offset + 8] != 0;
+        let name_length = record[offset + 9];
+
+        match attribute_type {
+            ATTR_TYPE_ATTRIBUTE_LIST => attribute_list_present = true,
+            ATTR_TYPE_FILE_NAME if !non_resident => {
+                if let Some(size) = parse_file_name_attribute(record, offset, record_length)? {
+                    file_name_size = Some(size);
+                }
+            }
+            ATTR_TYPE_DATA if name_length == 0 => {
+                if let Some(size) = parse_data_attribute(record, offset, record_length, non_resident)? {
+                    unnamed_data_size = Some(unnamed_data_size.map_or(size, |existing| existing.max(size)));
+                }
+            }
+            _ => {}
+        }
+
+        offset += record_length;
+    }
+
+    unnamed_data_size
+        .or(file_name_size)
+        .ok_or_else(|| {
+            let detail = if attribute_list_present {
+                "file record size lives outside the base record"
+            } else {
+                "file record did not expose a usable size attribute"
+            };
+            io::Error::other(detail)
+        })
+}
+
+#[cfg(windows)]
+fn parse_data_attribute(
+    record: &[u8],
+    offset: usize,
+    record_length: usize,
+    non_resident: bool,
+) -> io::Result<Option<u64>> {
+    if non_resident {
+        if record_length < 56 {
+            return Err(io::Error::other("truncated non-resident data attribute"));
+        }
+
+        let file_size_offset = offset + 48;
+        let file_size = i64::from_le_bytes(
+            record[file_size_offset..file_size_offset + 8]
+                .try_into()
+                .expect("file size"),
+        );
+        return Ok(Some(file_size.max(0) as u64));
+    }
+
+    if record_length < 24 {
+        return Err(io::Error::other("truncated resident data attribute"));
+    }
+
+    let value_length =
+        u32::from_le_bytes(record[offset + 16..offset + 20].try_into().expect("resident value length"));
+    Ok(Some(value_length as u64))
+}
+
+#[cfg(windows)]
+fn parse_file_name_attribute(record: &[u8], offset: usize, record_length: usize) -> io::Result<Option<u64>> {
+    if record_length < 24 {
+        return Err(io::Error::other("truncated file-name attribute"));
+    }
+
+    let value_length =
+        u32::from_le_bytes(record[offset + 16..offset + 20].try_into().expect("file-name value length"))
+            as usize;
+    let value_offset =
+        u16::from_le_bytes(record[offset + 20..offset + 22].try_into().expect("file-name value offset"))
+            as usize;
+    let value_start = offset + value_offset;
+    let real_size_offset = value_start + 48;
+
+    if value_offset >= record_length || value_length < 56 || real_size_offset + 8 > offset + record_length {
+        return Ok(None);
+    }
+
+    let real_size = i64::from_le_bytes(
+        record[real_size_offset..real_size_offset + 8]
+            .try_into()
+            .expect("file-name real size"),
+    );
+    Ok(Some(real_size.max(0) as u64))
 }
 
 #[cfg(windows)]
@@ -1064,7 +1205,9 @@ mod tests {
         assert_eq!(snapshot.root_path, r"C:\");
         assert_eq!(snapshot.filesystem, "NTFS");
         assert_eq!(snapshot.files_scanned, 2);
+        assert_eq!(snapshot.skipped_entries, 0);
         assert_eq!(snapshot.root.size_bytes, 40);
+        assert_eq!(snapshot.root.skipped_children, 0);
         assert_eq!(snapshot.root.name, r"C:\");
         assert_eq!(snapshot.root.children.len(), 2);
 
@@ -1079,5 +1222,51 @@ mod tests {
         assert_eq!(notes.kind, EntryKind::File);
         assert_eq!(notes.path, r"C:\notes.txt");
         assert_eq!(notes.size_bytes, 8);
+        assert_eq!(notes.skipped_children, 0);
+    }
+
+    #[test]
+    fn build_snapshot_counts_unresolved_files_as_skipped() {
+        let snapshot = build_snapshot_from_entries(
+            Path::new(r"C:\"),
+            "NTFS",
+            FileReference::from_u64(5),
+            vec![
+                EnumeratedEntry::file(10, 5, "notes.txt", 8),
+                EnumeratedEntry::unresolved_file(11, 5, "unknown.bin"),
+            ],
+        )
+        .expect("snapshot");
+
+        assert_eq!(snapshot.files_scanned, 1);
+        assert_eq!(snapshot.skipped_entries, 1);
+        assert_eq!(snapshot.root.size_bytes, 8);
+        assert_eq!(snapshot.root.skipped_children, 1);
+        assert_eq!(snapshot.root.children.len(), 1);
+        assert_eq!(snapshot.root.children[0].path, r"C:\notes.txt");
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_uses_file_name_real_size_when_present() {
+        let mut record = vec![0u8; 160];
+        record[..4].copy_from_slice(b"FILE");
+        record[20..22].copy_from_slice(&(48u16).to_le_bytes());
+
+        let attribute_offset = 48usize;
+        let attribute_length = 88usize;
+        record[attribute_offset..attribute_offset + 4].copy_from_slice(&(0x30u32).to_le_bytes());
+        record[attribute_offset + 4..attribute_offset + 8]
+            .copy_from_slice(&(attribute_length as u32).to_le_bytes());
+        record[attribute_offset + 8] = 0;
+        record[attribute_offset + 16..attribute_offset + 20].copy_from_slice(&(64u32).to_le_bytes());
+        record[attribute_offset + 20..attribute_offset + 22].copy_from_slice(&(24u16).to_le_bytes());
+
+        let value_start = attribute_offset + 24;
+        record[value_start + 48..value_start + 56].copy_from_slice(&(1234i64).to_le_bytes());
+        let end_offset = attribute_offset + attribute_length;
+        record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+
+        assert_eq!(parse_file_record_size(&record).expect("file record size"), 1234);
     }
 }

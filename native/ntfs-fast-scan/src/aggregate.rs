@@ -21,7 +21,7 @@ pub fn summary(snapshot: &ScanSnapshot, largest_files: &[LargestFile]) -> ScanSu
         total_bytes: snapshot.root.size_bytes,
         scanned_files: snapshot.files_scanned,
         scanned_directories: count_directories(&snapshot.root),
-        skipped_entries: 0,
+        skipped_entries: snapshot.skipped_entries,
         largest_file: largest_files.first().cloned(),
     }
 }
@@ -64,7 +64,7 @@ fn map_tree_node(entry: &ScanEntry) -> TreeNode {
             children_count: 0,
             file_count: 0,
             directory_count: 0,
-            skipped_children: 0,
+            skipped_children: entry.skipped_children,
             extension: path_extension(&entry.path),
             children: Vec::new(),
         },
@@ -108,7 +108,7 @@ fn map_tree_node(entry: &ScanEntry) -> TreeNode {
                 children_count: children.len() as u64,
                 file_count,
                 directory_count,
-                skipped_children,
+                skipped_children: entry.skipped_children.max(skipped_children),
                 extension: None,
                 children,
             }

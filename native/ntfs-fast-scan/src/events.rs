@@ -272,17 +272,20 @@ mod tests {
                 name: r"C:\".to_owned(),
                 kind: EntryKind::Directory,
                 size_bytes: 40,
+                skipped_children: 0,
                 children: vec![
                     ScanEntry {
                         path: r"C:\Games".to_owned(),
                         name: "Games".to_owned(),
                         kind: EntryKind::Directory,
                         size_bytes: 32,
+                        skipped_children: 0,
                         children: vec![ScanEntry {
                             path: r"C:\Games\game.bin".to_owned(),
                             name: "game.bin".to_owned(),
                             kind: EntryKind::File,
                             size_bytes: 32,
+                            skipped_children: 0,
                             children: Vec::new(),
                         }],
                     },
@@ -291,11 +294,37 @@ mod tests {
                         name: "notes.txt".to_owned(),
                         kind: EntryKind::File,
                         size_bytes: 8,
+                        skipped_children: 0,
                         children: Vec::new(),
                     },
                 ],
             },
             files_scanned: 2,
+            skipped_entries: 0,
+        }
+    }
+
+    fn partial_snapshot() -> ScanSnapshot {
+        ScanSnapshot {
+            root_path: r"C:\".to_owned(),
+            filesystem: "NTFS".to_owned(),
+            root: ScanEntry {
+                path: r"C:\".to_owned(),
+                name: r"C:\".to_owned(),
+                kind: EntryKind::Directory,
+                size_bytes: 8,
+                skipped_children: 1,
+                children: vec![ScanEntry {
+                    path: r"C:\notes.txt".to_owned(),
+                    name: "notes.txt".to_owned(),
+                    kind: EntryKind::File,
+                    size_bytes: 8,
+                    skipped_children: 0,
+                    children: Vec::new(),
+                }],
+            },
+            files_scanned: 1,
+            skipped_entries: 1,
         }
     }
 
@@ -362,5 +391,18 @@ mod tests {
         assert!(lines[1].contains("\"summary\":{"));
         assert!(lines[2].contains("\"largestFiles\":["));
         assert!(lines[3].contains("\"tree\":{"));
+    }
+
+    #[test]
+    fn serializes_partial_results_when_entries_are_unresolved() {
+        let events = build_scan_events(&partial_snapshot());
+        let complete = events[3].to_json_line();
+
+        assert!(complete.contains("\"scannedFiles\":1"));
+        assert!(complete.contains("\"skippedEntries\":1"));
+        assert!(complete.contains("\"totalBytes\":8"));
+        assert!(complete.contains("\"largestFile\":{"));
+        assert!(complete.contains("\"skippedChildren\":1"));
+        assert!(!complete.contains("unresolved.bin"));
     }
 }
