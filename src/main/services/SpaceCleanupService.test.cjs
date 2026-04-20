@@ -281,6 +281,41 @@ test('startScan falls back to filesystem scan when ntfs-fast startup throws', as
   assert.equal(result.data.summary.totalBytes, 13)
 })
 
+test('startScan falls back to filesystem scan when a started ntfs-fast run fails', async () => {
+  const entries = {
+    'D:\\': [createDirent('fallback-after-start.bin', 'file')]
+  }
+  const stats = {
+    'D:\\': { isDirectory: () => true, size: 0 },
+    'D:\\fallback-after-start.bin': { isDirectory: () => false, size: 17 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        return {
+          done: Promise.reject(new Error('native worker crashed')),
+          cancel() {}
+        }
+      }
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5875, createId: () => 'session-filesystem-4' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.scanModeReason, 'NTFS 极速扫描失败，已回退到普通扫描：native worker crashed')
+  assert.equal(result.data.summary.totalBytes, 17)
+})
+
 test('cancelScan cancels an active ntfs-fast run through the bridge handle', async () => {
   let cancelCalls = 0
   let releaseScan
@@ -318,6 +353,37 @@ test('cancelScan cancels an active ntfs-fast run through the bridge handle', asy
   assert.equal(cancelCalls, 1)
   assert.equal(cancelResult.data.status, 'cancelled')
   assert.equal(result.data.status, 'cancelled')
+})
+
+test('startScan updates largest files from standalone ntfs-fast largest-files events', async () => {
+  const largestFile = {
+    path: 'D:\\big.iso',
+    name: 'big.iso',
+    sizeBytes: 2048,
+    extension: '.iso'
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({ type: 'largest-files', largestFiles: [largestFile] })
+        onEvent({ type: 'complete' })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 6100, createId: () => 'session-fast-largest-files-1' })
+  const result = await service.startScan('D:\\')
+
+  assert.equal(result.success, true)
+  assert.deepEqual(result.data.largestFiles, [largestFile])
+  assert.deepEqual(result.data.summary.largestFile, largestFile)
 })
 
 test('startScan aggregates nested directory sizes and largest files', async () => {

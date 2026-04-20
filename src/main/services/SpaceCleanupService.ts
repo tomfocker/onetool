@@ -52,6 +52,13 @@ function getErrorMessage(error: unknown) {
     return error.message
   }
 
+  if (error && typeof error === 'object' && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message) {
+      return message
+    }
+  }
+
   return String(error)
 }
 
@@ -73,6 +80,20 @@ function treeHasSkippedEntries(node: SpaceCleanupNode | null | undefined): boole
 
 function shouldKeepNtfsSessionPartial(session: Pick<SpaceCleanupSession, 'summary' | 'tree'>): boolean {
   return session.summary.skippedEntries > 0 || treeHasSkippedEntries(session.tree)
+}
+
+function updateSessionLargestFiles(
+  session: SpaceCleanupSession,
+  largestFiles: SpaceCleanupLargestFile[]
+): SpaceCleanupSession {
+  return {
+    ...session,
+    largestFiles,
+    summary: {
+      ...session.summary,
+      largestFile: largestFiles[0] ?? null
+    }
+  }
 }
 
 export class SpaceCleanupService {
@@ -313,7 +334,7 @@ export class SpaceCleanupService {
       this.emit('space-cleanup-complete', this.currentSession)
       return { success: true, data: this.currentSession }
     } catch (error) {
-      const message = (error as Error).message
+      const message = getErrorMessage(error)
       if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
         this.currentSession = {
           ...this.currentSession,
@@ -324,15 +345,8 @@ export class SpaceCleanupService {
         return { success: true, data: this.currentSession }
       }
 
-      logger.error('SpaceCleanup: ntfs-fast scan failed', error)
-      this.currentSession = {
-        ...this.currentSession,
-        status: 'failed',
-        finishedAt: new Date(this.now()).toISOString(),
-        error: message
-      }
-      this.emit('space-cleanup-error', this.currentSession)
-      return { success: false, error: message, data: this.currentSession }
+      logger.warn('SpaceCleanup: ntfs-fast scan failed after start, falling back to filesystem scan', error)
+      return this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
     } finally {
       if (this.activeNtfsFastScanRun === run) {
         this.activeNtfsFastScanRun = null
@@ -359,20 +373,22 @@ export class SpaceCleanupService {
       nextSession.scanModeReason = null
     }
 
-    if (event.summary && typeof event.summary === 'object') {
-      const largestFiles = Array.isArray(event.largestFiles)
-        ? event.largestFiles as SpaceCleanupLargestFile[]
-        : nextSession.largestFiles
+    if (Array.isArray(event.largestFiles)) {
+      const largestFiles = event.largestFiles as SpaceCleanupLargestFile[]
+      const updatedSession = updateSessionLargestFiles(nextSession, largestFiles)
+      nextSession.largestFiles = updatedSession.largestFiles
+      nextSession.summary = updatedSession.summary
+    }
 
+    if (event.summary && typeof event.summary === 'object') {
       nextSession.summary = {
         ...createEmptySpaceCleanupSummary(),
         ...(event.summary as MutableSummary),
         largestFile:
           (event.summary as MutableSummary).largestFile ??
-          largestFiles[0] ??
+          nextSession.largestFiles[0] ??
           null
       }
-      nextSession.largestFiles = largestFiles
     }
 
     if (event.tree && typeof event.tree === 'object') {
