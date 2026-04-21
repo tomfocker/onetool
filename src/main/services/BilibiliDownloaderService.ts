@@ -1,5 +1,6 @@
 import fs from 'fs'
 import path from 'path'
+import { spawn } from 'child_process'
 import { app } from 'electron'
 import {
   buildStreamOptionSummary,
@@ -30,19 +31,41 @@ type FetchLike = (input: string, init?: Record<string, unknown>) => Promise<{
   ok?: boolean
   status?: number
   json: () => Promise<any>
+  arrayBuffer?: () => Promise<ArrayBuffer>
 }>
 
 type AppLike = Pick<typeof app, 'getPath'>
 
-type FsLike = Pick<typeof fs, 'existsSync' | 'mkdirSync' | 'readFileSync' | 'unlinkSync'> & {
-  promises: Pick<typeof fs.promises, 'writeFile'>
+type FsLike = Pick<typeof fs, 'existsSync' | 'mkdirSync' | 'readFileSync' | 'renameSync' | 'unlinkSync'> & {
+  promises: Pick<typeof fs.promises, 'mkdir' | 'rm' | 'writeFile'>
 }
+
+type DownloadBinaryInput = {
+  url: string
+  destinationPath: string
+  signal: AbortSignal
+  headers: Record<string, string>
+}
+
+type DownloadBinaryLike = (input: DownloadBinaryInput) => Promise<void>
+
+type RunFfmpegInput = {
+  ffmpegPath: string
+  videoPath: string
+  audioPath: string
+  outputPath: string
+}
+
+type RunFfmpegLike = (input: RunFfmpegInput) => Promise<void>
 
 type BilibiliDownloaderServiceDependencies = {
   app?: AppLike
   fs?: FsLike
   fetch?: FetchLike
   now?: () => number
+  downloadBinary?: DownloadBinaryLike
+  getFfmpegPath?: () => string | null
+  runFfmpeg?: RunFfmpegLike
 }
 
 type StateListener = (state: BilibiliDownloaderState) => void
@@ -93,12 +116,42 @@ type LoadStreamOptionsPayload = {
   summary: BilibiliStreamOptionSummary
 }
 
+type StartDownloadRequest = {
+  exportMode: BilibiliDownloaderSelection['exportMode']
+  outputDirectory?: string
+}
+
+type StartDownloadPayload = {
+  outputPaths: string[]
+  tempDirectory: string
+}
+
 type ItemPlaybackTarget = {
   cid: number | null
   page?: number
   epId?: string
   seasonId?: string
 }
+
+type DashResource = {
+  id?: number
+  baseUrl?: string
+  base_url?: string
+  backupUrl?: string[]
+  backup_url?: string[]
+}
+
+type ActiveDownloadTask = {
+  controller: AbortController
+  tempDirectory: string
+}
+
+type ExtendedTaskStage = BilibiliDownloaderState['taskStage'] | 'cancelled'
+
+const TASK_ROOT_DIRECTORY_NAME = 'bilibili-downloader'
+const TASKS_DIRECTORY_NAME = 'tasks'
+const VIDEO_TRACK_FILE_NAME = 'video-track.m4s'
+const AUDIO_TRACK_FILE_NAME = 'audio-track.m4s'
 
 function cloneState(state: BilibiliDownloaderState): BilibiliDownloaderState {
   return JSON.parse(JSON.stringify(state))
@@ -299,18 +352,26 @@ export class BilibiliDownloaderService {
   private readonly fs: FsLike
   private readonly fetchImpl: FetchLike | null
   private readonly now: () => number
+  private readonly downloadBinaryImpl: DownloadBinaryLike
+  private readonly getFfmpegPathImpl: () => string | null
+  private readonly runFfmpegImpl: RunFfmpegLike
   private readonly stateListeners = new Set<StateListener>()
 
   private state: BilibiliDownloaderState = createDefaultBilibiliDownloaderState()
   private authSession: BilibiliAuthSession | null = null
   private pendingAuthCode: string | null = null
   private readonly itemPlaybackTargets = new Map<string, ItemPlaybackTarget>()
+  private readonly playPayloads = new Map<string, any>()
+  private activeDownloadTask: ActiveDownloadTask | null = null
 
   constructor(dependencies: BilibiliDownloaderServiceDependencies = {}) {
     this.app = dependencies.app ?? app
     this.fs = dependencies.fs ?? fs
     this.fetchImpl = dependencies.fetch ?? (typeof fetch === 'function' ? fetch.bind(globalThis) : null)
     this.now = dependencies.now ?? (() => Date.now())
+    this.downloadBinaryImpl = dependencies.downloadBinary ?? ((input) => this.downloadBinary(input))
+    this.getFfmpegPathImpl = dependencies.getFfmpegPath ?? (() => process.env.FFMPEG_PATH ?? 'ffmpeg')
+    this.runFfmpegImpl = dependencies.runFfmpeg ?? ((input) => this.runFfmpeg(input))
   }
 
   onStateChanged(listener: StateListener) {
@@ -565,6 +626,7 @@ export class BilibiliDownloaderService {
     const parsedInput = parseBilibiliLink(request.url)
     if (!parsedInput) {
       this.itemPlaybackTargets.clear()
+      this.playPayloads.clear()
       this.updateState({
         parsedLink: null,
         selection: { exportMode: null },
@@ -590,6 +652,7 @@ export class BilibiliDownloaderService {
     }
 
     this.itemPlaybackTargets.clear()
+    this.playPayloads.clear()
     this.updateState({
       taskStage: 'parsing',
       error: null
@@ -614,6 +677,7 @@ export class BilibiliDownloaderService {
       }
     } catch (error) {
       this.itemPlaybackTargets.clear()
+      this.playPayloads.clear()
       this.updateState({
         parsedLink: null,
         selection: { exportMode: null },
@@ -694,6 +758,8 @@ export class BilibiliDownloaderService {
         summary
       }
 
+      this.playPayloads.set(request.itemId, playPayload)
+
       this.updateState({
         parsedLink: nextParsedLink,
         selection: { exportMode: null },
@@ -716,6 +782,208 @@ export class BilibiliDownloaderService {
         error: this.toErrorMessage(error)
       }
     }
+  }
+
+  async startDownload(request: StartDownloadRequest): Promise<IpcResponse<StartDownloadPayload>> {
+    const exportMode = request.exportMode
+    if (!this.state.parsedLink || !this.state.streamOptionSummary) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Load stream options before starting a download'
+      })
+      return {
+        success: false,
+        error: 'Load stream options before starting a download'
+      }
+    }
+
+    if (!exportMode) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Select an export mode before starting a download'
+      })
+      return {
+        success: false,
+        error: 'Select an export mode before starting a download'
+      }
+    }
+
+    if (this.activeDownloadTask) {
+      this.updateState({
+        error: 'A Bilibili download is already in progress'
+      })
+      return {
+        success: false,
+        error: 'A Bilibili download is already in progress'
+      }
+    }
+
+    const modeAvailability = this.state.streamOptionSummary.exportModes[exportMode]
+    if (!modeAvailability?.available) {
+      const error = modeAvailability?.disabledReason ?? 'The selected export mode is unavailable'
+      this.updateState({
+        taskStage: 'idle',
+        error
+      })
+      return {
+        success: false,
+        error
+      }
+    }
+
+    const selectedItemId = this.state.parsedLink.selectedItemId
+    const playPayload = this.playPayloads.get(selectedItemId)
+    if (!playPayload) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Selected item is missing loaded stream options'
+      })
+      return {
+        success: false,
+        error: 'Selected item is missing loaded stream options'
+      }
+    }
+
+    const tempDirectory = this.getTaskDirectory()
+    const controller = new AbortController()
+    this.activeDownloadTask = {
+      controller,
+      tempDirectory
+    }
+
+    const outputDirectory = request.outputDirectory ?? this.app.getPath('downloads')
+    const headers = this.getRequestHeaders()
+    const outputPaths: string[] = []
+    let preserveTempArtifacts = false
+
+    this.fs.mkdirSync(tempDirectory, { recursive: true })
+    this.fs.mkdirSync(outputDirectory, { recursive: true })
+    this.updateState({
+      selection: { exportMode },
+      error: null
+    })
+
+    try {
+      const resources = this.resolveDashResources(playPayload)
+      const videoTempPath = path.join(tempDirectory, VIDEO_TRACK_FILE_NAME)
+      const audioTempPath = path.join(tempDirectory, AUDIO_TRACK_FILE_NAME)
+
+      if (exportMode === 'video-only' || exportMode === 'split-streams' || exportMode === 'merge-mp4') {
+        if (!resources.videoUrl) {
+          throw new Error('Selected stream is missing a video resource')
+        }
+
+        this.setTaskStage('downloading-video')
+        await this.downloadBinaryImpl({
+          url: resources.videoUrl,
+          destinationPath: videoTempPath,
+          signal: controller.signal,
+          headers
+        })
+      }
+
+      if (exportMode === 'audio-only' || exportMode === 'split-streams' || exportMode === 'merge-mp4') {
+        if (!resources.audioUrl) {
+          throw new Error('Selected stream is missing an audio resource')
+        }
+
+        this.setTaskStage('downloading-audio')
+        await this.downloadBinaryImpl({
+          url: resources.audioUrl,
+          destinationPath: audioTempPath,
+          signal: controller.signal,
+          headers
+        })
+      }
+
+      if (exportMode === 'merge-mp4') {
+        const ffmpegPath = this.getFfmpegPathImpl()
+        if (!ffmpegPath) {
+          throw new Error('FFmpeg is not available')
+        }
+
+        const mergedOutputPath = path.join(outputDirectory, `${this.getOutputBaseName()}.mp4`)
+        this.removeExistingFileIfPresent(mergedOutputPath)
+        this.setTaskStage('merging')
+
+        try {
+          await this.runFfmpegImpl({
+            ffmpegPath,
+            videoPath: videoTempPath,
+            audioPath: audioTempPath,
+            outputPath: mergedOutputPath
+          })
+        } catch (error) {
+          preserveTempArtifacts = true
+          throw error
+        }
+
+        outputPaths.push(mergedOutputPath)
+      } else if (exportMode === 'video-only') {
+        const finalPath = path.join(outputDirectory, `${this.getOutputBaseName()}.video${this.getExtensionFromUrl(resources.videoUrl)}`)
+        this.moveFile(videoTempPath, finalPath)
+        outputPaths.push(finalPath)
+      } else if (exportMode === 'audio-only') {
+        const finalPath = path.join(outputDirectory, `${this.getOutputBaseName()}.audio${this.getExtensionFromUrl(resources.audioUrl)}`)
+        this.moveFile(audioTempPath, finalPath)
+        outputPaths.push(finalPath)
+      } else if (exportMode === 'split-streams') {
+        const finalVideoPath = path.join(outputDirectory, `${this.getOutputBaseName()}.video${this.getExtensionFromUrl(resources.videoUrl)}`)
+        const finalAudioPath = path.join(outputDirectory, `${this.getOutputBaseName()}.audio${this.getExtensionFromUrl(resources.audioUrl)}`)
+        this.moveFile(videoTempPath, finalVideoPath)
+        this.moveFile(audioTempPath, finalAudioPath)
+        outputPaths.push(finalVideoPath, finalAudioPath)
+      }
+
+      await this.cleanupTaskDirectory(tempDirectory)
+      this.setTaskStage('completed')
+      this.updateState({ error: null })
+      return {
+        success: true,
+        data: {
+          outputPaths,
+          tempDirectory
+        }
+      }
+    } catch (error) {
+      const cancelled = this.isAbortError(error) || controller.signal.aborted
+      if (cancelled) {
+        await this.cleanupTaskDirectory(tempDirectory)
+        this.setTaskStage('cancelled')
+        this.updateState({ error: null })
+        return {
+          success: false,
+          error: 'Download cancelled'
+        }
+      }
+
+      if (!preserveTempArtifacts) {
+        await this.cleanupTaskDirectory(tempDirectory)
+      }
+
+      this.setTaskStage('failed')
+      this.updateState({
+        error: this.toErrorMessage(error)
+      })
+      return {
+        success: false,
+        error: this.toErrorMessage(error)
+      }
+    } finally {
+      this.activeDownloadTask = null
+    }
+  }
+
+  cancelDownload(): IpcResponse {
+    if (!this.activeDownloadTask) {
+      return {
+        success: false,
+        error: 'No Bilibili download is in progress'
+      }
+    }
+
+    this.activeDownloadTask.controller.abort()
+    return { success: true }
   }
 
   private getSessionPath() {
@@ -932,6 +1200,73 @@ export class BilibiliDownloaderService {
     })
   }
 
+  private getTaskDirectory() {
+    return path.join(this.app.getPath('userData'), TASK_ROOT_DIRECTORY_NAME, TASKS_DIRECTORY_NAME, String(this.now()))
+  }
+
+  private getOutputBaseName() {
+    const parsedLink = this.state.parsedLink
+    if (!parsedLink) {
+      return 'bilibili-download'
+    }
+
+    const selectedItem = parsedLink.items.find((item) => item.id === parsedLink.selectedItemId)
+    const parts = [parsedLink.title, selectedItem?.title].filter((value) => normalizeText(value))
+    const rawBaseName = parts.length > 0 ? parts.join(' - ') : 'bilibili-download'
+    return rawBaseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').trim()
+  }
+
+  private getExtensionFromUrl(url: string | null) {
+    if (!url) {
+      return '.bin'
+    }
+
+    try {
+      const pathname = new URL(url).pathname
+      const extension = path.extname(pathname)
+      return extension || '.bin'
+    } catch {
+      return '.bin'
+    }
+  }
+
+  private resolveDashResources(playPayload: any) {
+    const dash = playPayload?.dash ?? {}
+    const firstVideo = (Array.isArray(dash.video) ? dash.video : [])[0] as DashResource | undefined
+    const firstAudio = (Array.isArray(dash.audio) ? dash.audio : [])[0] as DashResource | undefined
+
+    return {
+      videoUrl: this.getResourceUrl(firstVideo),
+      audioUrl: this.getResourceUrl(firstAudio)
+    }
+  }
+
+  private getResourceUrl(resource: DashResource | undefined) {
+    if (!resource) {
+      return null
+    }
+
+    const primary = normalizeText(resource.baseUrl ?? resource.base_url)
+    if (primary) {
+      return primary
+    }
+
+    const backupList = Array.isArray(resource.backupUrl)
+      ? resource.backupUrl
+      : Array.isArray(resource.backup_url)
+        ? resource.backup_url
+        : []
+
+    for (const candidate of backupList) {
+      const normalized = normalizeText(candidate)
+      if (normalized) {
+        return normalized
+      }
+    }
+
+    return null
+  }
+
   private async fetchJson(url: string) {
     if (!this.fetchImpl) {
       throw new Error('Fetch is not available')
@@ -996,7 +1331,93 @@ export class BilibiliDownloaderService {
   }
 
   private toErrorMessage(error: unknown) {
-    return error instanceof Error ? error.message : String(error)
+    if (error instanceof Error) {
+      return error.message
+    }
+
+    if (error && typeof error === 'object' && typeof (error as { message?: unknown }).message === 'string') {
+      return String((error as { message: string }).message)
+    }
+
+    return String(error)
+  }
+
+  private setTaskStage(stage: ExtendedTaskStage) {
+    this.updateState({
+      taskStage: stage as BilibiliDownloaderState['taskStage']
+    })
+  }
+
+  private removeExistingFileIfPresent(filePath: string) {
+    if (this.fs.existsSync(filePath)) {
+      this.fs.unlinkSync(filePath)
+    }
+  }
+
+  private moveFile(fromPath: string, toPath: string) {
+    this.removeExistingFileIfPresent(toPath)
+    this.fs.renameSync(fromPath, toPath)
+  }
+
+  private async cleanupTaskDirectory(taskDirectory: string) {
+    await this.fs.promises.rm(taskDirectory, {
+      recursive: true,
+      force: true
+    })
+  }
+
+  private isAbortError(error: unknown) {
+    const message = this.toErrorMessage(error).toLowerCase()
+    return message === 'aborted' || message.includes('abort')
+  }
+
+  private async downloadBinary(input: DownloadBinaryInput) {
+    if (!this.fetchImpl) {
+      throw new Error('Fetch is not available')
+    }
+
+    const response = await this.fetchImpl(input.url, {
+      headers: input.headers,
+      signal: input.signal
+    })
+
+    if (typeof response.arrayBuffer !== 'function') {
+      throw new Error('Binary downloads are not supported by the current fetch implementation')
+    }
+
+    const body = Buffer.from(await response.arrayBuffer())
+    await this.fs.promises.writeFile(input.destinationPath, body)
+  }
+
+  private async runFfmpeg(input: RunFfmpegInput) {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        input.ffmpegPath,
+        [
+          '-y',
+          '-i',
+          input.videoPath,
+          '-i',
+          input.audioPath,
+          '-c',
+          'copy',
+          input.outputPath
+        ],
+        {
+          windowsHide: true
+        }
+      )
+
+      child.once('error', reject)
+      child.once('exit', (code) => {
+        if (code === 0) {
+          resolve()
+          return
+        }
+
+        reject(new Error(`FFmpeg exited with code ${code ?? 'unknown'}`))
+      })
+    })
   }
 }
 
