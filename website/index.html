@@ -29,9 +29,7 @@
 
         <div class="nav-links">
           <a href="#hero">首页</a>
-          <a href="#scenarios">日常场景</a>
-          <a href="#tools">工具矩阵</a>
-          <a href="#system">系统支持</a>
+          <a href="#tools">工具展示</a>
           <a href="#download">下载</a>
         </div>
 
@@ -97,62 +95,15 @@
         </div>
       </section>
 
-      <section class="section value-strip reveal" aria-label="OneTool 价值摘要">
-        <div class="value-strip-grid">
-          <article class="value-strip-item">
-            <strong>一个入口</strong>
-            <p>把桌面高频工具收进同一个启动面板，日常动作不用再分散找。</p>
-          </article>
-          <article class="value-strip-item">
-            <strong>上手直接</strong>
-            <p>名字直白、功能清楚，下载后就能马上用，不需要先理解一套新概念。</p>
-          </article>
-          <article class="value-strip-item">
-            <strong>覆盖更广</strong>
-            <p>从截图录屏到系统辅助能力，一次装好，少装多个小工具。</p>
-          </article>
-        </div>
-      </section>
-
-      <section
-        class="section scenario-section reveal"
-        id="scenarios"
-        aria-labelledby="scenarios-title"
-      >
-        <div class="section-heading">
-          <p class="section-tag">Daily Use</p>
-          <h2 id="scenarios-title">每天都会遇到的事，尽量一次解决。</h2>
-          <p>OneTool 优先照顾真实桌面使用频率最高的几类动作，让它像顺手工具，而不是功能展厅。</p>
-        </div>
-
-        <div class="scenario-grid">
-          <article class="scenario-card" data-flight-target="capture" data-flight-dock="capture">
-            <span>场景 01</span>
-            <h3>截图、录屏、取色，开会和沟通时直接拿来用。</h3>
-            <p>需要留证据、做演示、标问题时，不用再在多个应用之间来回切换。</p>
-          </article>
-          <article class="scenario-card" data-flight-target="organize" data-flight-dock="organize">
-            <span>场景 02</span>
-            <h3>批量重命名、剪贴板整理，处理文件时更省心。</h3>
-            <p>重复动作交给工具做，临时复制的内容也能随时翻出来继续用。</p>
-          </article>
-          <article class="scenario-card" data-flight-target="utility" data-flight-dock="utility">
-            <span>场景 03</span>
-            <h3>二维码、语音输入、悬浮收纳，零碎小事不用再单独装软件。</h3>
-            <p>把看起来小、但每天都会点开的工具收在一起，桌面会清爽很多。</p>
-          </article>
-        </div>
-      </section>
-
       <section class="section tool-matrix reveal" id="tools" aria-labelledby="tools-title">
-        <div class="section-heading">
-          <p class="section-tag">Tool Matrix</p>
-          <h2 id="tools-title">常用工具按用途分组，找起来更快。</h2>
-          <p>先看到自己要解决的问题，再找到对应工具，比背功能名更自然。</p>
+        <div class="tool-matrix-intro">
+          <p class="tool-matrix-eyebrow">TOOLS</p>
+          <h2>常用工具已经整理好，滚动到这里就能直接接住。</h2>
+          <p>截图、文件处理、剪贴板和零碎小工具不再分散展示，第二页就是唯一落点。</p>
         </div>
 
         <div class="tool-matrix-grid">
-          <article class="tool-group tool-group-primary" data-flight-target="matrix" data-flight-dock="matrix">
+          <article class="tool-group tool-group-primary" data-flight-target="capture" data-flight-dock="capture">
             <span>捕获与处理</span>
             <ul>
               <li>叠加截图</li>
@@ -162,7 +113,7 @@
               <li>截屏翻译</li>
             </ul>
           </article>
-          <article class="tool-group">
+          <article class="tool-group" data-flight-target="organize" data-flight-dock="organize">
             <span>文件与文本</span>
             <ul>
               <li>批量重命名</li>
@@ -172,7 +123,7 @@
               <li>网页激活</li>
             </ul>
           </article>
-          <article class="tool-group">
+          <article class="tool-group" data-flight-target="utility" data-flight-dock="utility">
             <span>桌面效率</span>
             <ul>
               <li>文件暂存悬浮球</li>
@@ -181,42 +132,6 @@
               <li>极速装机</li>
               <li>Windows 管理面板</li>
             </ul>
-          </article>
-          <article class="tool-group">
-            <span>网络与系统</span>
-            <ul>
-              <li>本地代理管理</li>
-              <li>网络雷达</li>
-              <li>WSL 管理</li>
-              <li>配置检测</li>
-              <li>服务器监控</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section class="section system-strip reveal" id="system" aria-labelledby="system-title">
-        <div class="system-strip-copy">
-          <p class="section-tag">Advanced Support</p>
-          <h2 id="system-title">不只照顾轻工具，也把系统层常见操作放到前台。</h2>
-          <p>
-            如果你也会碰代理、网络状态、WSL 或基础运维动作，OneTool
-            可以让这些能力比原生入口更快到手。
-          </p>
-        </div>
-
-        <div class="system-strip-grid">
-          <article class="system-card">
-            <strong>代理与网络</strong>
-            <p>本地代理切换、端口状态和网络排查，不用再翻多层设置页。</p>
-          </article>
-          <article class="system-card">
-            <strong>WSL 与环境</strong>
-            <p>常见实例状态、启动与切换入口集中展示，减少命令行记忆负担。</p>
-          </article>
-          <article class="system-card">
-            <strong>系统辅助入口</strong>
-            <p>把 Windows 常见管理动作收回来，遇到问题时少走弯路。</p>
           </article>
         </div>
       </section>
