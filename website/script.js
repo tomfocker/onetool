@@ -18,7 +18,14 @@ document.addEventListener('DOMContentLoaded', () => {
     utility: document.querySelector('[data-flight-target="utility"]'),
     matrix: document.querySelector('[data-flight-target="matrix"]')
   }
+  const dockTargets = {
+    capture: document.querySelector('[data-flight-dock="capture"]'),
+    organize: document.querySelector('[data-flight-dock="organize"]'),
+    utility: document.querySelector('[data-flight-dock="utility"]'),
+    matrix: document.querySelector('[data-flight-dock="matrix"]')
+  }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  let frameRequested = false
 
   const clamp = motionApi?.clamp ?? ((value, min, max) => Math.min(Math.max(value, min), max))
   const getHeroMotionState =
@@ -27,8 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
       progress,
       breakout: 0,
       breakoutSoft: 0,
+      morph: 0,
+      morphSoft: 0,
       travel: 0,
       travelSoft: 0,
+      dock: 0,
+      dockSoft: 0,
       settle: 0,
       settleSoft: 0,
       highlight: {
@@ -93,9 +104,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const targetX = targetRect.left - flightRect.left + targetRect.width / 2
       const targetY = targetRect.top - flightRect.top + targetRect.height / 2
       const bias = flightBiases[key] ?? { x: 0, y: 0 }
+      const dockTarget = dockTargets[targetKey]
+      const dockRect = dockTarget?.getBoundingClientRect()
+      const dockX = dockRect ? dockRect.left - flightRect.left + dockRect.width / 2 : targetX
+      const dockY = dockRect ? dockRect.top - flightRect.top + dockRect.height / 2 : targetY
+      const dockScale = dockRect ? dockRect.width / card.offsetWidth : 1
 
       card.style.setProperty('--target-x', `${targetX - startX + bias.x}px`)
       card.style.setProperty('--target-y', `${targetY - startY + bias.y}px`)
+      card.style.setProperty('--dock-x', `${dockX - startX + bias.x}px`)
+      card.style.setProperty('--dock-y', `${dockY - startY + bias.y}px`)
+      card.style.setProperty('--dock-scale', dockScale.toFixed(4))
+    })
+  }
+
+  const scheduleSync = () => {
+    if (frameRequested) {
+      return
+    }
+
+    frameRequested = true
+    window.requestAnimationFrame(() => {
+      frameRequested = false
+      syncScrollState()
     })
   }
 
@@ -116,19 +147,24 @@ document.addEventListener('DOMContentLoaded', () => {
     root.style.setProperty('--hero-progress', state.progress.toFixed(4))
     root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
     root.style.setProperty('--flight-breakout-soft', state.breakoutSoft.toFixed(4))
+    root.style.setProperty('--flight-morph', state.morph.toFixed(4))
+    root.style.setProperty('--flight-morph-soft', state.morphSoft.toFixed(4))
     root.style.setProperty('--flight-travel', state.travel.toFixed(4))
     root.style.setProperty('--flight-travel-soft', state.travelSoft.toFixed(4))
+    root.style.setProperty('--flight-dock', state.dock.toFixed(4))
+    root.style.setProperty('--flight-dock-soft', state.dockSoft.toFixed(4))
     root.style.setProperty('--flight-settle', state.settle.toFixed(4))
     root.style.setProperty('--flight-settle-soft', state.settleSoft.toFixed(4))
     root.style.setProperty('--capture-highlight', state.highlight.capture.toFixed(4))
     root.style.setProperty('--organize-highlight', state.highlight.organize.toFixed(4))
     root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
     root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
+    syncFlightTargets()
   }
 
   syncFlightTargets()
   syncScrollState()
-  window.addEventListener('scroll', syncScrollState, { passive: true })
+  window.addEventListener('scroll', scheduleSync, { passive: true })
   window.addEventListener('resize', () => {
     syncFlightTargets()
     syncScrollState()

@@ -24,8 +24,12 @@
   --hero-progress: 0;
   --flight-breakout: 0;
   --flight-breakout-soft: 0;
+  --flight-morph: 0;
+  --flight-morph-soft: 0;
   --flight-travel: 0;
   --flight-travel-soft: 0;
+  --flight-dock: 0;
+  --flight-dock-soft: 0;
   --flight-settle: 0;
   --flight-settle-soft: 0;
   --capture-highlight: 0;
@@ -507,6 +511,9 @@ select {
 .hero-flight-card {
   --target-x: 0px;
   --target-y: 0px;
+  --dock-x: 0px;
+  --dock-y: 0px;
+  --dock-scale: 1;
   --break-x: 0px;
   --break-y: 0px;
   --break-rotate: 0deg;
@@ -531,6 +538,14 @@ select {
   opacity: calc(1 - (var(--flight-settle-soft) * 0.92));
   will-change: transform, opacity;
   transition: opacity 220ms linear;
+}
+
+.hero-flight-card[data-flight-card='capture'],
+.hero-flight-card[data-flight-card='organize'],
+.hero-flight-card[data-flight-card='clipboard'],
+.hero-flight-card[data-flight-card='utility'],
+.hero-flight-card[data-flight-card='matrix'] {
+  transform-style: preserve-3d;
 }
 
 .hero-flight-card::before {
@@ -573,14 +588,28 @@ select {
   --card-tilt-y: -4deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * 0.78 * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(-4deg + (var(--break-rotate) * var(--flight-breakout-soft))))
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc((-4deg + (var(--break-rotate) * var(--flight-breakout-soft))) * (1 - var(--flight-morph-soft))))
     rotateX(calc(var(--card-tilt-x) * var(--flight-breakout-soft)))
     rotateY(calc(var(--card-tilt-y) * var(--flight-breakout-soft)));
+  opacity: calc(1 - (0.88 * var(--flight-dock-soft)));
 }
 
 .hero-flight-card-capture,
@@ -600,12 +629,26 @@ select {
   --break-rotate: 7deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(7deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc(7deg * (1 - var(--flight-morph-soft))));
+  opacity: calc(1 - (0.82 * var(--flight-dock-soft)));
 }
 
 .hero-flight-card-organize {
@@ -617,12 +660,26 @@ select {
   --break-rotate: -10deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(-8deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc(-8deg * (1 - var(--flight-morph-soft))));
+  opacity: calc(1 - (0.82 * var(--flight-dock-soft)));
 }
 
 .hero-flight-card-clipboard {
@@ -634,12 +691,26 @@ select {
   --break-rotate: 9deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(10deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc(10deg * (1 - var(--flight-morph-soft))));
+  opacity: calc(1 - (0.82 * var(--flight-dock-soft)));
 }
 
 .hero-flight-card-utility {
@@ -653,12 +724,26 @@ select {
   --break-rotate: -14deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (0.38 * var(--flight-travel-soft))))
-    rotate(calc(-13deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+    scale(
+      calc(
+        (1 - (0.38 * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc(-13deg * (1 - var(--flight-morph-soft))));
+  opacity: calc(1 - (0.82 * var(--flight-dock-soft)));
 }
 
 .value-strip {
@@ -832,6 +917,14 @@ select {
 
 [data-flight-target='matrix'] {
   --target-active: var(--matrix-highlight);
+}
+
+[data-flight-dock='capture'],
+[data-flight-dock='organize'],
+[data-flight-dock='utility'],
+[data-flight-dock='matrix'] {
+  transform: translateY(calc((1 - var(--flight-dock-soft)) * 16px));
+  box-shadow: 0 20px 60px rgba(110, 134, 182, calc(0.04 + (var(--flight-dock-soft) * 0.08)));
 }
 
 .scenario-card[data-flight-target],
