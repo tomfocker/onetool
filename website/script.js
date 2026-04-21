@@ -278,18 +278,18 @@ document.addEventListener('DOMContentLoaded', () => {
       {
         progress,
         breakoutProgress: clamp(progress / 0.3, 0, 1),
-        clusterProgress: getViewportProgress(toolsSection, 0.86, 0.28),
-        travelProgress: getViewportProgress(toolsSection, 1.1, 0.34),
-        morphProgress: getViewportProgress(toolsSection, 0.74, 0.2),
+        clusterProgress: getViewportProgress(toolsSection, 1.18, 0.42),
+        travelProgress: getViewportProgress(toolsSection, 1.28, 0.48),
+        morphProgress: getViewportProgress(toolsSection, 0.88, 0.26),
         // Keep the dock window late so the shorter tools page stays readable before takeover.
-        dockProgress: getViewportProgress(toolsSection, 0.46, 0.08),
-        settleProgress: getViewportProgress(toolsSection, 0.92, 0.14),
+        dockProgress: getViewportProgress(toolsSection, 0.52, 0.1),
+        settleProgress: getViewportProgress(toolsSection, 1, 0.18),
         highlight: {
-          capture: easeOutCubic(getViewportProgress(heroTargets.capture, 0.94, 0.48)),
-          text: easeOutCubic(getViewportProgress(heroTargets.text, 0.82, 0.22)),
-          web: easeOutCubic(getViewportProgress(heroTargets.web, 0.88, 0.4)),
-          utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.84, 0.3)),
-          matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.72, 0.18))
+          capture: easeOutCubic(getViewportProgress(heroTargets.capture, 1.04, 0.56)),
+          text: easeOutCubic(getViewportProgress(heroTargets.text, 0.94, 0.34)),
+          web: easeOutCubic(getViewportProgress(heroTargets.web, 0.98, 0.48)),
+          utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.96, 0.4)),
+          matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.84, 0.28))
         }
       },
       prefersReducedMotion
