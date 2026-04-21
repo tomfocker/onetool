@@ -125,6 +125,9 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.app.onOpenTool, 'function')
   assert.equal(typeof bridge.app.onNotification, 'function')
   assert.equal(typeof bridge.doctor.runAudit, 'function')
+  assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
+  assert.equal(typeof bridge.taskbarAppearance.applyPreset, 'function')
+  assert.equal(typeof bridge.taskbarAppearance.restoreDefault, 'function')
 })
 
 test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () => {
@@ -438,7 +441,31 @@ test('createElectronBridge exposes explicit updates APIs and unsubscribes cleanl
   assert.equal(mocks.removed[0][0], 'updates-state-changed')
 })
 
-test('createElectronBridge exposes explicit bilibili downloader APIs and subscriptions', async () => {
+test('createElectronBridge maps taskbar appearance helpers to the explicit IPC channels', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  await bridge.taskbarAppearance.getStatus()
+  await bridge.taskbarAppearance.applyPreset({
+    preset: 'acrylic',
+    intensity: 72,
+    tintHex: '#22446688'
+  })
+  await bridge.taskbarAppearance.restoreDefault()
+
+  assert.deepEqual(mocks.invokeCalls, [
+    ['taskbar-appearance-get-status'],
+    ['taskbar-appearance-apply-preset', {
+      preset: 'acrylic',
+      intensity: 72,
+      tintHex: '#22446688'
+    }],
+    ['taskbar-appearance-restore-default']
+  ])
+})
+
+test('createElectronBridge exposes explicit bilibili downloader helpers and state subscriptions', async () => {
   const { createElectronBridge } = loadCreateElectronBridgeModule()
   const mocks = createMocks()
   const bridge = createElectronBridge(mocks.deps)

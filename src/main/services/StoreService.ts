@@ -6,6 +6,7 @@ import { GlobalStore } from '../../shared/types'
 import { logger } from '../utils/logger'
 import { DEFAULT_PINNED_TOOL_IDS } from '../../shared/devEnvironment'
 import { createDefaultDownloadOrganizerStoredState } from '../../shared/downloadOrganizer'
+import { createDefaultTaskbarAppearanceSettings } from '../../shared/taskbarAppearance'
 
 const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
   'control',
@@ -18,7 +19,9 @@ const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
   'sysdm'
 ]
 
-const DEFAULT_SETTINGS = {
+const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
+
+const DEFAULT_SETTINGS: GlobalStore['settings'] = {
   recorderHotkey: 'Alt+Shift+R',
   screenshotHotkey: 'Alt+Shift+S',
   screenshotSavePath: '',
@@ -29,7 +32,11 @@ const DEFAULT_SETTINGS = {
   minimizeToTray: true,
   translateApiUrl: '',
   translateApiKey: '',
-  translateModel: ''
+  translateModel: '',
+  taskbarAppearanceEnabled: defaultTaskbarAppearanceSettings.enabled,
+  taskbarAppearancePreset: defaultTaskbarAppearanceSettings.preset,
+  taskbarAppearanceIntensity: defaultTaskbarAppearanceSettings.intensity,
+  taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex
 }
 
 export class StoreService extends EventEmitter {
