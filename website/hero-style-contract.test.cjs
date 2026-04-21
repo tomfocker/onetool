@@ -9,6 +9,7 @@ const style = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8')
 test('hero cards map to tool groups and scroll timing comes only from toolsSection', () => {
   const flightTargetsBlock = script.match(/const flightTargets = \{[\s\S]*?\n  \}/)
   const dockTargetsBlock = script.match(/const dockTargets = \{[\s\S]*?\n  \}/)
+  const heroTargetsBlock = script.match(/const heroTargets = \{[\s\S]*?\n  \}/)
   const scheduleSyncBlock = script.match(/const scheduleSync = \(\) => \{[\s\S]*?\n  \}/)
   const syncScrollStateBlock = script.match(/const syncScrollState = \(\) => \{[\s\S]*?\n  \}/)
   const syncFlightTargetsBlock = script.match(/const syncFlightTargets = \(\) => \{[\s\S]*?\n  \}/)
@@ -16,6 +17,7 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
 
   assert.ok(flightTargetsBlock, 'expected flightTargets block in script.js')
   assert.ok(dockTargetsBlock, 'expected dockTargets block in script.js')
+  assert.ok(heroTargetsBlock, 'expected heroTargets block in script.js')
   assert.ok(scheduleSyncBlock, 'expected scheduleSync block in script.js')
   assert.ok(syncScrollStateBlock, 'expected syncScrollState block in script.js')
   assert.ok(syncFlightTargetsBlock, 'expected syncFlightTargets block in script.js')
@@ -50,12 +52,30 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(syncScrollStateBlock[0], /morphProgress:\s*getViewportProgress\(toolsSection, 0\.74, 0\.2\)/)
   assert.match(syncScrollStateBlock[0], /dockProgress:\s*getViewportProgress\(toolsSection, 0\.46, 0\.08\)/)
   assert.match(syncScrollStateBlock[0], /settleProgress:\s*getViewportProgress\(toolsSection, 0\.92, 0\.14\)/)
+  assert.match(heroTargetsBlock[0], /capture:\s*flightTargets\.capture/)
+  assert.match(heroTargetsBlock[0], /clipboard:\s*flightTargets\.organize/)
+  assert.match(heroTargetsBlock[0], /matrix:\s*flightTargets\.capture/)
+  assert.match(syncScrollStateBlock[0], /clipboard:\s*easeOutCubic\(getViewportProgress\(heroTargets\.clipboard, 0\.82, 0\.22\)\)/)
+  assert.match(syncScrollStateBlock[0], /matrix:\s*easeOutCubic\(getViewportProgress\(heroTargets\.matrix, 0\.72, 0\.18\)\)/)
   assert.doesNotMatch(syncScrollStateBlock[0], /travelLead/)
   assert.doesNotMatch(syncScrollStateBlock[0], /travelFollow/)
 
   assert.match(scheduleSyncBlock[0], /window\.requestAnimationFrame\(\(\) => \{/)
   assert.match(syncScrollStateBlock[0], /--flight-morph/)
   assert.match(syncScrollStateBlock[0], /--flight-dock/)
+})
+
+test('hero sticky keeps the dock handoff style contract', () => {
+  const heroStickyRule = style.match(/\.hero-sticky\s*\{[\s\S]*?\n\}/)
+
+  assert.ok(heroStickyRule, 'expected .hero-sticky rule in style.css')
+  assert.match(style, /--dock-x/)
+  assert.match(style, /--dock-y/)
+  assert.match(style, /--dock-scale/)
+  assert.match(style, /--clipboard-highlight/)
+  assert.match(heroStickyRule[0], /overflow:\s*visible/)
+  assert.match(style, /var\(--flight-dock-soft\)/)
+  assert.match(style, /\.hero-flight-card\[data-flight-card=/)
 })
 
 test('hero title uses launch-page typography instead of the old stacked tower', () => {
