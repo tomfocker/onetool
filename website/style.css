@@ -375,31 +375,37 @@ select {
   z-index: 2;
   display: grid;
   gap: 18px;
-  max-width: 560px;
+  max-width: 640px;
 }
 
 .hero-title {
   display: grid;
-  max-width: 9ch;
+  gap: 6px;
+  max-width: none;
   color: #16233f;
   font-family: 'Noto Sans SC', 'Manrope', 'PingFang SC', sans-serif;
-  font-size: clamp(3.18rem, 5.8vw, 5.86rem);
-  font-weight: 780;
-  line-height: 0.84;
-  letter-spacing: -0.092em;
-  text-wrap: balance;
+  text-wrap: initial;
 }
 
 .hero-title-line {
   display: block;
-  text-wrap: balance;
+  width: fit-content;
+}
+
+.hero-title-line-primary {
+  font-size: clamp(3.18rem, 5.8vw, 5.86rem);
+  font-weight: 780;
+  line-height: 0.84;
+  letter-spacing: -0.092em;
 }
 
 .hero-title-line-wide {
   color: #203154;
-  font-size: 0.82em;
+  font-size: clamp(2.06rem, 3.46vw, 3.28rem);
   font-weight: 760;
-  letter-spacing: -0.084em;
+  line-height: 0.92;
+  letter-spacing: -0.072em;
+  white-space: nowrap;
 }
 
 .hero-description {
@@ -500,7 +506,7 @@ select {
   pointer-events: none;
   perspective: 1800px;
   overflow: visible;
-  contain: layout paint;
+  contain: layout style;
 }
 
 .hero-flight::before,
@@ -558,7 +564,7 @@ select {
   opacity: calc(1 - (var(--flight-settle-soft) * 0.92));
   will-change: transform, opacity;
   transition: opacity 220ms linear;
-  contain: layout paint style;
+  contain: layout style;
   backface-visibility: hidden;
 }
 
@@ -1213,8 +1219,16 @@ select {
   }
 
   .hero-title {
-    max-width: none;
+    gap: 10px;
+  }
+
+  .hero-title-line-primary {
     font-size: clamp(3rem, 10vw, 5rem);
+  }
+
+  .hero-title-line-wide {
+    font-size: clamp(1.72rem, 5.2vw, 2.6rem);
+    white-space: normal;
   }
 
   .hero-flight {
@@ -1282,7 +1296,15 @@ select {
   }
 
   .hero-title {
+    gap: 8px;
+  }
+
+  .hero-title-line-primary {
     font-size: clamp(2.7rem, 12vw, 4rem);
+  }
+
+  .hero-title-line-wide {
+    font-size: clamp(1.48rem, 6.2vw, 2.12rem);
   }
 
   .hero-description,
