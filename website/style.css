@@ -489,7 +489,7 @@ select {
 
 .hero-flight {
   position: absolute;
-  inset: 24px 0 0 42%;
+  inset: 18px -2% 0 44%;
   z-index: 1;
   pointer-events: none;
   perspective: 1800px;
@@ -565,7 +565,7 @@ select {
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
   transform-style: preserve-3d;
-  width: min(14vw, 200px);
+  width: min(12.8vw, 176px);
   aspect-ratio: 5 / 4;
 }
 
@@ -676,7 +676,6 @@ select {
 
 .hero-flight-card-capture-stack,
 .hero-flight-card-capture-record {
-  background-image: url('hero-shot-capture.png');
   --break-rotate: 7deg;
   --receiver-dock-x: 20px;
   --receiver-dock-y: -22px;
@@ -684,17 +683,19 @@ select {
 }
 
 .hero-flight-card-capture-stack {
-  top: 8%;
-  right: 4%;
-  --break-x: 34px;
-  --break-y: -48px;
+  top: 3%;
+  right: 1%;
+  background-image: url('hero-shot-capture-stack-v2.png');
+  --break-x: 38px;
+  --break-y: -54px;
 }
 
 .hero-flight-card-capture-record {
-  top: 20%;
-  right: 14%;
-  --break-x: 22px;
-  --break-y: -22px;
+  top: 18%;
+  right: 22%;
+  background-image: url('hero-shot-capture-record-v2.png');
+  --break-x: 20px;
+  --break-y: -18px;
 }
 
 .hero-flight-card-text-rename,
@@ -706,24 +707,23 @@ select {
 }
 
 .hero-flight-card-text-rename {
-  top: 14%;
-  left: 9%;
-  background-image: url('hero-shot-rename.png');
-  --break-x: -46px;
-  --break-y: -28px;
+  top: 10%;
+  left: 1%;
+  background-image: url('hero-shot-text-rename-v2.png');
+  --break-x: -52px;
+  --break-y: -30px;
 }
 
 .hero-flight-card-text-clipboard {
-  bottom: 18%;
-  left: 3%;
-  background-image: url('hero-shot-clipboard.png');
-  --break-x: -34px;
-  --break-y: 20px;
+  bottom: 10%;
+  left: -2%;
+  background-image: url('hero-shot-text-clipboard-v2.png');
+  --break-x: -38px;
+  --break-y: 28px;
 }
 
 .hero-flight-card-web-activate,
 .hero-flight-card-web-qr {
-  background-image: url('hero-shot-qr.png');
   --break-rotate: 8deg;
   --receiver-dock-x: 18px;
   --receiver-dock-y: 20px;
@@ -731,22 +731,23 @@ select {
 }
 
 .hero-flight-card-web-activate {
-  right: 16%;
-  bottom: 14%;
-  --break-x: 30px;
-  --break-y: 28px;
+  right: 20%;
+  bottom: 10%;
+  background-image: url('hero-shot-web-activate-v2.png');
+  --break-x: 34px;
+  --break-y: 34px;
 }
 
 .hero-flight-card-web-qr {
-  right: 4%;
+  right: 2%;
   bottom: 24%;
-  --break-x: 18px;
-  --break-y: 40px;
+  background-image: url('hero-shot-web-qr-v2.png');
+  --break-x: 24px;
+  --break-y: 42px;
 }
 
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
-  background-image: url('hero-shot-main.png');
   --break-rotate: -11deg;
   --receiver-dock-x: -20px;
   --receiver-dock-y: 18px;
@@ -754,18 +755,19 @@ select {
 }
 
 .hero-flight-card-utility-float {
-  left: 18%;
-  bottom: 12%;
-  --break-x: -30px;
-  --break-y: 36px;
+  left: 14%;
+  bottom: 3%;
+  background-image: url('hero-shot-utility-float-v2.png');
+  --break-x: -34px;
+  --break-y: 42px;
 }
 
 .hero-flight-card-utility-clicker {
-  left: 6%;
-  bottom: 24%;
-  background-image: url('hero-shot-qr.png');
-  --break-x: -18px;
-  --break-y: 24px;
+  left: 0;
+  bottom: 22%;
+  background-image: url('hero-shot-utility-clicker-v2.png');
+  --break-x: -20px;
+  --break-y: 26px;
 }
 
 .value-strip {
@@ -886,20 +888,20 @@ select {
 .tool-group {
   display: grid;
   gap: 18px;
-  min-height: 290px;
+  min-height: 360px;
 }
 
 .tool-group ul {
   list-style: none;
   display: grid;
-  gap: 14px;
+  gap: 10px;
 }
 
 .tool-group li {
   padding-top: 14px;
   border-top: 1px solid var(--line);
   color: var(--ink);
-  font-size: 1.06rem;
+  font-size: 1rem;
   font-weight: 600;
 }
 
@@ -1133,7 +1135,7 @@ select {
   }
 
   .hero-flight {
-    inset: 36px 0 0 40%;
+    inset: 36px -2% 0 40%;
   }
 
   .value-strip-grid,
@@ -1221,7 +1223,7 @@ select {
   .hero-flight-card-web-qr,
   .hero-flight-card-utility-float,
   .hero-flight-card-utility-clicker {
-    width: min(28vw, 180px);
+    width: min(25vw, 164px);
   }
 
   .hero-actions {
@@ -1294,7 +1296,7 @@ select {
   .hero-flight-card-web-qr,
   .hero-flight-card-utility-float,
   .hero-flight-card-utility-clicker {
-    width: min(34vw, 150px);
+    width: min(31vw, 144px);
   }
 
   .section {
