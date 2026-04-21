@@ -66,10 +66,10 @@
       dock,
       dockSoft: easeOutCubic(dock),
       highlight: {
-        capture: easeOutCubic(getPhase(safeProgress, 0.56, 0.8)),
-        organize: easeOutCubic(getPhase(safeProgress, 0.61, 0.84)),
-        utility: easeOutCubic(getPhase(safeProgress, 0.66, 0.88)),
-        matrix: easeOutCubic(getPhase(safeProgress, 0.82, 0.96))
+        capture: easeOutCubic(getPhase(safeProgress, 0.58, 0.82)),
+        organize: easeOutCubic(getPhase(safeProgress, 0.63, 0.86)),
+        utility: easeOutCubic(getPhase(safeProgress, 0.67, 0.9)),
+        matrix: easeOutCubic(getPhase(safeProgress, 0.84, 1))
       }
     }
   }

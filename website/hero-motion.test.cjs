@@ -72,6 +72,7 @@ test('reduced motion zeros morph and dock stages too', () => {
   const state = getHeroMotionState(0.95, true)
 
   assert.equal(state.morph, 0)
+  assert.equal(state.morphSoft, 0)
   assert.equal(state.dock, 0)
   assert.equal(state.dockSoft, 0)
 })
