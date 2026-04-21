@@ -5,10 +5,16 @@ const path = require('node:path')
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 
+function countMatches(source, pattern) {
+  const matches = source.match(pattern)
+  return matches ? matches.length : 0
+}
+
 test('homepage keeps only hero, tools, and download sections', () => {
-  assert.match(html, /id="hero"/)
-  assert.match(html, /id="tools"/)
-  assert.match(html, /id="download"/)
+  assert.equal(countMatches(html, /<section\b/gi), 3)
+  assert.match(html, /<section\b[^>]*id="hero"/)
+  assert.match(html, /<section\b[^>]*id="tools"/)
+  assert.match(html, /<section\b[^>]*id="download"/)
   assert.doesNotMatch(html, /id="scenarios"/)
   assert.doesNotMatch(html, /id="system"/)
   assert.doesNotMatch(html, /value-strip/)
