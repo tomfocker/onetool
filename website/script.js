@@ -30,7 +30,8 @@ document.addEventListener('DOMContentLoaded', () => {
     utility: document.querySelector('[data-flight-dock="utility"]')
   }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-  let frameRequested = false
+  let syncFrameRequested = false
+  let motionFrameActive = false
 
   const clamp = motionApi?.clamp ?? ((value, min, max) => Math.min(Math.max(value, min), max))
   const easeOutCubic = motionApi?.easeOutCubic ?? ((value) => 1 - Math.pow(1 - value, 3))
@@ -70,6 +71,47 @@ document.addEventListener('DOMContentLoaded', () => {
   })
   const motionAnchors = new Map()
   const flightGeometry = new Map()
+  const motionKeys = [
+    'progress',
+    'breakout',
+    'breakoutSoft',
+    'cluster',
+    'clusterSoft',
+    'morph',
+    'morphSoft',
+    'travel',
+    'travelSoft',
+    'dock',
+    'dockSoft',
+    'settle',
+    'settleSoft'
+  ]
+
+  const createZeroMotionState = () => ({
+    progress: 0,
+    breakout: 0,
+    breakoutSoft: 0,
+    cluster: 0,
+    clusterSoft: 0,
+    morph: 0,
+    morphSoft: 0,
+    travel: 0,
+    travelSoft: 0,
+    dock: 0,
+    dockSoft: 0,
+    settle: 0,
+    settleSoft: 0,
+    highlight: {
+      capture: 0,
+      text: 0,
+      web: 0,
+      utility: 0,
+      matrix: 0
+    }
+  })
+  const smoothValue = (current, target, factor) => current + (target - current) * factor
+  let targetMotionState = createZeroMotionState()
+  let renderedMotionState = createZeroMotionState()
 
   const getHeroProgress = () => {
     if (!heroScroll || prefersReducedMotion) {
@@ -243,14 +285,100 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   }
 
-  const scheduleSync = () => {
-    if (frameRequested) {
+  const renderMotionState = (state) => {
+    applyFlightGeometry(state)
+
+    root.style.setProperty('--hero-progress', state.progress.toFixed(4))
+    root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
+    root.style.setProperty('--flight-breakout-soft', state.breakoutSoft.toFixed(4))
+    root.style.setProperty('--flight-cluster', state.cluster.toFixed(4))
+    root.style.setProperty('--flight-cluster-soft', state.clusterSoft.toFixed(4))
+    root.style.setProperty('--flight-morph', state.morph.toFixed(4))
+    root.style.setProperty('--flight-morph-soft', state.morphSoft.toFixed(4))
+    root.style.setProperty('--flight-travel', state.travel.toFixed(4))
+    root.style.setProperty('--flight-travel-soft', state.travelSoft.toFixed(4))
+    root.style.setProperty('--flight-dock', state.dock.toFixed(4))
+    root.style.setProperty('--flight-dock-soft', state.dockSoft.toFixed(4))
+    root.style.setProperty('--flight-settle', state.settle.toFixed(4))
+    root.style.setProperty('--flight-settle-soft', state.settleSoft.toFixed(4))
+    root.style.setProperty('--capture-highlight', state.highlight.capture.toFixed(4))
+    root.style.setProperty('--text-highlight', state.highlight.text.toFixed(4))
+    root.style.setProperty('--web-highlight', state.highlight.web.toFixed(4))
+    root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
+    root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
+  }
+
+  const smoothMotionState = (current, target, factor) => {
+    const next = {
+      ...current,
+      highlight: {
+        ...current.highlight
+      }
+    }
+
+    motionKeys.forEach((key) => {
+      next[key] = smoothValue(current[key], target[key], factor)
+    })
+
+    Object.keys(next.highlight).forEach((key) => {
+      next.highlight[key] = smoothValue(current.highlight[key], target.highlight[key], factor)
+    })
+
+    return next
+  }
+
+  const isMotionSettled = (current, target, epsilon = 0.0012) => {
+    for (const key of motionKeys) {
+      if (Math.abs(current[key] - target[key]) > epsilon) {
+        return false
+      }
+    }
+
+    for (const key of Object.keys(current.highlight)) {
+      if (Math.abs(current.highlight[key] - target.highlight[key]) > epsilon) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  const runMotionFrame = () => {
+    renderedMotionState = smoothMotionState(renderedMotionState, targetMotionState, 0.16)
+    renderMotionState(renderedMotionState)
+
+    if (isMotionSettled(renderedMotionState, targetMotionState)) {
+      renderedMotionState = {
+        ...targetMotionState,
+        highlight: {
+          ...targetMotionState.highlight
+        }
+      }
+      renderMotionState(renderedMotionState)
+      motionFrameActive = false
       return
     }
 
-    frameRequested = true
+    window.requestAnimationFrame(runMotionFrame)
+  }
+
+  const ensureMotionFrame = () => {
+    if (motionFrameActive) {
+      return
+    }
+
+    motionFrameActive = true
+    window.requestAnimationFrame(runMotionFrame)
+  }
+
+  const scheduleSync = () => {
+    if (syncFrameRequested) {
+      return
+    }
+
+    syncFrameRequested = true
     window.requestAnimationFrame(() => {
-      frameRequested = false
+      syncFrameRequested = false
       syncScrollState()
     })
   }
@@ -295,26 +423,20 @@ document.addEventListener('DOMContentLoaded', () => {
       prefersReducedMotion
     )
 
-    applyFlightGeometry(state)
+    targetMotionState = state
 
-    root.style.setProperty('--hero-progress', state.progress.toFixed(4))
-    root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
-    root.style.setProperty('--flight-breakout-soft', state.breakoutSoft.toFixed(4))
-    root.style.setProperty('--flight-cluster', state.cluster.toFixed(4))
-    root.style.setProperty('--flight-cluster-soft', state.clusterSoft.toFixed(4))
-    root.style.setProperty('--flight-morph', state.morph.toFixed(4))
-    root.style.setProperty('--flight-morph-soft', state.morphSoft.toFixed(4))
-    root.style.setProperty('--flight-travel', state.travel.toFixed(4))
-    root.style.setProperty('--flight-travel-soft', state.travelSoft.toFixed(4))
-    root.style.setProperty('--flight-dock', state.dock.toFixed(4))
-    root.style.setProperty('--flight-dock-soft', state.dockSoft.toFixed(4))
-    root.style.setProperty('--flight-settle', state.settle.toFixed(4))
-    root.style.setProperty('--flight-settle-soft', state.settleSoft.toFixed(4))
-    root.style.setProperty('--capture-highlight', state.highlight.capture.toFixed(4))
-    root.style.setProperty('--text-highlight', state.highlight.text.toFixed(4))
-    root.style.setProperty('--web-highlight', state.highlight.web.toFixed(4))
-    root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
-    root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
+    if (prefersReducedMotion) {
+      renderedMotionState = {
+        ...state,
+        highlight: {
+          ...state.highlight
+        }
+      }
+      renderMotionState(renderedMotionState)
+      return
+    }
+
+    ensureMotionFrame()
   }
 
   syncFlightTargets()
