@@ -33,8 +33,8 @@
   --flight-settle: 0;
   --flight-settle-soft: 0;
   --capture-highlight: 0;
-  --clipboard-highlight: 0;
-  --organize-highlight: 0;
+  --text-highlight: 0;
+  --web-highlight: 0;
   --utility-highlight: 0;
   --matrix-highlight: 0;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -552,11 +552,7 @@ select {
   transition: opacity 220ms linear;
 }
 
-.hero-flight-card[data-flight-card='capture'],
-.hero-flight-card[data-flight-card='organize'],
-.hero-flight-card[data-flight-card='clipboard'],
-.hero-flight-card[data-flight-card='utility'],
-.hero-flight-card[data-flight-card='matrix'] {
+.hero-flight-card[data-flight-card] {
   transform-style: preserve-3d;
 }
 
@@ -930,19 +926,11 @@ select {
 }
 
 [data-flight-target='text'] {
-  --target-active: var(--organize-highlight);
+  --target-active: var(--text-highlight);
 }
 
 [data-flight-target='web'] {
-  --target-active: var(--clipboard-highlight);
-}
-
-[data-flight-target='clipboard'] {
-  --target-active: var(--clipboard-highlight);
-}
-
-[data-flight-target='organize'] {
-  --target-active: var(--organize-highlight);
+  --target-active: var(--web-highlight);
 }
 
 [data-flight-target='utility'] {
@@ -973,11 +961,11 @@ select {
 }
 
 .tool-group[data-flight-target][data-flight-dock="text"] {
-  --flight-highlight: var(--organize-highlight);
+  --flight-highlight: var(--text-highlight);
 }
 
 .tool-group[data-flight-target][data-flight-dock="web"] {
-  --flight-highlight: var(--clipboard-highlight);
+  --flight-highlight: var(--web-highlight);
 }
 
 .tool-group[data-flight-target][data-flight-dock="utility"] {

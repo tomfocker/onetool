@@ -7,20 +7,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const toolsSection = document.querySelector('#tools')
   const revealItems = document.querySelectorAll('.reveal')
   const flightCards = {
-    capture: document.querySelector('.hero-flight-card-capture'),
-    organize: document.querySelector('.hero-flight-card-organize'),
-    clipboard: document.querySelector('.hero-flight-card-clipboard'),
-    utility: document.querySelector('.hero-flight-card-utility'),
+    captureStack: document.querySelector('.hero-flight-card-capture-stack'),
+    captureRecord: document.querySelector('.hero-flight-card-capture-record'),
+    textRename: document.querySelector('.hero-flight-card-text-rename'),
+    textClipboard: document.querySelector('.hero-flight-card-text-clipboard'),
+    webActivate: document.querySelector('.hero-flight-card-web-activate'),
+    webQr: document.querySelector('.hero-flight-card-web-qr'),
+    utilityFloat: document.querySelector('.hero-flight-card-utility-float'),
+    utilityClicker: document.querySelector('.hero-flight-card-utility-clicker'),
     matrix: document.querySelector('.hero-flight-card-main')
   }
   const flightTargets = {
     capture: document.querySelector('[data-flight-target="capture"]'),
-    organize: document.querySelector('[data-flight-target="organize"]'),
+    text: document.querySelector('[data-flight-target="text"]'),
+    web: document.querySelector('[data-flight-target="web"]'),
     utility: document.querySelector('[data-flight-target="utility"]')
   }
   const dockTargets = {
     capture: document.querySelector('[data-flight-dock="capture"]'),
-    organize: document.querySelector('[data-flight-dock="organize"]'),
+    text: document.querySelector('[data-flight-dock="text"]'),
+    web: document.querySelector('[data-flight-dock="web"]'),
     utility: document.querySelector('[data-flight-dock="utility"]')
   }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -53,8 +59,8 @@ document.addEventListener('DOMContentLoaded', () => {
         settleSoft: context.settleSoft ?? 0,
         highlight: {
           capture: highlight.capture ?? 0,
-          clipboard: highlight.clipboard ?? 0,
-          organize: highlight.organize ?? 0,
+          text: highlight.text ?? highlight.clipboard ?? 0,
+          web: highlight.web ?? highlight.organize ?? 0,
           utility: highlight.utility ?? 0,
           matrix: highlight.matrix ?? 0
         }
@@ -76,16 +82,44 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   const flightBiases = {
-    capture: { x: 0, y: -30 },
-    organize: { x: -18, y: -18 },
-    clipboard: { x: 28, y: 10 },
-    utility: { x: 8, y: 18 },
+    captureStack: { x: -10, y: -30 },
+    captureRecord: { x: 14, y: -14 },
+    textRename: { x: -14, y: -18 },
+    textClipboard: { x: 18, y: 8 },
+    webActivate: { x: -16, y: -12 },
+    webQr: { x: 16, y: 10 },
+    utilityFloat: { x: -12, y: -16 },
+    utilityClicker: { x: 14, y: 12 },
     matrix: { x: -42, y: -14 }
   }
+  const dockBiases = {
+    capture: {
+      captureStack: { x: -18, y: -18 },
+      captureRecord: { x: 18, y: 8 },
+      matrix: { x: 0, y: 24 }
+    },
+    text: {
+      textRename: { x: -16, y: -10 },
+      textClipboard: { x: 16, y: 10 }
+    },
+    web: {
+      webActivate: { x: -16, y: -10 },
+      webQr: { x: 16, y: 10 }
+    },
+    utility: {
+      utilityFloat: { x: -16, y: -10 },
+      utilityClicker: { x: 16, y: 10 }
+    }
+  }
   const targetMap = {
-    capture: 'capture',
-    organize: 'organize',
-    clipboard: 'organize',
+    captureStack: 'capture',
+    captureRecord: 'capture',
+    textRename: 'text',
+    textClipboard: 'text',
+    webActivate: 'web',
+    webQr: 'web',
+    utilityFloat: 'utility',
+    utilityClicker: 'utility',
     utility: 'utility',
     matrix: 'capture'
   }
@@ -193,10 +227,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const bias = flightBiases[key] ?? { x: 0, y: 0 }
       const dockOffset = getDockVisualOffset(targetKey, state)
+      const groupedDockBias = dockBiases[targetKey]?.[key] ?? { x: 0, y: 0 }
       const targetX = geometry.targetCenterX - flightLeft - geometry.startX + bias.x
       const targetY = geometry.targetCenterY - flightTop - geometry.startY + bias.y
-      const dockX = geometry.dockCenterX + dockOffset.x - flightLeft - geometry.startX + bias.x
-      const dockY = geometry.dockCenterY + dockOffset.y - flightTop - geometry.startY + bias.y
+      const dockX = geometry.dockCenterX + dockOffset.x + groupedDockBias.x - flightLeft - geometry.startX + bias.x
+      const dockY = geometry.dockCenterY + dockOffset.y + groupedDockBias.y - flightTop - geometry.startY + bias.y
 
       card.style.setProperty('--target-x', `${targetX}px`)
       card.style.setProperty('--target-y', `${targetY}px`)
@@ -232,8 +267,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const progress = getHeroProgress()
     const heroTargets = {
       capture: flightTargets.capture,
-      clipboard: flightTargets.organize,
-      organize: flightTargets.organize,
+      text: flightTargets.text,
+      web: flightTargets.web,
       utility: flightTargets.utility,
       matrix: flightTargets.capture
     }
@@ -248,8 +283,8 @@ document.addEventListener('DOMContentLoaded', () => {
         settleProgress: getViewportProgress(toolsSection, 0.92, 0.14),
         highlight: {
           capture: easeOutCubic(getViewportProgress(heroTargets.capture, 0.94, 0.48)),
-          clipboard: easeOutCubic(getViewportProgress(heroTargets.clipboard, 0.82, 0.22)),
-          organize: easeOutCubic(getViewportProgress(heroTargets.organize, 0.88, 0.4)),
+          text: easeOutCubic(getViewportProgress(heroTargets.text, 0.82, 0.22)),
+          web: easeOutCubic(getViewportProgress(heroTargets.web, 0.88, 0.4)),
           utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.84, 0.3)),
           matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.72, 0.18))
         }
@@ -271,8 +306,8 @@ document.addEventListener('DOMContentLoaded', () => {
     root.style.setProperty('--flight-settle', state.settle.toFixed(4))
     root.style.setProperty('--flight-settle-soft', state.settleSoft.toFixed(4))
     root.style.setProperty('--capture-highlight', state.highlight.capture.toFixed(4))
-    root.style.setProperty('--clipboard-highlight', state.highlight.clipboard.toFixed(4))
-    root.style.setProperty('--organize-highlight', state.highlight.organize.toFixed(4))
+    root.style.setProperty('--text-highlight', state.highlight.text.toFixed(4))
+    root.style.setProperty('--web-highlight', state.highlight.web.toFixed(4))
     root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
     root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
   }
