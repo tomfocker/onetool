@@ -314,10 +314,8 @@ select {
 }
 
 .hero-layout {
-  display: grid;
-  grid-template-columns: minmax(320px, 0.92fr) minmax(420px, 1.08fr);
-  align-items: center;
-  gap: clamp(32px, 5vw, 70px);
+  position: relative;
+  min-height: clamp(520px, 72vh, 720px);
   width: 100%;
 }
 
@@ -325,19 +323,19 @@ select {
   position: relative;
   z-index: 2;
   display: grid;
-  gap: 24px;
-  max-width: 560px;
+  gap: 22px;
+  max-width: 460px;
 }
 
 .hero-copy h1 {
-  max-width: 9.2ch;
-  font-size: clamp(3.6rem, 7vw, 6.8rem);
-  line-height: 0.94;
+  max-width: 6.4ch;
+  font-size: clamp(2.7rem, 5vw, 4.8rem);
+  line-height: 0.92;
   letter-spacing: -0.065em;
 }
 
 .hero-description {
-  max-width: 42ch;
+  max-width: 32ch;
   font-size: 1.06rem;
 }
 
@@ -424,8 +422,16 @@ select {
 }
 
 .hero-media {
-  position: relative;
-  min-height: clamp(520px, 74vh, 760px);
+  position: absolute;
+  top: 50%;
+  right: 0;
+  width: min(46vw, 560px);
+  min-height: clamp(500px, 62vh, 620px);
+  transform: translateY(-50%);
+  overflow: visible;
+  background:
+    url('hero-shot-main.png') center center / contain no-repeat,
+    radial-gradient(circle at 60% 40%, rgba(222, 235, 255, 0.5), rgba(222, 235, 255, 0) 58%);
   padding: 20px 12px 24px;
   perspective: 1800px;
   transform-style: preserve-3d;
@@ -472,7 +478,10 @@ select {
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92) 0%, rgba(246, 250, 255, 0.8) 100%);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-color: rgba(246, 250, 255, 0.92);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.96),
     inset 0 -1px 0 rgba(210, 224, 247, 0.72),
@@ -513,6 +522,7 @@ select {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  opacity: 0;
 }
 
 .hero-layer:hover {
@@ -524,14 +534,15 @@ select {
 
 .hero-layer-main {
   inset: 10% 10% 12% 12%;
-  transform:
-    translate3d(
+  background-image: url('hero-shot-main.png');
+  z-index: 2;
+  opacity: 0;
+  transform: translate3d(
       calc(var(--breakout-drift) * 12px),
       calc(var(--hero-progress) * -20px),
       calc(var(--breakout-soft) * 44px)
     )
-    rotateX(calc(var(--breakout-soft) * 1.3deg))
-    rotateY(calc(var(--breakout-drift) * -1.8deg))
+    rotateX(calc(var(--breakout-soft) * 1.3deg)) rotateY(calc(var(--breakout-drift) * -1.8deg))
     rotate(-6deg);
 }
 
@@ -539,14 +550,15 @@ select {
   top: 2%;
   right: 0;
   width: min(36%, 268px);
-  transform:
-    translate3d(
+  aspect-ratio: 16 / 10;
+  background-image: url('hero-shot-capture.png');
+  z-index: 4;
+  transform: translate3d(
       calc(var(--breakout-progress) * 86px),
       calc(var(--breakout-soft) * -66px),
       calc(72px + var(--breakout-soft) * 138px)
     )
-    rotateX(calc(var(--breakout-soft) * 2.3deg))
-    rotateY(calc(var(--breakout-progress) * -8.5deg))
+    rotateX(calc(var(--breakout-soft) * 2.3deg)) rotateY(calc(var(--breakout-progress) * -8.5deg))
     rotate(9deg);
 }
 
@@ -554,14 +566,15 @@ select {
   top: 13%;
   left: 0;
   width: min(32%, 234px);
-  transform:
-    translate3d(
+  aspect-ratio: 5 / 4;
+  background-image: url('hero-shot-rename.png');
+  z-index: 3;
+  transform: translate3d(
       calc(var(--breakout-progress) * -94px),
       calc(var(--breakout-drift) * 34px),
       calc(84px + var(--breakout-soft) * 150px)
     )
-    rotateX(calc(var(--breakout-soft) * -2deg))
-    rotateY(calc(var(--breakout-progress) * 9deg))
+    rotateX(calc(var(--breakout-soft) * -2deg)) rotateY(calc(var(--breakout-progress) * 9deg))
     rotate(-10deg);
 }
 
@@ -569,14 +582,15 @@ select {
   right: 6%;
   bottom: 2%;
   width: min(34%, 252px);
-  transform:
-    translate3d(
+  aspect-ratio: 5 / 4;
+  background-image: url('hero-shot-clipboard.png');
+  z-index: 4;
+  transform: translate3d(
       calc(var(--breakout-progress) * 62px),
       calc(var(--breakout-soft) * 70px),
       calc(94px + var(--breakout-soft) * 144px)
     )
-    rotateX(calc(var(--breakout-soft) * -2.6deg))
-    rotateY(calc(var(--breakout-progress) * -7deg))
+    rotateX(calc(var(--breakout-soft) * -2.6deg)) rotateY(calc(var(--breakout-progress) * -7deg))
     rotate(11deg);
 }
 
@@ -584,14 +598,15 @@ select {
   bottom: 11%;
   left: 6%;
   width: min(28%, 208px);
-  transform:
-    translate3d(
+  aspect-ratio: 1 / 1;
+  background-image: url('hero-shot-qr.png');
+  z-index: 3;
+  transform: translate3d(
       calc(var(--breakout-progress) * -72px),
       calc(var(--breakout-soft) * 82px),
       calc(108px + var(--breakout-soft) * 170px)
     )
-    rotateX(calc(var(--breakout-soft) * 2.8deg))
-    rotateY(calc(var(--breakout-progress) * 10.5deg))
+    rotateX(calc(var(--breakout-soft) * 2.8deg)) rotateY(calc(var(--breakout-progress) * 10.5deg))
     rotate(-13deg);
 }
 
@@ -866,7 +881,13 @@ select {
     --section-gap: clamp(64px, 9vw, 96px);
   }
 
-  .hero-layout,
+  .hero-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 28px;
+    min-height: auto;
+  }
+
   .system-strip {
     grid-template-columns: 1fr;
   }
@@ -883,7 +904,12 @@ select {
   }
 
   .hero-media {
+    position: relative;
+    top: auto;
+    right: auto;
+    width: min(100%, 620px);
     min-height: 620px;
+    transform: none;
     margin-top: 12px;
   }
 
