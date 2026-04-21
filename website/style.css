@@ -22,6 +22,9 @@
   --section-gap: clamp(72px, 10vw, 120px);
   --panel-padding: clamp(24px, 3vw, 34px);
   --hero-progress: 0;
+  --breakout-progress: 0;
+  --breakout-soft: 0;
+  --breakout-drift: 0;
 }
 
 * {
@@ -241,14 +244,14 @@ select {
   isolation: isolate;
 }
 
-.hero-video,
+.hero-backplate,
 .hero-film,
 .hero-aurora {
   position: absolute;
   inset: 0;
 }
 
-.hero-video {
+.hero-backplate {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -475,6 +478,7 @@ select {
     inset 0 -1px 0 rgba(210, 224, 247, 0.72),
     var(--hero-shadow);
   backdrop-filter: blur(16px) saturate(1.06);
+  transform-origin: center center;
   transition: box-shadow 300ms ease;
 }
 
@@ -520,47 +524,75 @@ select {
 
 .hero-layer-main {
   inset: 10% 10% 12% 12%;
-  transform: translate3d(0, calc(var(--hero-progress) * -10px), 0) rotate(-6deg);
+  transform:
+    translate3d(
+      calc(var(--breakout-drift) * 12px),
+      calc(var(--hero-progress) * -20px),
+      calc(var(--breakout-soft) * 44px)
+    )
+    rotateX(calc(var(--breakout-soft) * 1.3deg))
+    rotateY(calc(var(--breakout-drift) * -1.8deg))
+    rotate(-6deg);
 }
 
 .hero-layer-capture {
   top: 2%;
   right: 0;
   width: min(36%, 268px);
-  transform: translate3d(
-      calc(var(--hero-progress) * 18px),
-      calc(var(--hero-progress) * -16px),
-      70px
+  transform:
+    translate3d(
+      calc(var(--breakout-progress) * 86px),
+      calc(var(--breakout-soft) * -66px),
+      calc(72px + var(--breakout-soft) * 138px)
     )
-    rotate(8deg);
+    rotateX(calc(var(--breakout-soft) * 2.3deg))
+    rotateY(calc(var(--breakout-progress) * -8.5deg))
+    rotate(9deg);
 }
 
 .hero-layer-rename {
   top: 13%;
   left: 0;
   width: min(32%, 234px);
-  transform: translate3d(calc(var(--hero-progress) * -20px), calc(var(--hero-progress) * 8px), 80px)
-    rotate(-9deg);
+  transform:
+    translate3d(
+      calc(var(--breakout-progress) * -94px),
+      calc(var(--breakout-drift) * 34px),
+      calc(84px + var(--breakout-soft) * 150px)
+    )
+    rotateX(calc(var(--breakout-soft) * -2deg))
+    rotateY(calc(var(--breakout-progress) * 9deg))
+    rotate(-10deg);
 }
 
 .hero-layer-clipboard {
   right: 6%;
   bottom: 2%;
   width: min(34%, 252px);
-  transform: translate3d(calc(var(--hero-progress) * 14px), calc(var(--hero-progress) * 10px), 90px)
-    rotate(10deg);
+  transform:
+    translate3d(
+      calc(var(--breakout-progress) * 62px),
+      calc(var(--breakout-soft) * 70px),
+      calc(94px + var(--breakout-soft) * 144px)
+    )
+    rotateX(calc(var(--breakout-soft) * -2.6deg))
+    rotateY(calc(var(--breakout-progress) * -7deg))
+    rotate(11deg);
 }
 
 .hero-layer-qr {
   bottom: 11%;
   left: 6%;
   width: min(28%, 208px);
-  transform: translate3d(
-      calc(var(--hero-progress) * -16px),
-      calc(var(--hero-progress) * 16px),
-      100px
+  transform:
+    translate3d(
+      calc(var(--breakout-progress) * -72px),
+      calc(var(--breakout-soft) * 82px),
+      calc(108px + var(--breakout-soft) * 170px)
     )
-    rotate(-12deg);
+    rotateX(calc(var(--breakout-soft) * 2.8deg))
+    rotateY(calc(var(--breakout-progress) * 10.5deg))
+    rotate(-13deg);
 }
 
 .value-strip {

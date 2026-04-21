@@ -3,19 +3,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('.site-header');
     const heroScroll = document.querySelector('.hero-scroll');
     const revealItems = document.querySelectorAll('.reveal');
-    const heroVideo = document.querySelector('.hero-video');
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-    if (heroVideo && !prefersReducedMotion) {
-        heroVideo.playbackRate = 0.78;
-    }
-
     const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+    const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3);
+    const easeInOutSine = (value) => -(Math.cos(Math.PI * value) - 1) / 2;
+    const getHeroProgress = () => {
+        if (!heroScroll || prefersReducedMotion) {
+            return 0;
+        }
+
+        const rect = heroScroll.getBoundingClientRect();
+        const total = Math.max(heroScroll.offsetHeight - window.innerHeight, 1);
+        const distance = clamp(-rect.top, 0, total);
+
+        return clamp(distance / total, 0, 1);
+    };
+
+    const getBreakoutProgress = (progress) => {
+        const stagedProgress = progress < 0.22
+            ? progress / 0.22 * 0.42
+            : progress < 0.7
+                ? 0.42 + ((progress - 0.22) / 0.48) * 0.43
+                : 0.85 + ((progress - 0.7) / 0.3) * 0.15;
+
+        return clamp(stagedProgress, 0, 1);
+    };
 
     const syncScrollState = () => {
-        if (window.scrollY > 18) {
+        if (header && window.scrollY > 18) {
             header.classList.add('is-scrolled');
-        } else {
+        } else if (header) {
             header.classList.remove('is-scrolled');
         }
 
@@ -23,13 +41,15 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const rect = heroScroll.getBoundingClientRect();
-        const total = heroScroll.offsetHeight - window.innerHeight;
-        const progress = prefersReducedMotion
-            ? 0
-            : clamp((-rect.top) / Math.max(total, 1), 0, 1);
+        const progress = getHeroProgress();
+        const breakoutProgress = prefersReducedMotion ? 0 : getBreakoutProgress(progress);
+        const breakoutSoft = prefersReducedMotion ? 0 : easeOutCubic(breakoutProgress);
+        const breakoutDrift = prefersReducedMotion ? 0 : easeInOutSine(progress);
 
         root.style.setProperty('--hero-progress', progress.toFixed(4));
+        root.style.setProperty('--breakout-progress', breakoutProgress.toFixed(4));
+        root.style.setProperty('--breakout-soft', breakoutSoft.toFixed(4));
+        root.style.setProperty('--breakout-drift', breakoutDrift.toFixed(4));
     };
 
     syncScrollState();
