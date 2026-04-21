@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const Module = require('node:module')
 const ts = require('typescript')
 
 function loadCreateElectronBridgeModule() {
@@ -69,6 +70,48 @@ function createMocks() {
   }
 }
 
+function loadFloatBallIpcModule(mocks) {
+  const filePath = path.join(__dirname, '..', 'main', 'ipc', 'floatBallIpc.ts')
+  const source = fs.readFileSync(filePath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: filePath
+  }).outputText
+
+  const module = { exports: {} }
+  const originalLoad = Module._load
+
+  Module._load = function (request, parent, isMain) {
+    if (request === 'electron') {
+      return mocks.electron
+    }
+    if (request === '../services/WindowManagerService') {
+      return mocks.windowManagerServiceModule
+    }
+    return originalLoad.call(this, request, parent, isMain)
+  }
+
+  try {
+    vm.runInNewContext(transpiled, {
+      module,
+      exports: module.exports,
+      require,
+      __dirname: path.dirname(filePath),
+      __filename: filePath,
+      console,
+      process
+    }, { filename: filePath })
+  } finally {
+    Module._load = originalLoad
+  }
+
+  return module.exports
+}
+
 test('createElectronBridge exposes explicit app APIs without raw ipcRenderer access', () => {
   const { createElectronBridge } = loadCreateElectronBridgeModule()
   const mocks = createMocks()
@@ -78,6 +121,89 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.app.onOpenTool, 'function')
   assert.equal(typeof bridge.app.onNotification, 'function')
   assert.equal(typeof bridge.doctor.runAudit, 'function')
+})
+
+test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  bridge.floatBall.beginDrag({ pointerOffsetX: 36, pointerOffsetY: 36 })
+  bridge.floatBall.dragTo({ screenX: 1400, screenY: 320 })
+  bridge.floatBall.endDrag()
+  bridge.floatBall.peek()
+  bridge.floatBall.restoreDock()
+
+  assert.deepEqual(mocks.sendCalls[0], ['floatball-begin-drag', { pointerOffsetX: 36, pointerOffsetY: 36 }])
+  assert.deepEqual(mocks.sendCalls[1], ['floatball-drag-to', { screenX: 1400, screenY: 320 }])
+  assert.deepEqual(mocks.invokeCalls[0], ['floatball-end-drag', undefined])
+  assert.deepEqual(mocks.invokeCalls[1], ['floatball-peek', undefined])
+  assert.deepEqual(mocks.invokeCalls[2], ['floatball-restore-dock', undefined])
+})
+
+test('registerFloatBallIpc wires explicit float ball drag lifecycle channels', () => {
+  const registeredOn = []
+  const registeredHandle = []
+  const mocks = {
+    electron: {
+      ipcMain: {
+        on(channel, handler) {
+          registeredOn.push([channel, handler])
+        },
+        handle(channel, handler) {
+          registeredHandle.push([channel, handler])
+        }
+      },
+      nativeImage: {
+        createEmpty() {
+          return { empty: true }
+        },
+        createFromPath() {
+          return {
+            resize() {
+              return { resized: true }
+            }
+          }
+        }
+      }
+    },
+    windowManagerServiceModule: {
+      windowManagerService: {
+        getFloatBallWindow() {
+          return null
+        },
+        hideFloatBallWindow() {},
+        showFloatBallWindow() {},
+        setFloatBallVisible() {},
+        getFloatBallState() {
+          return { success: true, data: { exists: true, visible: true } }
+        }
+      }
+    }
+  }
+
+  const { registerFloatBallIpc } = loadFloatBallIpcModule(mocks)
+  registerFloatBallIpc()
+
+  assert.deepEqual(registeredOn.map(([channel]) => channel), [
+    'floatball-move',
+    'floatball-set-position',
+    'floatball-resize',
+    'floatball-hide-window',
+    'floatball-show-window',
+    'floatball-toggle-visibility',
+    'floatball-set-visibility',
+    'floatball-begin-drag',
+    'floatball-drag-to',
+    'ondragstart'
+  ])
+  assert.deepEqual(registeredHandle.map(([channel]) => channel), [
+    'floatball-get-state',
+    'floatball-end-drag',
+    'floatball-peek',
+    'floatball-restore-dock',
+    'settings-set-floatball-hotkey'
+  ])
 })
 
 test('createElectronBridge subscriptions route through explicit channels and unsubscribe cleanly', () => {
@@ -306,4 +432,81 @@ test('createElectronBridge exposes explicit updates APIs and unsubscribes cleanl
 
   assert.equal(mocks.removed.length, 1)
   assert.equal(mocks.removed[0][0], 'updates-state-changed')
+})
+
+test('createElectronBridge exposes explicit bilibili downloader helpers and state subscriptions', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let state = null
+  const unsubscribe = bridge.bilibiliDownloader.onStateChanged((nextState) => {
+    state = nextState
+  })
+
+  await bridge.bilibiliDownloader.getSession()
+  await bridge.bilibiliDownloader.startLogin()
+  await bridge.bilibiliDownloader.pollLogin()
+  await bridge.bilibiliDownloader.logout()
+  await bridge.bilibiliDownloader.parseLink('https://www.bilibili.com/video/BV1xK4y1m7aA')
+  await bridge.bilibiliDownloader.loadStreamOptions('video', 'page:1')
+  await bridge.bilibiliDownloader.startDownload('merge-mp4', 'D:\\Downloads')
+  await bridge.bilibiliDownloader.cancelDownload()
+  await bridge.bilibiliDownloader.selectOutputDirectory()
+
+  mocks.listeners.get('bilibili-downloader-state-changed')({}, {
+    taskStage: 'cancelled',
+    error: null
+  })
+
+  assert.equal(state.taskStage, 'cancelled')
+  assert.deepEqual(mocks.invokeCalls, [
+    ['bilibili-downloader-get-session'],
+    ['bilibili-downloader-start-login'],
+    ['bilibili-downloader-poll-login'],
+    ['bilibili-downloader-logout'],
+    ['bilibili-downloader-parse-link', { link: 'https://www.bilibili.com/video/BV1xK4y1m7aA' }],
+    ['bilibili-downloader-load-stream-options', { kind: 'video', itemId: 'page:1' }],
+    ['bilibili-downloader-start-download', { exportMode: 'merge-mp4', outputDirectory: 'D:\\Downloads' }],
+    ['bilibili-downloader-cancel-download'],
+    ['bilibili-downloader-select-output-directory']
+  ])
+
+  unsubscribe()
+
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'bilibili-downloader-state-changed')
+})
+
+test('createElectronBridge exposes explicit model download APIs and subscriptions', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let state = null
+  const unsubscribe = bridge.modelDownload.onStateChanged((nextState) => {
+    state = nextState
+  })
+
+  await bridge.modelDownload.getState()
+  await bridge.modelDownload.startDownload({ repoId: 'Qwen/Qwen2.5' })
+  await bridge.modelDownload.cancelDownload()
+  await bridge.modelDownload.chooseSavePath()
+  await bridge.modelDownload.openPath('D:\\Downloads')
+
+  mocks.listeners.get('model-download-state-changed')({}, { status: 'running' })
+
+  assert.equal(state.status, 'running')
+  assert.deepEqual(mocks.invokeCalls, [
+    ['model-download-get-state'],
+    ['model-download-start', { repoId: 'Qwen/Qwen2.5' }],
+    ['model-download-cancel'],
+    ['model-download-choose-save-path'],
+    ['model-download-open-path', 'D:\\Downloads']
+  ])
+
+  unsubscribe()
+
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'model-download-state-changed')
 })

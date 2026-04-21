@@ -294,3 +294,44 @@ test('getSystemConfig returns a failure when the hardware probe output has no JS
   assert.equal(result.success, false);
   assert.match(result.error, /无法获取硬件信息/);
 });
+
+test('getRealtimeStats reuses cached results for nearby callers to avoid duplicate probes', async () => {
+  const encodedCalls = [];
+  const statsJson = JSON.stringify({
+    cpuLoad: 21,
+    cpuTemp: 43,
+    cpuName: 'Intel Core',
+    gpuLoad: 9,
+    gpuTemp: 37,
+    gpuName: 'RTX',
+    memoryUsage: 72,
+    memoryUsed: 24,
+    memoryTotal: 32,
+    netUp: '0 KB/s',
+    netDown: '0 KB/s',
+  });
+
+  const { SystemService: TestSystemService } = loadSystemServiceModule({
+    execPowerShellEncoded: async (script) => {
+      encodedCalls.push(script);
+      return `---STATS_JSON_START---\n${statsJson}\n---STATS_JSON_END---`;
+    },
+    electronModule: {
+      app: {},
+      dialog: {},
+      BrowserWindow: function BrowserWindow() {},
+      screen: {
+        getAllDisplays: () => [],
+      },
+    },
+  });
+
+  const service = new TestSystemService();
+  const first = await service.getRealtimeStats();
+  const second = await service.getRealtimeStats();
+
+  assert.equal(first.success, true);
+  assert.equal(second.success, true);
+  assert.equal(encodedCalls.length, 1);
+  assert.deepEqual(second.data, first.data);
+});

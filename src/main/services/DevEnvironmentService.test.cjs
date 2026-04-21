@@ -97,11 +97,11 @@ test('inspectAll returns installed linked and external environment states with p
     'where.exe go': 'C:\\Go\\bin\\go.exe\r\n',
     'java -version 2>&1': 'openjdk version "17.0.14" 2025-01-21\r\n',
     'where.exe java': 'C:\\Program Files\\Microsoft\\jdk-17\\bin\\java.exe\r\n',
-    'winget upgrade --id OpenJS.NodeJS.LTS --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id Git.Git --accept-source-agreements': 'Git.Git  2.49.0  2.50.0 winget\r\n',
-    'winget upgrade --id Python.Python.3.12 --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id GoLang.Go --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id Microsoft.OpenJDK.17 --accept-source-agreements': 'No available upgrade found.\r\n'
+    'winget list --id OpenJS.NodeJS.LTS --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Git.Git --exact --upgrade-available --accept-source-agreements': 'Git.Git  Git  2.49.0  2.50.0  winget\r\n',
+    'winget list --id Python.Python.3.12 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id GoLang.Go --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Microsoft.OpenJDK.17 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n'
   }
 
   const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
@@ -159,11 +159,11 @@ test('inspectAll can complete through async process execution without execSync',
     'where.exe go': 'C:\\Go\\bin\\go.exe\r\n',
     'java -version 2>&1': 'openjdk version "17.0.14" 2025-01-21\r\n',
     'where.exe java': 'C:\\Program Files\\Microsoft\\jdk-17\\bin\\java.exe\r\n',
-    'winget upgrade --id OpenJS.NodeJS.LTS --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id Git.Git --accept-source-agreements': 'Git.Git  2.49.0  2.50.0 winget\r\n',
-    'winget upgrade --id Python.Python.3.12 --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id GoLang.Go --accept-source-agreements': 'No available upgrade found.\r\n',
-    'winget upgrade --id Microsoft.OpenJDK.17 --accept-source-agreements': 'No available upgrade found.\r\n'
+    'winget list --id OpenJS.NodeJS.LTS --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Git.Git --exact --upgrade-available --accept-source-agreements': 'Git.Git  Git  2.49.0  2.50.0  winget\r\n',
+    'winget list --id Python.Python.3.12 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id GoLang.Go --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Microsoft.OpenJDK.17 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n'
   }
 
   const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
@@ -254,6 +254,60 @@ test('inspectOne marks an unparseable but reachable command as broken', async ()
 
   assert.equal(result.success, true)
   assert.equal(result.data.status, 'broken')
+})
+
+test('inspectAll checks update availability without invoking winget upgrade', async () => {
+  const calls = []
+  const commandOutputs = {
+    'winget --version': 'v1.8.1911\r\n',
+    'node --version': 'v22.15.0\r\n',
+    'where.exe node': 'C:\\Program Files\\nodejs\\node.exe\r\n',
+    'npm --version': '10.9.2\r\n',
+    'where.exe npm': 'C:\\Program Files\\nodejs\\npm.cmd\r\n',
+    'git --version': 'git version 2.49.0.windows.1\r\n',
+    'where.exe git': 'C:\\Program Files\\Git\\cmd\\git.exe\r\n',
+    'python --version': 'Python 3.12.9\r\n',
+    'where.exe python': 'C:\\Python312\\python.exe\r\n',
+    'pip --version': 'pip 24.0 from C:\\Python312\\Lib\\site-packages\\pip (python 3.12)\r\n',
+    'where.exe pip': 'C:\\Python312\\Scripts\\pip.exe\r\n',
+    'go version': 'go version go1.24.2 windows/amd64\r\n',
+    'where.exe go': 'C:\\Go\\bin\\go.exe\r\n',
+    'java -version 2>&1': 'openjdk version "17.0.14" 2025-01-21\r\n',
+    'where.exe java': 'C:\\Program Files\\Microsoft\\jdk-17\\bin\\java.exe\r\n',
+    'winget list --id OpenJS.NodeJS.LTS --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Git.Git --exact --upgrade-available --accept-source-agreements': 'Git.Git  Git  2.49.0  2.50.0  winget\r\n',
+    'winget list --id Python.Python.3.12 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id GoLang.Go --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n',
+    'winget list --id Microsoft.OpenJDK.17 --exact --upgrade-available --accept-source-agreements': 'No installed package found matching input criteria.\r\n'
+  }
+
+  const { DevEnvironmentService } = loadDevEnvironmentServiceModule({
+    exec(command, _options, callback) {
+      const done = typeof _options === 'function' ? _options : callback
+      calls.push(command)
+      if (!(command in commandOutputs)) {
+        done(new Error(`unexpected async command: ${command}`), Buffer.alloc(0), Buffer.alloc(0))
+        return { pid: 1234 }
+      }
+      setImmediate(() => {
+        done(null, Buffer.from(commandOutputs[command]), Buffer.alloc(0))
+      })
+      return { pid: 1234 }
+    },
+    wslService: {
+      getOverview: async () => ({
+        success: true,
+        data: { available: false, distros: [], defaultDistro: null }
+      })
+    }
+  })
+
+  const service = new DevEnvironmentService()
+  const result = await service.inspectAll()
+
+  assert.equal(result.success, true)
+  assert.equal(calls.some((command) => command.startsWith('winget upgrade')), false)
+  assert.equal(calls.some((command) => command.startsWith('winget list --id Git.Git')), true)
 })
 
 test('install returns a failure when winget is unavailable', async () => {

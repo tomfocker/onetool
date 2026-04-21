@@ -42,8 +42,44 @@ export function registerFloatBallIpc() {
         windowManagerService.setFloatBallVisible(Boolean(visible))
     })
 
+    ipcMain.on('floatball-begin-drag', (event, payload: { pointerOffsetX: number; pointerOffsetY: number }) => {
+        windowManagerService.beginFloatBallDrag(payload)
+    })
+
+    ipcMain.on('floatball-drag-to', (event, payload: { screenX: number; screenY: number }) => {
+        windowManagerService.dragFloatBallTo(payload)
+    })
+
     ipcMain.handle('floatball-get-state', () => {
         return windowManagerService.getFloatBallState()
+    })
+
+    ipcMain.handle('floatball-end-drag', () => {
+        return windowManagerService.endFloatBallDrag()
+    })
+
+    ipcMain.handle('floatball-peek', () => {
+        const service = windowManagerService as typeof windowManagerService & {
+            peekFloatBall?: () => unknown
+        }
+
+        if (typeof service.peekFloatBall === 'function') {
+            return service.peekFloatBall()
+        }
+
+        return { success: false, error: '悬浮球预览尚未实现' }
+    })
+
+    ipcMain.handle('floatball-restore-dock', () => {
+        const service = windowManagerService as typeof windowManagerService & {
+            restoreFloatBallDock?: () => unknown
+        }
+
+        if (typeof service.restoreFloatBallDock === 'function') {
+            return service.restoreFloatBallDock()
+        }
+
+        return { success: false, error: '悬浮球停靠恢复尚未实现' }
     })
 
     ipcMain.handle('settings-set-floatball-hotkey', async (event, hotkey: string) => {

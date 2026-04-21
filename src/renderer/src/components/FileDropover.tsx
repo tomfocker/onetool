@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { X, Trash2, File, Folder } from 'lucide-react'
 import { buildStoredFiles } from '../../../shared/fileDropover'
-import appIcon from '../../../../resources/icon.png'
+import type { RealtimeStats } from '../../../shared/types'
+import floatBallIcon from '@/assets/floatball-icon.png'
 
 interface StoredFile {
   id: string
@@ -16,7 +17,10 @@ export const FileDropover: React.FC = () => {
   const [isPanelRendering, setIsPanelRendering] = useState(false)
   const [isDraggingOver, setIsDraggingOver] = useState(false)
   const [autoRemoveAfterDrag, setAutoRemoveAfterDrag] = useState(false)
-  const [windowSize, setWindowSize] = useState({ width: 120, height: 120 })
+  const [dockState, setDockState] = useState<'free' | 'docked' | 'peek' | 'dragging'>('docked')
+  const [dockSide, setDockSide] = useState<'docked-left' | 'docked-right'>('docked-right')
+  const [realtimeStats, setRealtimeStats] = useState<RealtimeStats | null>(null)
+  const [windowSize, setWindowSize] = useState({ width: 96, height: 96 })
 
   useEffect(() => {
     const savedAutoRemove = localStorage.getItem('floatball-autoRemoveAfterDrag')
@@ -28,9 +32,8 @@ export const FileDropover: React.FC = () => {
   const floatBallRef = useRef<HTMLDivElement>(null)
   const isDraggingRef = useRef(false)
   const dragDepthRef = useRef(0)
-  const startPosRef = useRef({ offsetX: 0, offsetY: 0 })
-  const animationFrameRef = useRef<number | null>(null)
-  const pendingTargetRef = useRef<{ targetX: number; targetY: number } | null>(null)
+  const pendingDragPositionRef = useRef<{ screenX: number; screenY: number } | null>(null)
+  const dragFrameRef = useRef<number | null>(null)
 
   useEffect(() => {
     const electron = window.electron as any
@@ -39,21 +42,37 @@ export const FileDropover: React.FC = () => {
     }
   }, [windowSize])
 
+  const fetchRealtimeStats = useCallback(async () => {
+    const electron = window.electron as typeof window.electron | undefined
+    if (!electron?.systemConfig?.getRealtimeStats || document.visibilityState === 'hidden') {
+      return
+    }
+
+    const result = await electron.systemConfig.getRealtimeStats()
+    if (result.success && result.data) {
+      setRealtimeStats(result.data as RealtimeStats)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchRealtimeStats()
+    const timer = window.setInterval(fetchRealtimeStats, 5000)
+    return () => window.clearInterval(timer)
+  }, [fetchRealtimeStats])
+
   useEffect(() => {
     let timerWindow: NodeJS.Timeout
     let timerRender: NodeJS.Timeout
 
     if (isExpanded) {
-      // 展开时：主进程窗口立刻变大，前端动画延迟 50ms 播放，防止闪烁
       setWindowSize({ width: 320, height: 400 })
       timerRender = setTimeout(() => {
         setIsPanelRendering(true)
       }, 50)
     } else {
-      // 收缩时：前端动画立刻播放，主进程窗口等待动画 300ms 结束后再变小
       setIsPanelRendering(false)
       timerWindow = setTimeout(() => {
-        setWindowSize({ width: 120, height: 120 })
+        setWindowSize({ width: 96, height: 96 })
       }, 300)
     }
 
@@ -63,65 +82,121 @@ export const FileDropover: React.FC = () => {
     }
   }, [isExpanded])
 
-  const moveWindow = useCallback(() => {
-    if (pendingTargetRef.current) {
-      const electron = window.electron as any
-      if (electron?.floatBall) {
-        electron.floatBall.setPosition(pendingTargetRef.current.targetX, pendingTargetRef.current.targetY)
-      }
-      pendingTargetRef.current = null
-    }
-    animationFrameRef.current = null
+  const openExpandedPanel = useCallback((event: React.MouseEvent) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setIsExpanded(true)
   }, [])
 
   const handlePointerDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('.no-drag')) {
+    const target = e.target as HTMLElement
+    if (!target.closest('.drag-handle') || e.button !== 0) {
       return
     }
 
     e.preventDefault()
     e.stopPropagation()
     isDraggingRef.current = true
-
-    // Capture the pointer
+    setDockState('dragging')
     e.currentTarget.setPointerCapture(e.pointerId)
 
-    // Calculate the mouse offset from the top-left of the window
-    startPosRef.current = { offsetX: e.clientX, offsetY: e.clientY }
+    const electron = window.electron as any
+    if (electron?.floatBall?.beginDrag) {
+      const rect = e.currentTarget.getBoundingClientRect()
+      electron.floatBall.beginDrag({ pointerOffsetX: e.clientX - rect.left, pointerOffsetY: e.clientY - rect.top })
+    }
   }
 
   const handlePointerMove = (e: React.PointerEvent) => {
     if (!isDraggingRef.current) return
 
-    // Calculate absolute window position
-    const targetX = e.screenX - startPosRef.current.offsetX
-    const targetY = e.screenY - startPosRef.current.offsetY
+    pendingDragPositionRef.current = { screenX: e.screenX, screenY: e.screenY }
+    if (dragFrameRef.current !== null) {
+      return
+    }
 
-    pendingTargetRef.current = { targetX, targetY }
+    const electron = window.electron as any
+    dragFrameRef.current = window.requestAnimationFrame(() => {
+      dragFrameRef.current = null
+      const nextPosition = pendingDragPositionRef.current
+      pendingDragPositionRef.current = null
+      if (nextPosition && electron?.floatBall?.dragTo) {
+        electron.floatBall.dragTo(nextPosition)
+      }
+    })
+  }
 
-    if (!animationFrameRef.current) {
-      animationFrameRef.current = requestAnimationFrame(moveWindow)
+  const handlePointerUp = async (e: React.PointerEvent) => {
+    isDraggingRef.current = false
+    let nextDockState: 'free' | 'docked' = 'free'
+    if (dragFrameRef.current !== null) {
+      window.cancelAnimationFrame(dragFrameRef.current)
+      dragFrameRef.current = null
+    }
+    pendingDragPositionRef.current = null
+    try {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+    } catch (_err) {}
+
+    try {
+      const electron = window.electron as any
+      if (electron?.floatBall?.endDrag) {
+        const result = await electron.floatBall.endDrag()
+        nextDockState = result?.data?.dockState === 'docked' ? 'docked' : 'free'
+        if (result?.data?.dockSide === 'left') {
+          setDockSide('docked-left')
+        } else if (result?.data?.dockSide === 'right') {
+          setDockSide('docked-right')
+        }
+      }
+    } catch (err) {
+      void err
+    } finally {
+      setDockState(nextDockState)
     }
   }
 
-  const handlePointerUp = (e: React.PointerEvent) => {
-    isDraggingRef.current = false
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId)
-    } catch (err) { }
+  const handleMouseEnter = () => {
+    if (isDraggingRef.current || isExpanded || dockState !== 'docked') {
+      return
+    }
+
+    setDockState('peek')
+    const electron = window.electron as any
+    if (electron?.floatBall?.peek) {
+      void electron.floatBall.peek()
+    }
   }
 
   const handleMouseLeave = () => {
-    if (!isDraggingRef.current && isExpanded) {
-      setIsExpanded(false)
+    if (isDraggingRef.current) {
+      return
     }
+
+    if (!isDraggingRef.current && !isExpanded && dockState === 'peek') {
+      const electron = window.electron as any
+      if (electron?.floatBall?.restoreDock) {
+        void electron.floatBall.restoreDock()
+      }
+    }
+
+    if (isExpanded) {
+      setIsExpanded(false)
+      setDockState('docked')
+      return
+    }
+
+    setDockState('docked')
   }
 
   useEffect(() => {
     return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current)
+      isDraggingRef.current = false
+      if (dragFrameRef.current !== null) {
+        window.cancelAnimationFrame(dragFrameRef.current)
+        dragFrameRef.current = null
       }
+      pendingDragPositionRef.current = null
     }
   }, [])
 
@@ -254,7 +329,7 @@ export const FileDropover: React.FC = () => {
 
     if (autoRemoveAfterDrag) {
       setTimeout(() => {
-        setStoredFiles(prev => prev.filter(f => f.id !== file.id))
+        setStoredFiles((prev) => prev.filter((f) => f.id !== file.id))
       }, 100)
     }
   }
@@ -262,7 +337,7 @@ export const FileDropover: React.FC = () => {
   const removeFile = (e: React.MouseEvent, id: string) => {
     e.stopPropagation()
     e.preventDefault()
-    setStoredFiles(prev => prev.filter(f => f.id !== id))
+    setStoredFiles((prev) => prev.filter((f) => f.id !== id))
   }
 
   const clearAll = (e: React.MouseEvent) => {
@@ -280,69 +355,159 @@ export const FileDropover: React.FC = () => {
     }
   }
 
+  const cpuLoad = Math.max(0, Math.min(100, Math.round(realtimeStats?.cpuLoad ?? 0)))
+  const memoryUsage = Math.max(0, Math.min(100, Math.round(realtimeStats?.memoryUsage ?? 0)))
+  const isDragging = dockState === 'dragging'
+  const dockEdgeOffsetClass = isDragging
+    ? ''
+    : dockSide === 'docked-left'
+      ? '-translate-x-[8px]'
+      : 'translate-x-[8px]'
+  const dragMotionClass = isDragging
+    ? 'transition-none duration-0'
+    : 'transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]'
+  const dragTransformClass = isDragging
+    ? ''
+    : 'group-hover/trigger:scale-[1.04] group-hover/trigger:-translate-y-[1px] group-hover/trigger:shadow-[inset_0_1px_1px_rgba(255,255,255,0.98),0_4px_10px_rgba(148,163,184,0.14)]'
+  const statusHue = cpuLoad >= 85 ? '244, 63, 94' : cpuLoad >= 65 ? '245, 158, 11' : '52, 211, 153'
+  const memoryHue = memoryUsage >= 85 ? '249, 115, 22' : memoryUsage >= 65 ? '59, 130, 246' : '56, 189, 248'
+  const ringRadius = 28
+  const ringCircumference = 2 * Math.PI * ringRadius
+  const trackArcLength = ringCircumference * 0.22
+  const activeArcLength = trackArcLength * Math.max(0.18, cpuLoad / 100)
+  const memoryTrackArcLength = ringCircumference * 0.16
+  const memoryActiveArcLength = memoryTrackArcLength * Math.max(0.18, memoryUsage / 100)
+
   return (
     <div
       ref={floatBallRef}
-      className="w-full h-full relative select-none"
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerCancel={handlePointerUp}
+      className={`relative h-full w-full select-none ${dockState === 'peek' ? 'peek' : dockSide} ${dockState === 'dragging' ? 'dragging' : ''}`}
+      onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
     >
-      {/* 悬浮球形态 */}
       <div
-        className={`absolute top-0 left-0 w-[120px] h-[120px] flex items-center justify-center cursor-pointer transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-[60px_60px] ${!isPanelRendering ? 'opacity-100 scale-100 pointer-events-auto delay-100' : 'opacity-0 scale-[0.01] pointer-events-none'
+        className={`absolute left-0 top-0 flex h-[96px] w-[96px] items-center origin-[48px_48px] transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${dockSide === 'docked-left' ? 'justify-start' : 'justify-end'} ${!isPanelRendering ? 'pointer-events-auto delay-100 opacity-100 scale-100' : 'pointer-events-none opacity-0 scale-[0.01]'
           }`}
-        onClick={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          setIsExpanded(true)
-        }}
         onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        <div className={`w-[72px] h-[72px] relative transition-all duration-300 ease-out flex items-center justify-center group ${isDraggingOver ? 'scale-110' : 'hover:scale-105'
-          }`}
-          style={{
-            filter: isDraggingOver
-              ? 'drop-shadow(0 0 18px rgba(127, 86, 217, 0.55))'
-              : 'drop-shadow(0 8px 18px rgba(78, 49, 138, 0.28))'
-          }}>
-          <img
-            src={appIcon}
-            alt="OneTool"
-            className="w-full h-full object-contain pointer-events-none transition-transform duration-300 group-hover:scale-105"
-            draggable={false}
-          />
+        <div className={`relative flex h-[72px] w-[72px] items-center justify-center ${dockEdgeOffsetClass}`}>
+          <button
+            type="button"
+            className={`peer/trigger group/trigger drag-handle relative flex h-[72px] w-[72px] items-center justify-center rounded-full ${dragMotionClass} ${isDraggingOver ? 'scale-[1.03]' : ''}`}
+            onPointerDown={handlePointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handlePointerUp}
+            onPointerCancel={handlePointerUp}
+            onDoubleClick={openExpandedPanel}
+            onContextMenu={openExpandedPanel}
+          >
+            <svg
+              viewBox="0 0 72 72"
+              className={`absolute inset-0 overflow-visible rotate-[-78deg] ${dragMotionClass} ${isDragging ? '' : 'group-hover/trigger:rotate-[-70deg]'}`}
+              aria-hidden="true"
+            >
+              <circle
+                cx="36"
+                cy="36"
+                r={ringRadius}
+                fill="none"
+                stroke={`rgba(${statusHue}, 0.18)`}
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${trackArcLength} ${ringCircumference}`}
+              />
+              <circle
+                cx="36"
+                cy="36"
+                r={ringRadius}
+                fill="none"
+                stroke={`rgba(${statusHue}, 0.8)`}
+                strokeWidth="4"
+                strokeLinecap="round"
+                strokeDasharray={`${activeArcLength} ${ringCircumference}`}
+              />
+              <circle
+                cx="36"
+                cy="36"
+                r="23"
+                fill="none"
+                stroke={`rgba(${memoryHue}, 0.14)`}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${memoryTrackArcLength} ${ringCircumference}`}
+                strokeDashoffset={-18}
+              />
+              <circle
+                cx="36"
+                cy="36"
+                r="23"
+                fill="none"
+                stroke={`rgba(${memoryHue}, 0.78)`}
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={`${memoryActiveArcLength} ${ringCircumference}`}
+                strokeDashoffset={-18}
+              />
+            </svg>
+            <div className={`absolute inset-[9px] rounded-full border border-white/70 bg-[radial-gradient(circle_at_30%_28%,rgba(255,255,255,0.98)_0%,rgba(241,246,255,0.92)_34%,rgba(223,234,252,0.86)_62%,rgba(205,220,245,0.78)_100%)] shadow-[inset_0_1px_1px_rgba(255,255,255,0.92),0_6px_14px_rgba(148,163,184,0.12)] ${dragMotionClass} ${isDragging ? '' : 'group-hover/trigger:scale-[1.02] group-hover/trigger:shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_8px_18px_rgba(148,163,184,0.16)]'}`} />
+            <div className="absolute inset-[15px] rounded-full bg-[radial-gradient(circle_at_34%_28%,rgba(255,255,255,0.9)_0%,rgba(233,241,252,0.76)_46%,rgba(216,227,243,0.6)_100%)]" />
+            <div className={`absolute inset-[13px] rounded-full bg-[radial-gradient(circle_at_32%_24%,rgba(255,255,255,0.46)_0%,rgba(255,255,255,0)_40%)] opacity-80 ${dragMotionClass} ${isDragging ? '' : 'group-hover/trigger:-translate-y-[1px]'}`} />
+            <div className={`relative z-10 flex h-[40px] w-[40px] flex-col justify-center rounded-full border border-white/80 bg-[radial-gradient(circle_at_30%_28%,rgba(255,255,255,0.98)_0%,rgba(243,247,255,0.94)_36%,rgba(226,235,249,0.9)_100%)] px-[6px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.96),0_1px_2px_rgba(148,163,184,0.12)] ${dragMotionClass} ${isDraggingOver ? 'scale-[1.02]' : dragTransformClass}`}>
+              <div className="grid grid-cols-[15px_1fr] items-end gap-x-[3px] leading-none">
+                <span className="text-[6px] font-bold tracking-[0.16em] text-slate-500">CPU</span>
+                <span className="justify-self-end text-[11px] font-black tabular-nums text-slate-700">{cpuLoad}</span>
+              </div>
+              <div className="mt-[2px] h-[3px] overflow-hidden rounded-full bg-slate-300/40">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${cpuLoad}%`, background: `linear-gradient(90deg, rgba(${statusHue}, 0.66), rgba(${statusHue}, 0.9))` }}
+                />
+              </div>
+              <div className="mt-[4px] grid grid-cols-[15px_1fr] items-end gap-x-[3px] leading-none">
+                <span className="text-[6px] font-bold tracking-[0.16em] text-slate-500">MEM</span>
+                <span className="justify-self-end text-[11px] font-black tabular-nums text-slate-700">{memoryUsage}</span>
+              </div>
+              <div className="mt-[2px] h-[3px] overflow-hidden rounded-full bg-slate-300/40">
+                <div
+                  className="h-full rounded-full transition-[width] duration-500"
+                  style={{ width: `${memoryUsage}%`, background: `linear-gradient(90deg, rgba(${memoryHue}, 0.62), rgba(${memoryHue}, 0.88))` }}
+                />
+              </div>
+            </div>
+          </button>
         </div>
 
         {storedFiles.length > 0 && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold shadow-md">
+          <div className="absolute right-0 top-0 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white shadow-md">
             {storedFiles.length}
           </div>
         )}
 
         <button
           onClick={handleCloseFloatBall}
-          className="absolute -top-2 -right-2 w-6 h-6 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-all duration-200 opacity-0 hover:opacity-100 no-drag"
+          className="no-drag absolute right-1 top-1 z-30 flex h-5 w-5 items-center justify-center rounded-full border border-white/25 bg-slate-900/45 text-white/90 opacity-0 transition-opacity duration-200 peer-hover/trigger:opacity-100 hover:bg-slate-900/65"
         >
-          <X className="w-3 h-3 text-white/90" />
+          <X className="h-3 w-3 text-white/90" />
         </button>
       </div>
 
-      {/* 展开面板形态 */}
       <div
-        className={`absolute top-0 left-0 w-[320px] h-[400px] bg-white/70 dark:bg-[#2a2d35]/90 backdrop-blur-xl rounded-2xl border border-white/30 dark:border-white/10 shadow-xl flex flex-col overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] origin-[60px_60px] ${isPanelRendering ? 'opacity-100 scale-100 pointer-events-auto delay-100' : 'opacity-0 scale-50 pointer-events-none'
+        className={`absolute left-0 top-0 flex h-[400px] w-[320px] origin-[48px_48px] flex-col overflow-hidden rounded-2xl border border-white/30 bg-white/70 shadow-xl backdrop-blur-xl transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] dark:border-white/10 dark:bg-[#2a2d35]/90 ${isPanelRendering ? 'pointer-events-auto delay-100 opacity-100 scale-100' : 'pointer-events-none opacity-0 scale-50'
           }`}
       >
-        <div className="p-3 border-b border-white/20 dark:border-white/10 flex items-center justify-between no-drag">
+        <div className="no-drag flex items-center justify-between border-b border-white/20 p-3 dark:border-white/10">
           <div className="flex items-center gap-2">
-            <div className="p-2 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 backdrop-blur-sm border border-white/20 dark:border-white/10 rounded-xl">
-              <img src={appIcon} alt="OneTool" className="w-4 h-4 object-contain" draggable={false} />
+            <div className="rounded-xl border border-white/20 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 p-2 backdrop-blur-sm dark:border-white/10">
+              <img
+                src={floatBallIcon}
+                alt="文件暂存悬浮球"
+                className="h-5 w-5 object-contain drop-shadow-[0_4px_10px_rgba(191,219,254,0.32)]"
+                draggable={false}
+              />
             </div>
-            <span className="font-semibold text-sm">文件暂存</span>
+            <span className="text-sm font-semibold">文件暂存</span>
           </div>
           <button
             onClick={(e) => {
@@ -350,9 +515,9 @@ export const FileDropover: React.FC = () => {
               e.stopPropagation()
               setIsExpanded(false)
             }}
-            className="no-drag p-1.5 rounded-lg hover:bg-white/30 dark:hover:bg-white/10 transition-colors"
+            className="no-drag rounded-lg p-1.5 transition-colors hover:bg-white/30 dark:hover:bg-white/10"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -363,40 +528,45 @@ export const FileDropover: React.FC = () => {
           onDrop={handleDrop}
         >
           {storedFiles.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center py-8">
-              <div className={`p-4 rounded-xl bg-gradient-to-br transition-all duration-300 ease-apple ${isDraggingOver
-                ? 'from-emerald-500/20 to-teal-400/10 scale-110'
+            <div className="flex h-full flex-col items-center justify-center py-8 text-center">
+              <div className={`rounded-xl bg-gradient-to-br p-4 transition-all duration-300 ease-apple ${isDraggingOver
+                ? 'scale-110 from-emerald-500/20 to-teal-400/10'
                 : 'from-muted/50 to-muted/30'
                 }`}>
-                <img src={appIcon} alt="OneTool" className="w-8 h-8 object-contain opacity-60" draggable={false} />
+                <img
+                  src={floatBallIcon}
+                  alt="文件暂存悬浮球"
+                  className="h-9 w-9 object-contain opacity-90 drop-shadow-[0_6px_14px_rgba(191,219,254,0.24)]"
+                  draggable={false}
+                />
               </div>
-              <p className="text-sm text-muted-foreground mt-3">拖入文件到此处暂存</p>
+              <p className="mt-3 text-sm text-muted-foreground">拖入文件到此处暂存</p>
             </div>
           ) : (
             <div className="space-y-2">
               {storedFiles.map((file) => (
                 <div
                   key={file.id}
-                  className="flex items-center gap-3 p-2.5 rounded-xl bg-white/40 dark:bg-white/5 hover:bg-white/60 dark:hover:bg-white/10 transition-all duration-200 group no-drag"
+                  className="group no-drag flex items-center gap-3 rounded-xl bg-white/40 p-2.5 transition-all duration-200 hover:bg-white/60 dark:bg-white/5 dark:hover:bg-white/10"
                   draggable
                   onDragStart={(e) => handleFileDragStart(e, file)}
                 >
-                  <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-400/10 flex items-center justify-center flex-shrink-0">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500/10 to-teal-400/10">
                     {file.isDirectory ? (
-                      <Folder className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                      <Folder className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     ) : (
-                      <File className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                      <File className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                     )}
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{file.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{file.path}</p>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{file.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">{file.path}</p>
                   </div>
                   <button
                     onClick={(e) => removeFile(e, file.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30 text-muted-foreground hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    className="rounded-lg p-1.5 text-muted-foreground opacity-0 transition-colors group-hover:opacity-100 hover:bg-red-100 hover:text-red-500 dark:hover:bg-red-900/30"
                   >
-                    <X className="w-4 h-4" />
+                    <X className="h-4 w-4" />
                   </button>
                 </div>
               ))}
@@ -405,18 +575,17 @@ export const FileDropover: React.FC = () => {
         </div>
 
         {storedFiles.length > 0 && (
-          <div className="p-3 border-t border-white/20 dark:border-white/10 no-drag">
+          <div className="no-drag border-t border-white/20 p-3 dark:border-white/10">
             <button
               onClick={(e) => clearAll(e)}
-              className="w-full py-2 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all duration-200 flex items-center justify-center gap-2 text-sm font-medium"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-50 py-2 text-sm font-medium text-red-600 transition-all duration-200 hover:bg-red-100 dark:bg-red-900/20 dark:text-red-400 dark:hover:bg-red-900/30"
             >
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="h-4 w-4" />
               一键清空
             </button>
           </div>
         )}
       </div>
-
     </div>
   )
 }

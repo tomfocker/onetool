@@ -10,6 +10,7 @@ import {
 import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
+import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
 import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
@@ -198,6 +199,11 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     move: (x: number, y: number) => ipcRenderer.send('floatball-move', { x, y }),
     setPosition: (x: number, y: number) => ipcRenderer.send('floatball-set-position', { x, y }),
     resize: (width: number, height: number) => ipcRenderer.send('floatball-resize', { width, height }),
+    beginDrag: (payload: { pointerOffsetX: number; pointerOffsetY: number }) => ipcRenderer.send('floatball-begin-drag', payload),
+    dragTo: (payload: { screenX: number; screenY: number }) => ipcRenderer.send('floatball-drag-to', payload),
+    endDrag: () => ipcRenderer.invoke('floatball-end-drag', undefined),
+    peek: () => ipcRenderer.invoke('floatball-peek', undefined),
+    restoreDock: () => ipcRenderer.invoke('floatball-restore-dock', undefined),
     startDrag: (filePath: string) => ipcRenderer.send('ondragstart', filePath),
     hideWindow: () => ipcRenderer.send('floatball-hide-window'),
     showWindow: () => ipcRenderer.send('floatball-show-window'),
@@ -344,11 +350,27 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onStateChanged: (callback: (state: DownloadOrganizerState) => void) => onChannel('download-organizer-state-changed', callback)
   }
 
+  const modelDownloadAPI = {
+    getState: () => ipcRenderer.invoke('model-download-get-state') as Promise<IpcResponse<ModelDownloadState>>,
+    startDownload: (request: ModelDownloadRequest) => {
+      return ipcRenderer.invoke('model-download-start', request) as Promise<IpcResponse<ModelDownloadState>>
+    },
+    cancelDownload: () => ipcRenderer.invoke('model-download-cancel') as Promise<IpcResponse<ModelDownloadState>>,
+    chooseSavePath: () => {
+      return ipcRenderer.invoke('model-download-choose-save-path') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+    },
+    openPath: (targetPath?: string) => {
+      return ipcRenderer.invoke('model-download-open-path', targetPath) as Promise<IpcResponse<{ targetPath: string }>>
+    },
+    onStateChanged: (callback: (state: ModelDownloadState) => void) => onChannel('model-download-state-changed', callback)
+  }
+
   return {
     app: appAPI,
     doctor: doctorAPI,
     devEnvironment: devEnvironmentAPI,
     downloadOrganizer: downloadOrganizerAPI,
+    modelDownload: modelDownloadAPI,
     spaceCleanup: spaceCleanupAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,

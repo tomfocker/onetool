@@ -140,6 +140,10 @@ export function buildSystemConfigFromHardwarePayload(
 }
 
 export class SystemService {
+  private realtimeStatsCache: { timestamp: number; data: any } | null = null
+  private realtimeStatsInFlight: Promise<IpcResponse<any>> | null = null
+  private readonly realtimeStatsCacheMs = 5000
+
   constructor() { }
 
   async getSystemConfig(): Promise<IpcResponse<SystemConfig>> {
@@ -329,7 +333,16 @@ Write-Output "${MONITOR_JSON_END}"
   }
 
   async getRealtimeStats(): Promise<IpcResponse<any>> {
-    return taskQueueService.enqueue('RealtimeStats', async () => {
+    const now = Date.now()
+    if (this.realtimeStatsCache && now - this.realtimeStatsCache.timestamp < this.realtimeStatsCacheMs) {
+      return { success: true, data: this.realtimeStatsCache.data }
+    }
+
+    if (this.realtimeStatsInFlight) {
+      return this.realtimeStatsInFlight
+    }
+
+    this.realtimeStatsInFlight = taskQueueService.enqueue('RealtimeStats', async () => {
       try {
         const statsScript = `
 # CPU Load & Name
@@ -434,6 +447,10 @@ Write-Output "---STATS_JSON_END---"
         if (match && match[1]) {
           try {
             const data = JSON.parse(match[1].trim())
+            this.realtimeStatsCache = {
+              timestamp: Date.now(),
+              data,
+            }
             return { success: true, data }
           } catch (pe) {
             console.error('SystemService: Stats JSON Parse Error:', pe, rawResult)
@@ -445,6 +462,12 @@ Write-Output "---STATS_JSON_END---"
         return { success: false, error: (error as Error).message }
       }
     })
+
+    try {
+      return await this.realtimeStatsInFlight
+    } finally {
+      this.realtimeStatsInFlight = null
+    }
   }
 
   async executeCommand(command: string): Promise<IpcResponse> {

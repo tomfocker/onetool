@@ -148,7 +148,7 @@ export class DevEnvironmentService extends EventEmitter {
         const wingetId = DEV_ENVIRONMENT_WINGET_TARGETS[id]
         if (wingetId) {
           try {
-            const upgradeOutput = await execText(`winget upgrade --id ${wingetId} --accept-source-agreements`)
+            const upgradeOutput = await execText(`winget list --id ${wingetId} --exact --upgrade-available --accept-source-agreements`)
             if (hasWingetUpgrade(upgradeOutput)) {
               status = 'available-update'
               canUpdate = true
