@@ -159,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
     root.style.setProperty('--organize-highlight', state.highlight.organize.toFixed(4))
     root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
     root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
-    syncFlightTargets()
   }
 
   syncFlightTargets()

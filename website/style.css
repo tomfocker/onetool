@@ -919,18 +919,16 @@ select {
   --target-active: var(--matrix-highlight);
 }
 
-[data-flight-dock='capture'],
-[data-flight-dock='organize'],
-[data-flight-dock='utility'],
-[data-flight-dock='matrix'] {
-  transform: translateY(calc((1 - var(--flight-dock-soft)) * 16px));
-  box-shadow: 0 20px 60px rgba(110, 134, 182, calc(0.04 + (var(--flight-dock-soft) * 0.08)));
-}
-
 .scenario-card[data-flight-target],
 .tool-group[data-flight-target] {
   transform:
-    translateY(calc(24px - (var(--target-active) * 24px)))
+    translateY(
+      calc(
+        24px -
+        (var(--target-active) * 24px) +
+        ((1 - var(--flight-dock-soft)) * 16px)
+      )
+    )
     scale(calc(0.985 + (var(--target-active) * 0.015)));
   border-color: rgba(
     176,
@@ -940,6 +938,7 @@ select {
   );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 20px 60px rgba(110, 134, 182, calc(0.04 + (var(--flight-dock-soft) * 0.08))),
     0 calc(20px + (var(--target-active) * 18px)) calc(44px + (var(--target-active) * 16px))
       rgba(101, 124, 166, calc(0.1 + (var(--target-active) * 0.12)));
 }
