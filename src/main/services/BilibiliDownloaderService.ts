@@ -41,6 +41,17 @@ type PollPayload = {
   loginSession?: BilibiliLoginSession
 }
 
+type BilibiliAuthSession = {
+  sessData: string
+  biliJct: string
+  refreshToken: string | null
+}
+
+type PersistedSessionRecord = {
+  loginSession: BilibiliLoginSession
+  auth: BilibiliAuthSession
+}
+
 function cloneState(state: BilibiliDownloaderState): BilibiliDownloaderState {
   return JSON.parse(JSON.stringify(state))
 }
@@ -59,6 +70,18 @@ function createLoggedOutSession(): BilibiliLoginSession {
   }
 }
 
+function isValidExpiresAt(value: unknown) {
+  if (value === null) {
+    return true
+  }
+
+  if (typeof value !== 'string') {
+    return false
+  }
+
+  return Number.isFinite(Date.parse(value))
+}
+
 function isValidLoginSession(value: unknown): value is BilibiliLoginSession {
   if (!value || typeof value !== 'object') {
     return false
@@ -69,7 +92,7 @@ function isValidLoginSession(value: unknown): value is BilibiliLoginSession {
     typeof session.isLoggedIn === 'boolean' &&
     (typeof session.nickname === 'string' || session.nickname === null) &&
     (typeof session.avatarUrl === 'string' || session.avatarUrl === null) &&
-    (typeof session.expiresAt === 'string' || session.expiresAt === null)
+    isValidExpiresAt(session.expiresAt)
   )
 }
 
@@ -82,12 +105,71 @@ function isExpiredSession(session: BilibiliLoginSession, now: number) {
   return Number.isFinite(expiresAt) && expiresAt <= now
 }
 
-function normalizeConfirmedSession(payload: any): BilibiliLoginSession {
-  return {
+function normalizeConfirmedSession(payload: any) {
+  const loginSession: BilibiliLoginSession = {
     isLoggedIn: true,
     nickname: normalizeText(payload?.user_info?.uname),
     avatarUrl: normalizeText(payload?.user_info?.face),
     expiresAt: normalizeText(payload?.expires_at)
+  }
+
+  const cookieEntries = Array.isArray(payload?.cookie_info?.cookies) ? payload.cookie_info.cookies : []
+  const cookieMap = new Map<string, string>()
+  for (const cookie of cookieEntries) {
+    const name = normalizeText(cookie?.name)
+    const value = normalizeText(cookie?.value)
+    if (name && value) {
+      cookieMap.set(name, value)
+    }
+  }
+
+  const sessData = normalizeText(payload?.sessdata) ?? cookieMap.get('SESSDATA') ?? null
+  const biliJct = normalizeText(payload?.bili_jct) ?? cookieMap.get('bili_jct') ?? null
+
+  if (!sessData || !biliJct) {
+    throw new Error('Bilibili confirmed login is missing auth cookies')
+  }
+
+  const auth: BilibiliAuthSession = {
+    sessData,
+    biliJct,
+    refreshToken: normalizeText(payload?.refresh_token)
+  }
+
+  return {
+    loginSession,
+    auth
+  }
+}
+
+function isValidAuthSession(value: unknown): value is BilibiliAuthSession {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+
+  const auth = value as Record<string, unknown>
+  return (
+    typeof auth.sessData === 'string' &&
+    auth.sessData.trim().length > 0 &&
+    typeof auth.biliJct === 'string' &&
+    auth.biliJct.trim().length > 0 &&
+    (typeof auth.refreshToken === 'string' || auth.refreshToken === null)
+  )
+}
+
+function normalizePersistedSessionRecord(value: unknown): PersistedSessionRecord | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  if (!isValidLoginSession(record.loginSession) || !record.loginSession.isLoggedIn || !isValidAuthSession(record.auth)) {
+    return null
+  }
+
+  return {
+    loginSession: record.loginSession,
+    auth: record.auth
   }
 }
 
@@ -122,6 +204,7 @@ export class BilibiliDownloaderService {
   private readonly stateListeners = new Set<StateListener>()
 
   private state: BilibiliDownloaderState = createDefaultBilibiliDownloaderState()
+  private authSession: BilibiliAuthSession | null = null
   private pendingAuthCode: string | null = null
 
   constructor(dependencies: BilibiliDownloaderServiceDependencies = {}) {
@@ -141,6 +224,10 @@ export class BilibiliDownloaderService {
 
   getState(): BilibiliDownloaderState {
     return cloneState(this.state)
+  }
+
+  getAuthSession(): BilibiliAuthSession | null {
+    return this.authSession ? { ...this.authSession } : null
   }
 
   loadSession(): IpcResponse<BilibiliLoginSession> {
@@ -170,8 +257,10 @@ export class BilibiliDownloaderService {
         }
       }
 
-      if (!isValidLoginSession(parsed) || !parsed.isLoggedIn) {
+      const persisted = normalizePersistedSessionRecord(parsed)
+      if (!persisted || !persisted.auth) {
         this.clearPersistedSession()
+        this.authSession = null
         this.updateState({
           loginSession: createLoggedOutSession(),
           error: 'Stored Bilibili session is invalid'
@@ -182,8 +271,9 @@ export class BilibiliDownloaderService {
         }
       }
 
-      if (isExpiredSession(parsed, this.now())) {
+      if (isExpiredSession(persisted.loginSession, this.now())) {
         this.clearPersistedSession()
+        this.authSession = null
         this.updateState({
           loginSession: createLoggedOutSession(),
           error: 'Stored Bilibili session expired'
@@ -194,16 +284,18 @@ export class BilibiliDownloaderService {
         }
       }
 
+      this.authSession = persisted.auth
       this.updateState({
-        loginSession: parsed,
+        loginSession: persisted.loginSession,
         error: null
       })
       return {
         success: true,
-        data: parsed
+        data: persisted.loginSession
       }
     } catch (error) {
       this.clearPersistedSession()
+      this.authSession = null
       this.updateState({
         loginSession: createLoggedOutSession(),
         error: this.toErrorMessage(error)
@@ -284,6 +376,7 @@ export class BilibiliDownloaderService {
       if (status === 'expired') {
         this.pendingAuthCode = null
         this.clearPersistedSession()
+        this.authSession = null
         this.updateState({
           loginSession: createLoggedOutSession(),
           error: 'QR login expired'
@@ -295,24 +388,26 @@ export class BilibiliDownloaderService {
       }
 
       if (status === 'confirmed') {
-        const loginSession = normalizeConfirmedSession(pollData)
-        await this.persistSession(loginSession)
+        const confirmedSession = normalizeConfirmedSession(pollData)
+        await this.persistSession(confirmedSession)
         this.pendingAuthCode = null
+        this.authSession = confirmedSession.auth
         this.updateState({
-          loginSession,
+          loginSession: confirmedSession.loginSession,
           error: null
         })
         return {
           success: true,
           data: {
             status,
-            loginSession
+            loginSession: confirmedSession.loginSession
           }
         }
       }
 
       this.pendingAuthCode = null
       this.clearPersistedSession()
+      this.authSession = null
       this.updateState({
         loginSession: createLoggedOutSession(),
         error: 'Bilibili login status was invalid'
@@ -336,6 +431,7 @@ export class BilibiliDownloaderService {
     try {
       this.pendingAuthCode = null
       this.clearPersistedSession()
+      this.authSession = null
       this.updateState({
         loginSession: createLoggedOutSession(),
         error: null
@@ -356,12 +452,12 @@ export class BilibiliDownloaderService {
     return path.join(this.app.getPath('userData'), SESSION_FILE_NAME)
   }
 
-  private async persistSession(loginSession: BilibiliLoginSession) {
+  private async persistSession(session: PersistedSessionRecord) {
     const sessionPath = this.getSessionPath()
     const sessionDirectory = path.dirname(sessionPath)
 
     this.fs.mkdirSync(sessionDirectory, { recursive: true })
-    await this.fs.promises.writeFile(sessionPath, JSON.stringify(loginSession, null, 2))
+    await this.fs.promises.writeFile(sessionPath, JSON.stringify(session, null, 2))
   }
 
   private clearPersistedSession() {

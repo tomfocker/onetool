@@ -181,6 +181,18 @@ test('pollLogin persists a confirmed session and loadSession restores it', async
         code: 0,
         status: 'confirmed',
         refresh_token: 'refresh-token',
+        cookie_info: {
+          cookies: [
+            {
+              name: 'SESSDATA',
+              value: 'sess-token'
+            },
+            {
+              name: 'bili_jct',
+              value: 'csrf-token'
+            }
+          ]
+        },
         url: 'https://passport.bilibili.com/login/success',
         user_info: {
           uname: 'Test User',
@@ -204,6 +216,22 @@ test('pollLogin persists a confirmed session and loadSession restores it', async
     expiresAt: '2099-01-01T00:00:00.000Z'
   })
   assert.equal(fsMock.files.has(sessionPath), true)
+  assert.deepEqual(
+    JSON.parse(fsMock.files.get(sessionPath)),
+    {
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Test User',
+        avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
+        expiresAt: '2099-01-01T00:00:00.000Z'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
+    }
+  )
 
   const restored = new BilibiliDownloaderService({ fs: fsMock })
   const loadResult = restored.loadSession()
@@ -215,16 +243,28 @@ test('pollLogin persists a confirmed session and loadSession restores it', async
     avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
     expiresAt: '2099-01-01T00:00:00.000Z'
   })
+  assert.deepEqual(toPlain(restored.getAuthSession()), {
+    sessData: 'sess-token',
+    biliJct: 'csrf-token',
+    refreshToken: 'refresh-token'
+  })
 })
 
 test('logout clears persisted session and emits logged-out state once', async () => {
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
     [sessionPath]: JSON.stringify({
-      isLoggedIn: true,
-      nickname: 'Persisted User',
-      avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
-      expiresAt: '2099-01-01T00:00:00.000Z'
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Persisted User',
+        avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
+        expiresAt: '2099-01-01T00:00:00.000Z'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
     })
   })
   const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
@@ -263,10 +303,17 @@ test('pollLogin clears state and persistence when QR login expires', async () =>
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
     [sessionPath]: JSON.stringify({
-      isLoggedIn: true,
-      nickname: 'Old User',
-      avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
-      expiresAt: '2099-01-01T00:00:00.000Z'
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Old User',
+        avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
+        expiresAt: '2099-01-01T00:00:00.000Z'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
     })
   })
   const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
@@ -332,10 +379,17 @@ test('pollLogin clears state and persistence when QR login response is invalid',
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
     [sessionPath]: JSON.stringify({
-      isLoggedIn: true,
-      nickname: 'Old User',
-      avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
-      expiresAt: '2099-01-01T00:00:00.000Z'
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Old User',
+        avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
+        expiresAt: '2099-01-01T00:00:00.000Z'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
     })
   })
   const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
@@ -388,10 +442,17 @@ test('loadSession clears expired persisted login sessions', () => {
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
     [sessionPath]: JSON.stringify({
-      isLoggedIn: true,
-      nickname: 'Expired User',
-      avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
-      expiresAt: '2020-01-01T00:00:00.000Z'
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Expired User',
+        avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
+        expiresAt: '2020-01-01T00:00:00.000Z'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
     })
   })
   const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
@@ -430,6 +491,42 @@ test('loadSession treats malformed persisted payloads as invalid login state', (
   assert.equal(result.success, false)
   assert.equal(result.error, 'Stored Bilibili session is invalid')
   assert.equal(fsMock.files.has(sessionPath), false)
+  assert.deepEqual(toPlain(service.getState().loginSession), {
+    isLoggedIn: false,
+    nickname: null,
+    avatarUrl: null,
+    expiresAt: null
+  })
+})
+
+test('loadSession rejects persisted sessions with malformed expiresAt strings', () => {
+  const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
+  const fsMock = createFsMock({
+    [sessionPath]: JSON.stringify({
+      loginSession: {
+        isLoggedIn: true,
+        nickname: 'Broken User',
+        avatarUrl: 'https://i0.hdslb.com/avatar.jpg',
+        expiresAt: 'not-a-date'
+      },
+      auth: {
+        sessData: 'sess-token',
+        biliJct: 'csrf-token',
+        refreshToken: 'refresh-token'
+      }
+    })
+  })
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    fsModule: fsMock
+  })
+  const service = new BilibiliDownloaderService({ fs: fsMock })
+
+  const result = service.loadSession()
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'Stored Bilibili session is invalid')
+  assert.equal(fsMock.files.has(sessionPath), false)
+  assert.equal(service.getAuthSession(), null)
   assert.deepEqual(toPlain(service.getState().loginSession), {
     isLoggedIn: false,
     nickname: null,
