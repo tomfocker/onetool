@@ -180,6 +180,16 @@ export const toolComponents: ToolComponent[] = [
     installed: true
   },
   {
+    id: 'model-download',
+    name: '模型下载',
+    description: '内置 HuggingFace 与 ModelScope 模型下载器，支持整仓和单文件下载',
+    category: '效率工具',
+    size: 160,
+    version: '1.0.0',
+    icon: 'CloudDownload',
+    installed: true
+  },
+  {
     id: 'screen-overlay-translator',
     name: '沉浸式截屏翻译',
     description: '全屏透明遮罩框选，OCR识别加翻译，玻璃质感设计',

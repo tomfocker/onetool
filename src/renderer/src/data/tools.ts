@@ -90,6 +90,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'DownloadOrganizerTool'
   },
   {
+    id: 'model-download',
+    name: '模型下载',
+    description: '内置 HuggingFace 与 ModelScope 模型下载器',
+    category: '实用工具',
+    icon: 'CloudDownload',
+    componentPath: 'ModelDownloadTool'
+  },
+  {
     id: 'screenshot-tool',
     name: '叠加截图',
     description: '支持聚焦叠加的高级截图工具',

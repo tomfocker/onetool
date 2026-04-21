@@ -108,6 +108,10 @@
         "to": "icon.png"
       },
       {
+        "from": "resources/model-download",
+        "to": "model-download"
+      },
+      {
         "from": "node_modules/ffmpeg-static/ffmpeg.exe",
         "to": "ffmpeg.exe"
       }

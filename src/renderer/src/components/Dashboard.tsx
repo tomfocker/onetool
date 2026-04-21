@@ -3,7 +3,7 @@ import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
-  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare
+  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare
+  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload
 }
 
 const toolGradientMap: Record<string, string> = {
@@ -40,6 +40,7 @@ const toolGradientMap: Record<string, string> = {
   'qr-generator': 'from-green-500 to-emerald-600',
   'screenshot-tool': 'from-blue-400 to-cyan-500',
   'file-dropover': 'from-indigo-400 to-purple-500',
+  'model-download': 'from-sky-500 to-blue-700',
   'translator': 'from-purple-500 to-pink-500',
   'network-radar': 'from-blue-600 to-cyan-600',
   'windows-manager': 'from-slate-600 to-zinc-800',
