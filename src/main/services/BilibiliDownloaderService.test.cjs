@@ -145,7 +145,10 @@ function loadBilibiliDownloaderServiceModule(overrides = {}) {
       }
 
       if (specifier.startsWith('.')) {
-        const resolvedPath = path.resolve(path.dirname(filePath), specifier)
+        let resolvedPath = path.resolve(path.dirname(filePath), specifier)
+        if (!path.extname(resolvedPath) && fs.existsSync(`${resolvedPath}.ts`)) {
+          resolvedPath = `${resolvedPath}.ts`
+        }
         if (resolvedPath.endsWith('.ts')) {
           return executeModule(resolvedPath)
         }
@@ -295,7 +298,8 @@ test('pollLogin persists a confirmed session and loadSession restores it', async
         sessData: 'sess-token',
         biliJct: 'csrf-token',
         refreshToken: 'refresh-token'
-      }
+      },
+      source: 'current'
     }
   )
 

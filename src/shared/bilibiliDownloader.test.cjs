@@ -1,5 +1,72 @@
 const test = require('node:test')
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+const vm = require('node:vm')
+const ts = require('typescript')
+
+function loadTsModule(entryFileName) {
+  const cache = new Map()
+
+  function executeModule(filePath) {
+    if (cache.has(filePath)) {
+      return cache.get(filePath)
+    }
+
+    const source = fs.readFileSync(filePath, 'utf8')
+    const transpiled = ts.transpileModule(source, {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+        esModuleInterop: true
+      },
+      fileName: filePath
+    }).outputText
+
+    const module = { exports: {} }
+    cache.set(filePath, module.exports)
+
+    const localRequire = (specifier) => {
+      if (specifier.startsWith('.')) {
+        let resolvedPath = path.resolve(path.dirname(filePath), specifier)
+        if (!path.extname(resolvedPath) && fs.existsSync(`${resolvedPath}.ts`)) {
+          resolvedPath = `${resolvedPath}.ts`
+        }
+
+        if (resolvedPath.endsWith('.ts')) {
+          return executeModule(resolvedPath)
+        }
+      }
+
+      return require(specifier)
+    }
+
+    vm.runInNewContext(
+      transpiled,
+      {
+        module,
+        exports: module.exports,
+        require: localRequire,
+        __dirname: path.dirname(filePath),
+        __filename: filePath,
+        console,
+        process,
+        URL,
+        URLSearchParams
+      },
+      { filename: filePath }
+    )
+
+    cache.set(filePath, module.exports)
+    return module.exports
+  }
+
+  return executeModule(path.join(__dirname, entryFileName))
+}
+
+function toPlain(value) {
+  return JSON.parse(JSON.stringify(value))
+}
 
 const {
   BILIBILI_DOWNLOAD_STAGE_VALUES,
@@ -8,16 +75,16 @@ const {
   normalizeBilibiliDownloaderSelection,
   normalizeBilibiliParsedLink,
   parseBilibiliLink
-} = require('./bilibiliDownloader.ts')
+} = loadTsModule('bilibiliDownloader.ts')
 
 const {
   BilibiliDownloaderStateSchema,
   BilibiliParsedLinkSchema
-} = require('./ipc-schemas.ts')
+} = loadTsModule('ipc-schemas.ts')
 
 test('parseBilibiliLink recognizes BV video and bangumi links with selectable items', () => {
   assert.deepEqual(
-    parseBilibiliLink('https://www.bilibili.com/video/BV1xK4y1m7aA?p=3'),
+    toPlain(parseBilibiliLink('https://www.bilibili.com/video/BV1xK4y1m7aA?p=3')),
     {
       kind: 'video',
       bvid: 'BV1xK4y1m7aA',
@@ -37,7 +104,7 @@ test('parseBilibiliLink recognizes BV video and bangumi links with selectable it
   )
 
   assert.deepEqual(
-    parseBilibiliLink('https://www.bilibili.com/bangumi/play/ep123456'),
+    toPlain(parseBilibiliLink('https://www.bilibili.com/bangumi/play/ep123456')),
     {
       kind: 'episode',
       epId: 'ep123456',
@@ -56,7 +123,7 @@ test('parseBilibiliLink recognizes BV video and bangumi links with selectable it
   )
 
   assert.deepEqual(
-    parseBilibiliLink('https://www.bilibili.com/bangumi/play/ss98765'),
+    toPlain(parseBilibiliLink('https://www.bilibili.com/bangumi/play/ss98765')),
     {
       kind: 'season',
       seasonId: 'ss98765',
@@ -89,7 +156,7 @@ test('parseBilibiliLink rejects spoofed bilibili hosts', () => {
 
 test('normalizeBilibiliParsedLink preserves candidate items and explicit selection', () => {
   assert.deepEqual(
-    normalizeBilibiliParsedLink({
+    toPlain(normalizeBilibiliParsedLink({
       kind: 'video',
       bvid: 'BV1xK4y1m7aA',
       items: [
@@ -106,7 +173,7 @@ test('normalizeBilibiliParsedLink preserves candidate items and explicit selecti
       selectedItemId: 'page:3',
       title: '  Demo Video  ',
       coverUrl: '  '
-    }),
+    })),
     {
       kind: 'video',
       bvid: 'BV1xK4y1m7aA',
@@ -171,9 +238,9 @@ test('normalizeBilibiliParsedLink rejects incomplete selectable input', () => {
 
 test('normalizeBilibiliDownloaderSelection keeps export mode only', () => {
   assert.deepEqual(
-    normalizeBilibiliDownloaderSelection({
+    toPlain(normalizeBilibiliDownloaderSelection({
       exportMode: 'merge-mp4'
-    }),
+    })),
     {
       exportMode: 'merge-mp4'
     }
@@ -199,7 +266,7 @@ test('buildStreamOptionSummary disables MP4 merge when audio or video is missing
 })
 
 test('createDefaultBilibiliDownloaderState returns a parse-and-selection oriented state', () => {
-  const state = createDefaultBilibiliDownloaderState()
+  const state = toPlain(createDefaultBilibiliDownloaderState())
 
   assert.deepEqual(state, {
     loginSession: {
@@ -233,7 +300,7 @@ test('cancelled is part of the shared downloader stage contract and schema', () 
 
 test('parsed link schema accepts selectable items', () => {
   const parsedLink = parseBilibiliLink('https://www.bilibili.com/video/BV1xK4y1m7aA?p=1')
-  assert.deepEqual(BilibiliParsedLinkSchema.parse(parsedLink), parsedLink)
+  assert.deepEqual(toPlain(BilibiliParsedLinkSchema.parse(parsedLink)), toPlain(parsedLink))
 })
 
 test('parsed link schema rejects impossible selectable states', () => {

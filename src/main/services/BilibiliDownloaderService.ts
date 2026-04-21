@@ -7,15 +7,16 @@ import {
   createDefaultBilibiliDownloaderState,
   normalizeBilibiliParsedLink,
   parseBilibiliLink
-} from '../../shared/bilibiliDownloader.ts'
+} from '../../shared/bilibiliDownloader'
 import type {
   BilibiliDownloaderState,
+  BilibiliExportMode,
   BilibiliLinkKind,
   BilibiliLoginSession,
   BilibiliParsedLink,
   BilibiliStreamOptionSummary,
   IpcResponse
-} from '../../shared/types.ts'
+} from '../../shared/types'
 
 const QR_BOOTSTRAP_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate'
 const QR_POLL_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll'
@@ -117,7 +118,7 @@ type LoadStreamOptionsPayload = {
 }
 
 type StartDownloadRequest = {
-  exportMode: BilibiliDownloaderSelection['exportMode']
+  exportMode: BilibiliExportMode | null
   outputDirectory?: string
 }
 
@@ -561,7 +562,10 @@ export class BilibiliDownloaderService {
 
       if (status === 'confirmed') {
         const confirmedSession = normalizeConfirmedSession(pollData)
-        await this.persistSession(confirmedSession)
+        await this.persistSession({
+          ...confirmedSession,
+          source: 'current'
+        })
         this.pendingAuthCode = null
         this.authSession = confirmedSession.auth
         this.updateState({
@@ -1283,7 +1287,7 @@ export class BilibiliDownloaderService {
     return payload
   }
 
-  private getRequestHeaders() {
+  private getRequestHeaders(): Record<string, string> {
     if (!this.authSession) {
       return {}
     }
