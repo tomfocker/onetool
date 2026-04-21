@@ -305,26 +305,64 @@ export const BILIBILI_DOWNLOAD_STAGE_VALUES = [
 
 export type BilibiliDownloadStage = (typeof BILIBILI_DOWNLOAD_STAGE_VALUES)[number]
 
-export interface BilibiliParsedLink {
-  kind: BilibiliLinkKind
-  bvid?: string
-  epId?: string
-  seasonId?: string
+export interface BilibiliParsedPageItem {
+  id: string
+  kind: 'page'
+  title: string
+  page: number
+}
+
+export interface BilibiliParsedEpisodeItem {
+  id: string
+  kind: 'episode'
+  title: string
+  epId: string
+}
+
+export interface BilibiliParsedSeasonItem {
+  id: string
+  kind: 'season'
+  title: string
+  seasonId: string
+}
+
+export type BilibiliParsedItem =
+  | BilibiliParsedPageItem
+  | BilibiliParsedEpisodeItem
+  | BilibiliParsedSeasonItem
+
+export interface BilibiliParsedVideoLink {
+  kind: 'video'
+  bvid: string
   page?: number
   title: string | null
   coverUrl: string | null
-  items: BilibiliParsedItem[]
+  items: BilibiliParsedPageItem[]
   selectedItemId: string
 }
 
-export interface BilibiliParsedItem {
-  id: string
-  kind: BilibiliParsedItemKind
-  title: string
-  page?: number
-  epId?: string
-  seasonId?: string
+export interface BilibiliParsedEpisodeLink {
+  kind: 'episode'
+  epId: string
+  title: string | null
+  coverUrl: string | null
+  items: BilibiliParsedEpisodeItem[]
+  selectedItemId: string
 }
+
+export interface BilibiliParsedSeasonLink {
+  kind: 'season'
+  seasonId: string
+  title: string | null
+  coverUrl: string | null
+  items: BilibiliParsedSeasonItem[]
+  selectedItemId: string
+}
+
+export type BilibiliParsedLink =
+  | BilibiliParsedVideoLink
+  | BilibiliParsedEpisodeLink
+  | BilibiliParsedSeasonLink
 
 export interface BilibiliLoginSession {
   isLoggedIn: boolean

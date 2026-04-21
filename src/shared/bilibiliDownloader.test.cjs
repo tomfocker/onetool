@@ -74,6 +74,18 @@ test('parseBilibiliLink recognizes BV video and bangumi links with selectable it
   )
 })
 
+test('parseBilibiliLink rejects spoofed bilibili hosts', () => {
+  assert.equal(
+    parseBilibiliLink('https://notbilibili.com/video/BV1xK4y1m7aA'),
+    null
+  )
+
+  assert.equal(
+    parseBilibiliLink('https://bilibili.com.evil.example/video/BV1xK4y1m7aA'),
+    null
+  )
+})
+
 test('normalizeBilibiliParsedLink preserves candidate items and explicit selection', () => {
   assert.deepEqual(
     normalizeBilibiliParsedLink({

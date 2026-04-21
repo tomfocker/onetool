@@ -88,6 +88,10 @@ function parseBilibiliHost(rawInput: string) {
   }
 }
 
+function isRealBilibiliHost(hostname: string) {
+  return hostname === 'bilibili.com' || hostname.endsWith('.bilibili.com')
+}
+
 function normalizeParsedItemKind(value: BilibiliParsedItemKind | null | undefined, fallback: BilibiliParsedItemKind) {
   return value === 'page' || value === 'episode' || value === 'season' ? value : fallback
 }
@@ -158,25 +162,30 @@ export function normalizeBilibiliParsedItem(
   const page = kind === 'page' ? normalizePositiveInteger(input?.page, 1) : undefined
   const epId = kind === 'episode' ? normalizeText(input?.epId) || undefined : undefined
   const seasonId = kind === 'season' ? normalizeText(input?.seasonId) || undefined : undefined
-  const item: BilibiliParsedItem = {
+  if (kind === 'page') {
+    return {
+      id: buildParsedItemId({ ...input, kind }),
+      kind,
+      title: buildParsedItemTitle({ ...input, kind }),
+      page
+    }
+  }
+
+  if (kind === 'episode') {
+    return {
+      id: buildParsedItemId({ ...input, kind }),
+      kind,
+      title: buildParsedItemTitle({ ...input, kind }),
+      epId: epId as string
+    }
+  }
+
+  return {
     id: buildParsedItemId({ ...input, kind }),
     kind,
-    title: buildParsedItemTitle({ ...input, kind })
+    title: buildParsedItemTitle({ ...input, kind }),
+    seasonId: seasonId as string
   }
-
-  if (typeof page === 'number') {
-    item.page = page
-  }
-
-  if (epId) {
-    item.epId = epId
-  }
-
-  if (seasonId) {
-    item.seasonId = seasonId
-  }
-
-  return item
 }
 
 function buildDefaultSelectableItems(input: BilibiliParsedLinkInput): BilibiliParsedItem[] {
@@ -308,13 +317,13 @@ export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): Bil
     parsedLink.page = page
   }
 
-  return parsedLink
+  return parsedLink as BilibiliParsedLink
 }
 
 export function parseBilibiliLink(input: string): BilibiliParsedLink | null {
   const url = parseBilibiliHost(input)
 
-  if (!url || !url.hostname.includes('bilibili.com')) {
+  if (!url || !isRealBilibiliHost(url.hostname)) {
     return null
   }
 
