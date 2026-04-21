@@ -11,7 +11,18 @@ import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
-import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
+import type {
+  BilibiliDownloaderState,
+  BilibiliExportMode,
+  BilibiliLinkKind,
+  BilibiliLoginSession,
+  BilibiliParsedLink,
+  BilibiliStreamOptionSummary,
+  IpcResponse,
+  LocalProxyConfig,
+  WslBackupFormat,
+  WslRestoreMode
+} from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
 type WebUtilsLike = Pick<WebUtils, 'getPathForFile'>
@@ -344,8 +355,49 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onStateChanged: (callback: (state: DownloadOrganizerState) => void) => onChannel('download-organizer-state-changed', callback)
   }
 
+  const bilibiliDownloaderAPI = {
+    getSession: () => ipcRenderer.invoke('bilibili-downloader-get-session') as Promise<IpcResponse<BilibiliLoginSession>>,
+    startLogin: () => {
+      return ipcRenderer.invoke('bilibili-downloader-start-login') as Promise<IpcResponse<{ qrUrl: string; authCode: string }>>
+    },
+    pollLogin: () => {
+      return ipcRenderer.invoke('bilibili-downloader-poll-login') as Promise<IpcResponse<{
+        status: 'pending' | 'scanned' | 'confirmed'
+        loginSession?: BilibiliLoginSession
+      }>>
+    },
+    logout: () => ipcRenderer.invoke('bilibili-downloader-logout') as Promise<IpcResponse>,
+    parseLink: (link: string) => {
+      return ipcRenderer.invoke('bilibili-downloader-parse-link', { link }) as Promise<IpcResponse<BilibiliParsedLink>>
+    },
+    loadStreamOptions: (kind: BilibiliLinkKind, itemId: string) => {
+      return ipcRenderer.invoke('bilibili-downloader-load-stream-options', { kind, itemId }) as Promise<IpcResponse<{
+        itemId: string
+        qnOptions: Array<{
+          qn: number
+          label: string
+          selected: boolean
+          available: boolean
+        }>
+        summary: BilibiliStreamOptionSummary
+      }>>
+    },
+    startDownload: (exportMode: BilibiliExportMode, outputDirectory?: string) => {
+      return ipcRenderer.invoke('bilibili-downloader-start-download', { exportMode, outputDirectory }) as Promise<IpcResponse<{
+        outputPaths: string[]
+        tempDirectory: string
+      }>>
+    },
+    cancelDownload: () => ipcRenderer.invoke('bilibili-downloader-cancel-download') as Promise<IpcResponse>,
+    selectOutputDirectory: () => {
+      return ipcRenderer.invoke('bilibili-downloader-select-output-directory') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+    },
+    onStateChanged: (callback: (state: BilibiliDownloaderState) => void) => onChannel('bilibili-downloader-state-changed', callback)
+  }
+
   return {
     app: appAPI,
+    bilibiliDownloader: bilibiliDownloaderAPI,
     doctor: doctorAPI,
     devEnvironment: devEnvironmentAPI,
     downloadOrganizer: downloadOrganizerAPI,

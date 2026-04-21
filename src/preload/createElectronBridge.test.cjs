@@ -69,6 +69,10 @@ function createMocks() {
   }
 }
 
+function normalizeForAssertion(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 test('createElectronBridge exposes explicit app APIs without raw ipcRenderer access', () => {
   const { createElectronBridge } = loadCreateElectronBridgeModule()
   const mocks = createMocks()
@@ -306,4 +310,45 @@ test('createElectronBridge exposes explicit updates APIs and unsubscribes cleanl
 
   assert.equal(mocks.removed.length, 1)
   assert.equal(mocks.removed[0][0], 'updates-state-changed')
+})
+
+test('createElectronBridge exposes explicit bilibili downloader APIs and subscriptions', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let state = null
+  const unsubscribe = bridge.bilibiliDownloader.onStateChanged((nextState) => {
+    state = nextState
+  })
+
+  await bridge.bilibiliDownloader.getSession()
+  await bridge.bilibiliDownloader.startLogin()
+  await bridge.bilibiliDownloader.pollLogin()
+  await bridge.bilibiliDownloader.logout()
+  await bridge.bilibiliDownloader.parseLink('https://www.bilibili.com/video/BV1xK4y1m7aA')
+  await bridge.bilibiliDownloader.loadStreamOptions('video', 'page:1')
+  await bridge.bilibiliDownloader.startDownload('merge-mp4', 'D:\\Downloads')
+  await bridge.bilibiliDownloader.cancelDownload()
+  await bridge.bilibiliDownloader.selectOutputDirectory()
+
+  mocks.listeners.get('bilibili-downloader-state-changed')({}, { taskStage: 'cancelled', error: null })
+
+  assert.equal(state.taskStage, 'cancelled')
+  assert.deepEqual(normalizeForAssertion(mocks.invokeCalls), [
+    ['bilibili-downloader-get-session'],
+    ['bilibili-downloader-start-login'],
+    ['bilibili-downloader-poll-login'],
+    ['bilibili-downloader-logout'],
+    ['bilibili-downloader-parse-link', { link: 'https://www.bilibili.com/video/BV1xK4y1m7aA' }],
+    ['bilibili-downloader-load-stream-options', { kind: 'video', itemId: 'page:1' }],
+    ['bilibili-downloader-start-download', { exportMode: 'merge-mp4', outputDirectory: 'D:\\Downloads' }],
+    ['bilibili-downloader-cancel-download'],
+    ['bilibili-downloader-select-output-directory']
+  ])
+
+  unsubscribe()
+
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'bilibili-downloader-state-changed')
 })
