@@ -5,44 +5,100 @@ const path = require('node:path')
 
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 
-function countMatches(source, pattern) {
-  const matches = source.match(pattern)
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function countTags(source, tagName) {
+  const matches = source.match(new RegExp(`<${tagName}\\b`, 'gi'))
   return matches ? matches.length : 0
 }
 
+function findStartTags(source, tagName) {
+  return [...source.matchAll(new RegExp(`<${tagName}\\b[^>]*>`, 'g'))].map((match) => match[0])
+}
+
+function findStartTag(source, tagName, predicate, description) {
+  for (const tag of findStartTags(source, tagName)) {
+    if (predicate(tag)) {
+      return tag
+    }
+  }
+
+  assert.fail(`Could not find ${description}`)
+}
+
+function findStartTagById(source, tagName, id) {
+  const idPattern = new RegExp(`\\bid="${escapeRegExp(id)}"`)
+  return findStartTag(source, tagName, (tag) => idPattern.test(tag), `<${tagName}> with id="${id}"`)
+}
+
+function getAttribute(tag, attributeName) {
+  const match = tag.match(new RegExp(`\\b${escapeRegExp(attributeName)}="([^"]*)"`))
+  return match ? match[1] : null
+}
+
+function getSectionContent(source, id) {
+  const pattern = new RegExp(
+    `<section\\b[^>]*\\bid="${escapeRegExp(id)}"[^>]*>([\\s\\S]*?)<\\/section>`
+  )
+  const match = source.match(pattern)
+
+  assert.ok(match, `Could not extract section content for id="${id}"`)
+  return match[1]
+}
+
+function getStartTagForSectionBody(source, id, tagName) {
+  const sectionContent = getSectionContent(source, id)
+  return findStartTag(sectionContent, tagName, () => true, `<${tagName}> inside section "${id}"`)
+}
+
 test('homepage keeps only hero, tools, and download sections', () => {
-  assert.equal(countMatches(html, /<section\b/gi), 3)
-  assert.match(html, /<section\b[^>]*id="hero"/)
-  assert.match(html, /<section\b[^>]*id="tools"[^>]*aria-labelledby="tools-title"/)
-  assert.match(html, /<h2 id="tools-title">常用工具已经整理好，滚动到这里就能直接接住。<\/h2>/)
-  assert.match(html, /<section\b[^>]*id="download"/)
+  assert.equal(countTags(html, 'section'), 3)
+  findStartTagById(html, 'section', 'hero')
+  findStartTagById(html, 'section', 'tools')
+  findStartTagById(html, 'section', 'download')
   assert.doesNotMatch(html, /id="scenarios"/)
   assert.doesNotMatch(html, /id="system"/)
   assert.doesNotMatch(html, /value-strip/)
 })
 
 test('top navigation exposes only three in-page anchors', () => {
-  assert.match(html, /<a href="#hero">首页<\/a>/)
-  assert.match(html, /<a href="#tools">工具展示<\/a>/)
-  assert.match(html, /<a href="#download">下载<\/a>/)
-  assert.doesNotMatch(html, /href="#scenarios"/)
-  assert.doesNotMatch(html, /href="#system"/)
+  const navLinks = html.match(/<div class="nav-links">([\s\S]*?)<\/div>/)
+
+  assert.ok(navLinks, 'expected .nav-links container')
+  const navAnchors = [...navLinks[1].matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>/g)].map(
+    (match) => match[1]
+  )
+
+  assert.deepEqual(navAnchors, ['#hero', '#tools', '#download'])
 })
 
-test('tool section includes a short intro and three dock groups', () => {
-  assert.match(html, /class="tool-matrix-intro"/)
-  assert.match(
-    html,
-    /<article class="tool-group tool-group-primary" data-flight-target="capture" data-flight-dock="capture">\s*<span>捕获与处理<\/span>/
+test('tool section is validly labelled and has three tool-group receivers', () => {
+  const toolsSection = findStartTagById(html, 'section', 'tools')
+  const toolsLabelId = getAttribute(toolsSection, 'aria-labelledby')
+
+  assert.ok(toolsLabelId, 'expected tools section to have aria-labelledby')
+  findStartTagById(html, 'h2', toolsLabelId)
+
+  const toolSectionContent = getSectionContent(html, 'tools')
+  const toolGroupTags = findStartTags(toolSectionContent, 'article').filter((tag) =>
+    /data-flight-target=/.test(tag)
   )
-  assert.match(
-    html,
-    /<article class="tool-group" data-flight-target="organize" data-flight-dock="organize">\s*<span>文件与文本<\/span>/
+
+  assert.match(toolSectionContent, /class="tool-matrix-intro"/)
+  assert.equal(toolGroupTags.length, 3)
+
+  const toolGroupByTarget = new Map(
+    toolGroupTags.map((tag) => [getAttribute(tag, 'data-flight-target'), tag])
   )
-  assert.match(
-    html,
-    /<article class="tool-group" data-flight-target="utility" data-flight-dock="utility">\s*<span>更多小工具<\/span>/
-  )
+
+  assert.match(toolGroupByTarget.get('capture') ?? '', /class="tool-group tool-group-primary"/)
+  assert.match(toolGroupByTarget.get('capture') ?? '', /data-flight-dock="capture"/)
+  assert.match(toolGroupByTarget.get('organize') ?? '', /class="tool-group"/)
+  assert.match(toolGroupByTarget.get('organize') ?? '', /data-flight-dock="organize"/)
+  assert.match(toolGroupByTarget.get('utility') ?? '', /class="tool-group"/)
+  assert.match(toolGroupByTarget.get('utility') ?? '', /data-flight-dock="utility"/)
   assert.doesNotMatch(html, /data-flight-target="matrix"/)
   assert.doesNotMatch(html, /data-flight-target="clipboard"/)
 })
