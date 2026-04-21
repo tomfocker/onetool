@@ -36,7 +36,8 @@ function loadTaskbarAppearanceIpcModule(overrides = {}) {
         taskbarAppearanceService: overrides.taskbarAppearanceService || {
           getStatus: () => ({ success: true, data: { settings: { enabled: false } } }),
           applyPreset: async () => ({ success: true }),
-          restoreDefault: async () => ({ success: true })
+          restoreDefault: async () => ({ success: true }),
+          restoreFromSettings: async () => ({ success: true })
         }
       }
     }
@@ -112,28 +113,23 @@ test('registerTaskbarAppearanceIpc wires the explicit handlers to the taskbar ap
   ])
 })
 
-test('restoreTaskbarAppearanceOnStartup reapplies the persisted preset when taskbar appearance is enabled', async () => {
+test('restoreTaskbarAppearanceOnStartup delegates to restoreFromSettings when the service supports it', async () => {
   const calls = []
   const service = {
     getStatus() {
-      return {
-        success: true,
-        data: {
-          settings: {
-            enabled: true,
-            preset: 'acrylic',
-            intensity: 72,
-            tintHex: '#22446688'
-          }
-        }
-      }
+      calls.push(['getStatus'])
+      return { success: true, data: { settings: { enabled: true } } }
     },
-    async applyPreset(input) {
-      calls.push(['applyPreset', input])
+    async applyPreset() {
+      calls.push(['applyPreset'])
       return { success: true }
     },
     async restoreDefault() {
       calls.push(['restoreDefault'])
+      return { success: true }
+    },
+    async restoreFromSettings() {
+      calls.push(['restoreFromSettings'])
       return { success: true }
     }
   }
@@ -145,36 +141,27 @@ test('restoreTaskbarAppearanceOnStartup reapplies the persisted preset when task
   const result = await restoreTaskbarAppearanceOnStartup()
 
   assert.deepEqual(result, { success: true })
-  assert.equal(calls.length, 1)
-  assert.equal(calls[0][0], 'applyPreset')
-  assert.equal(calls[0][1].preset, 'acrylic')
-  assert.equal(calls[0][1].intensity, 72)
-  assert.equal(calls[0][1].tintHex, '#22446688')
+  assert.deepEqual(calls, [['restoreFromSettings']])
 })
 
-test('restoreTaskbarAppearanceOnStartup restores the default appearance when persisted settings are disabled', async () => {
+test('restoreTaskbarAppearanceOnStartup returns the restoreFromSettings result when startup recovery fails', async () => {
   const calls = []
   const service = {
     getStatus() {
-      return {
-        success: true,
-        data: {
-          settings: {
-            enabled: false,
-            preset: 'blur',
-            intensity: 60,
-            tintHex: '#FFFFFF33'
-          }
-        }
-      }
+      calls.push(['getStatus'])
+      return { success: true, data: { settings: { enabled: true } } }
     },
-    async applyPreset(input) {
-      calls.push(['applyPreset', input])
+    async applyPreset() {
+      calls.push(['applyPreset'])
       return { success: true }
     },
     async restoreDefault() {
       calls.push(['restoreDefault'])
       return { success: true }
+    },
+    async restoreFromSettings() {
+      calls.push(['restoreFromSettings'])
+      return { success: false, error: 'startup failed' }
     }
   }
 
@@ -184,7 +171,7 @@ test('restoreTaskbarAppearanceOnStartup restores the default appearance when per
 
   const result = await restoreTaskbarAppearanceOnStartup()
 
-  assert.deepEqual(result, { success: true })
-  assert.deepEqual(calls, [['restoreDefault']])
+  assert.deepEqual(result, { success: false, error: 'startup failed' })
+  assert.deepEqual(calls, [['restoreFromSettings']])
 })
 

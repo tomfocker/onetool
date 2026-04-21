@@ -348,3 +348,250 @@ test('restoreDefault persists the disabled default preset only after the adapter
   assert.equal(saved[0].taskbarAppearanceIntensity, 60)
   assert.equal(saved[0].taskbarAppearanceTint, '#FFFFFF33')
 })
+
+test('restoreFromSettings falls back to restoreDefault and disables persistence when startup apply fails', async () => {
+  const saved = []
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async (input) => {
+        events.push(`apply:${input.preset}`)
+        return { success: false, error: 'startup apply failed' }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: true }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: true,
+        taskbarAppearancePreset: 'acrylic',
+        taskbarAppearanceIntensity: 82,
+        taskbarAppearanceTint: '#12345678'
+      }),
+      updateSettings: async (updates) => {
+        events.push('settings')
+        saved.push(updates)
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.22631'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /startup apply failed/)
+  assert.deepEqual(events, ['apply:acrylic', 'restore', 'settings'])
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].taskbarAppearanceEnabled, false)
+  assert.equal(saved[0].taskbarAppearancePreset, 'default')
+  assert.equal(saved[0].taskbarAppearanceIntensity, 60)
+  assert.equal(saved[0].taskbarAppearanceTint, '#FFFFFF33')
+})
+
+test('restoreFromSettings still disables persistence when restoreDefault also fails', async () => {
+  const saved = []
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async (input) => {
+        events.push(`apply:${input.preset}`)
+        return { success: false, error: 'startup apply failed' }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: false, error: 'restore failed' }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: true,
+        taskbarAppearancePreset: 'acrylic',
+        taskbarAppearanceIntensity: 82,
+        taskbarAppearanceTint: '#12345678'
+      }),
+      updateSettings: async (updates) => {
+        events.push('settings')
+        saved.push(updates)
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.22631'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /startup apply failed/)
+  assert.deepEqual(events, ['apply:acrylic', 'restore', 'settings'])
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].taskbarAppearanceEnabled, false)
+  assert.equal(saved[0].taskbarAppearancePreset, 'default')
+  assert.equal(saved[0].taskbarAppearanceIntensity, 60)
+  assert.equal(saved[0].taskbarAppearanceTint, '#FFFFFF33')
+})
+
+test('restoreFromSettings does nothing when persisted taskbar appearance is disabled', async () => {
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async () => {
+        events.push('apply')
+        return { success: true }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: true }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: false,
+        taskbarAppearancePreset: 'blur',
+        taskbarAppearanceIntensity: 60,
+        taskbarAppearanceTint: '#FFFFFF33'
+      }),
+      updateSettings: async () => {
+        events.push('settings')
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.22631'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(events, [])
+})
+
+test('restoreFromSettings is a no-op on unsupported hosts even when persisted state is enabled', async () => {
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async () => {
+        events.push('apply')
+        return { success: true }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: true }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: true,
+        taskbarAppearancePreset: 'blur',
+        taskbarAppearanceIntensity: 74,
+        taskbarAppearanceTint: '#ABCDEF66'
+      }),
+      updateSettings: async () => {
+        events.push('settings')
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'darwin',
+    release: '23.0.0'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(events, [])
+})
+
+test('restoreFromSettings keeps persisted state unchanged when startup apply succeeds', async () => {
+  const saved = []
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async (input) => {
+        events.push(`apply:${input.preset}`)
+        return { success: true }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: true }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: true,
+        taskbarAppearancePreset: 'blur',
+        taskbarAppearanceIntensity: 74,
+        taskbarAppearanceTint: '#ABCDEF66'
+      }),
+      updateSettings: async (updates) => {
+        events.push('settings')
+        saved.push(updates)
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.22631'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(events, ['apply:blur'])
+  assert.equal(saved.length, 0)
+})
+
+test('restoreFromSettings does not call restoreDefault twice when the persisted preset is already default', async () => {
+  const saved = []
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async () => {
+        events.push('apply')
+        return { success: true }
+      },
+      restoreDefault: async () => {
+        events.push('restore')
+        return { success: false, error: 'restore failed' }
+      }
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: true,
+        taskbarAppearancePreset: 'default',
+        taskbarAppearanceIntensity: 60,
+        taskbarAppearanceTint: '#FFFFFF33'
+      }),
+      updateSettings: async (updates) => {
+        events.push('settings')
+        saved.push(updates)
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.22631'
+  })
+  const result = await service.restoreFromSettings()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /restore failed/)
+  assert.deepEqual(events, ['restore', 'settings'])
+  assert.equal(saved.length, 1)
+  assert.equal(saved[0].taskbarAppearanceEnabled, false)
+  assert.equal(saved[0].taskbarAppearancePreset, 'default')
+})

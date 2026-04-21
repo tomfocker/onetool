@@ -62,6 +62,17 @@ export class TaskbarAppearanceService {
     return resolveTaskbarAppearanceAvailability(this.runtime)
   }
 
+  private getDefaultSettingsUpdate(): Partial<AppSettings> {
+    const defaults = createDefaultTaskbarAppearanceSettings()
+
+    return {
+      taskbarAppearanceEnabled: false,
+      taskbarAppearancePreset: 'default',
+      taskbarAppearanceIntensity: defaults.intensity,
+      taskbarAppearanceTint: defaults.tintHex
+    }
+  }
+
   private getPresetGuardResult(preset: TaskbarAppearancePreset): IpcResponse | null {
     const support = this.getSupport()
     const availability = support.presets[preset]
@@ -86,6 +97,35 @@ export class TaskbarAppearanceService {
     }
   }
 
+  async restoreFromSettings(): Promise<IpcResponse> {
+    const persisted = this.getPersistedSettings()
+    if (!persisted.enabled) {
+      return { success: true }
+    }
+
+    if (!this.getSupport().supported) {
+      return { success: true }
+    }
+
+    const guardResult = this.getPresetGuardResult(persisted.preset)
+    const attemptedRestoreInPrimaryPath = persisted.preset === 'default'
+    const applyResult = guardResult ?? (
+      attemptedRestoreInPrimaryPath
+        ? await this.adapter.restoreDefault()
+        : await this.adapter.applyAppearance(persisted)
+    )
+
+    if (applyResult.success) {
+      return applyResult
+    }
+
+    if (!attemptedRestoreInPrimaryPath) {
+      await this.adapter.restoreDefault()
+    }
+    const settingsResult = await this.settings.updateSettings(this.getDefaultSettingsUpdate())
+    return settingsResult.success ? applyResult : settingsResult
+  }
+
   async applyPreset(input: ApplyTaskbarAppearanceInput): Promise<IpcResponse> {
     const effectiveInput = input.preset === 'default'
       ? {
@@ -108,12 +148,16 @@ export class TaskbarAppearanceService {
       return adapterResult
     }
 
-    return this.settings.updateSettings({
-      taskbarAppearanceEnabled: effectiveInput.preset !== 'default',
-      taskbarAppearancePreset: effectiveInput.preset,
-      taskbarAppearanceIntensity: effectiveInput.intensity,
-      taskbarAppearanceTint: effectiveInput.tintHex
-    })
+    return this.settings.updateSettings(
+      effectiveInput.preset === 'default'
+        ? this.getDefaultSettingsUpdate()
+        : {
+            taskbarAppearanceEnabled: true,
+            taskbarAppearancePreset: effectiveInput.preset,
+            taskbarAppearanceIntensity: effectiveInput.intensity,
+            taskbarAppearanceTint: effectiveInput.tintHex
+          }
+    )
   }
 
   async restoreDefault(): Promise<IpcResponse> {

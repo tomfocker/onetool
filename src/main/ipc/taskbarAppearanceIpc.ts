@@ -3,7 +3,7 @@ import { taskbarAppearanceService } from '../services/TaskbarAppearanceService'
 
 type TaskbarAppearanceServiceLike = Pick<
   typeof taskbarAppearanceService,
-  'getStatus' | 'applyPreset' | 'restoreDefault'
+  'getStatus' | 'applyPreset' | 'restoreDefault' | 'restoreFromSettings'
 >
 
 export function registerTaskbarAppearanceIpc(service: TaskbarAppearanceServiceLike = taskbarAppearanceService) {
@@ -23,21 +23,5 @@ export function registerTaskbarAppearanceIpc(service: TaskbarAppearanceServiceLi
 export async function restoreTaskbarAppearanceOnStartup(
   service: TaskbarAppearanceServiceLike = taskbarAppearanceService
 ) {
-  const status = service.getStatus()
-
-  if (!status.success || !status.data) {
-    return status
-  }
-
-  const { settings } = status.data
-
-  if (!settings.enabled) {
-    return service.restoreDefault()
-  }
-
-  return service.applyPreset({
-    preset: settings.preset,
-    intensity: settings.intensity,
-    tintHex: settings.tintHex
-  })
+  return service.restoreFromSettings()
 }

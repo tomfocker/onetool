@@ -48,7 +48,7 @@ function loadWindowsTaskbarAdapterModule(overrides = {}) {
   return module.exports
 }
 
-test('applyAppearance emits a PowerShell script that pins composition calls and the requested blur tint', async () => {
+test('applyAppearance emits the real composition interop script for blur with the resolved gradient color', async () => {
   const calls = []
   const { WindowsTaskbarAdapter } = loadWindowsTaskbarAdapterModule({
     execPowerShellEncoded: async (script) => {
@@ -66,14 +66,74 @@ test('applyAppearance emits a PowerShell script that pins composition calls and 
 
   assert.equal(result.success, true)
   assert.equal(calls.length, 1)
-  assert.match(calls[0], /Add-Type/)
+  assert.match(calls[0], /AccentPolicy/)
+  assert.match(calls[0], /WindowCompositionAttributeData/)
   assert.match(calls[0], /SetWindowCompositionAttribute/)
+  assert.match(calls[0], /Shell_TrayWnd/)
+  assert.match(calls[0], /Shell_SecondaryTrayWnd/)
+  assert.match(calls[0], /FindWindowEx/)
+  assert.match(calls[0], /\$accent\.AccentState = 3/)
+  assert.match(calls[0], /0x31332211/)
   assert.match(calls[0], /apply-success/)
-  assert.match(calls[0], /11223344/)
-  assert.match(calls[0], /blur/i)
 })
 
-test('restoreDefault emits the reset script through execPowerShellEncoded and returns success when the marker is present', async () => {
+test('applyAppearance maps transparent and acrylic presets to distinct accent states', async () => {
+  const calls = []
+  const { WindowsTaskbarAdapter } = loadWindowsTaskbarAdapterModule({
+    execPowerShellEncoded: async (script) => {
+      calls.push(script)
+      return 'apply-success'
+    }
+  })
+
+  const adapter = new WindowsTaskbarAdapter()
+
+  const transparentResult = await adapter.applyAppearance({
+    preset: 'transparent',
+    intensity: 35,
+    tintHex: '#01020304'
+  })
+  const acrylicResult = await adapter.applyAppearance({
+    preset: 'acrylic',
+    intensity: 80,
+    tintHex: '#55667788'
+  })
+
+  assert.equal(transparentResult.success, true)
+  assert.equal(acrylicResult.success, true)
+  assert.equal(calls.length, 2)
+  assert.match(calls[0], /\$accent\.AccentState = 2/)
+  assert.match(calls[1], /\$accent\.AccentState = 4/)
+})
+
+test('applyAppearance uses intensity to adjust the final gradient alpha', async () => {
+  const calls = []
+  const { WindowsTaskbarAdapter } = loadWindowsTaskbarAdapterModule({
+    execPowerShellEncoded: async (script) => {
+      calls.push(script)
+      return 'apply-success'
+    }
+  })
+
+  const adapter = new WindowsTaskbarAdapter()
+
+  await adapter.applyAppearance({
+    preset: 'blur',
+    intensity: 100,
+    tintHex: '#11223380'
+  })
+  await adapter.applyAppearance({
+    preset: 'blur',
+    intensity: 50,
+    tintHex: '#11223380'
+  })
+
+  assert.equal(calls.length, 2)
+  assert.match(calls[0], /0x80332211/)
+  assert.match(calls[1], /0x40332211/)
+})
+
+test('restoreDefault emits the real composition restore script and returns success when the marker is present', async () => {
   const calls = []
   const { WindowsTaskbarAdapter } = loadWindowsTaskbarAdapterModule({
     execPowerShellEncoded: async (script) => {
@@ -87,8 +147,11 @@ test('restoreDefault emits the reset script through execPowerShellEncoded and re
 
   assert.equal(result.success, true)
   assert.equal(calls.length, 1)
-  assert.match(calls[0], /Add-Type/)
+  assert.match(calls[0], /AccentPolicy/)
   assert.match(calls[0], /SetWindowCompositionAttribute/)
+  assert.match(calls[0], /Shell_TrayWnd/)
+  assert.match(calls[0], /Shell_SecondaryTrayWnd/)
+  assert.match(calls[0], /\$accent\.AccentState = 0/)
   assert.match(calls[0], /restore-success/)
 })
 
