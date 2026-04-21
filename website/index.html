@@ -56,7 +56,10 @@
             <div class="hero-layout">
               <div class="hero-copy">
                 <p class="hero-kicker">OneTool / Windows desktop toolbox</p>
-                <h1 id="hero-title">一个应用，<br />收齐 Windows<br />日常高频工具。</h1>
+                <h1 class="hero-title" id="hero-title">
+                  <span class="hero-title-line">一个应用，收齐</span>
+                  <span class="hero-title-line hero-title-line-wide">Windows 日常高频工具</span>
+                </h1>
                 <p class="hero-description">
                   截图、录屏、批量重命名、剪贴板、二维码等常用工具集中在一个清爽顺手的桌面工具箱里。
                 </p>
@@ -83,11 +86,11 @@
                 </div>
               </div>
               <div class="hero-flight" aria-hidden="true">
-                <div class="hero-flight-card hero-flight-card-main"></div>
-                <div class="hero-flight-card hero-flight-card-capture"></div>
-                <div class="hero-flight-card hero-flight-card-organize"></div>
-                <div class="hero-flight-card hero-flight-card-clipboard"></div>
-                <div class="hero-flight-card hero-flight-card-utility"></div>
+                <div class="hero-flight-card hero-flight-card-main" data-flight-card="matrix"></div>
+                <div class="hero-flight-card hero-flight-card-capture" data-flight-card="capture"></div>
+                <div class="hero-flight-card hero-flight-card-organize" data-flight-card="organize"></div>
+                <div class="hero-flight-card hero-flight-card-clipboard" data-flight-card="clipboard"></div>
+                <div class="hero-flight-card hero-flight-card-utility" data-flight-card="utility"></div>
               </div>
             </div>
           </section>
@@ -123,17 +126,17 @@
         </div>
 
         <div class="scenario-grid">
-          <article class="scenario-card" data-flight-target="capture">
+          <article class="scenario-card" data-flight-target="capture" data-flight-dock="capture">
             <span>场景 01</span>
             <h3>截图、录屏、取色，开会和沟通时直接拿来用。</h3>
             <p>需要留证据、做演示、标问题时，不用再在多个应用之间来回切换。</p>
           </article>
-          <article class="scenario-card" data-flight-target="organize">
+          <article class="scenario-card" data-flight-target="organize" data-flight-dock="organize">
             <span>场景 02</span>
             <h3>批量重命名、剪贴板整理，处理文件时更省心。</h3>
             <p>重复动作交给工具做，临时复制的内容也能随时翻出来继续用。</p>
           </article>
-          <article class="scenario-card" data-flight-target="utility">
+          <article class="scenario-card" data-flight-target="utility" data-flight-dock="utility">
             <span>场景 03</span>
             <h3>二维码、语音输入、悬浮收纳，零碎小事不用再单独装软件。</h3>
             <p>把看起来小、但每天都会点开的工具收在一起，桌面会清爽很多。</p>
@@ -149,7 +152,7 @@
         </div>
 
         <div class="tool-matrix-grid">
-          <article class="tool-group tool-group-primary" data-flight-target="matrix">
+          <article class="tool-group tool-group-primary" data-flight-target="matrix" data-flight-dock="matrix">
             <span>捕获与处理</span>
             <ul>
               <li>叠加截图</li>
