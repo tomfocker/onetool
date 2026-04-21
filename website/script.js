@@ -1,20 +1,43 @@
 document.addEventListener('DOMContentLoaded', () => {
+  const motionApi = window.OneToolHeroMotion
   const root = document.documentElement
   const header = document.querySelector('.site-header')
   const heroScroll = document.querySelector('.hero-scroll')
+  const heroFlight = document.querySelector('.hero-flight')
   const revealItems = document.querySelectorAll('.reveal')
+  const flightCards = {
+    capture: document.querySelector('.hero-flight-card-capture'),
+    organize: document.querySelector('.hero-flight-card-organize'),
+    clipboard: document.querySelector('.hero-flight-card-clipboard'),
+    utility: document.querySelector('.hero-flight-card-utility'),
+    matrix: document.querySelector('.hero-flight-card-main')
+  }
+  const flightTargets = {
+    capture: document.querySelector('[data-flight-target="capture"]'),
+    organize: document.querySelector('[data-flight-target="organize"]'),
+    utility: document.querySelector('[data-flight-target="utility"]'),
+    matrix: document.querySelector('[data-flight-target="matrix"]')
+  }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
-  const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
-  const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3)
-  const easeInOutSine = (value) => -(Math.cos(Math.PI * value) - 1) / 2
-  const getPhase = (value, start, end) => {
-    if (end <= start) {
-      return 0
-    }
-
-    return clamp((value - start) / (end - start), 0, 1)
-  }
+  const clamp = motionApi?.clamp ?? ((value, min, max) => Math.min(Math.max(value, min), max))
+  const getHeroMotionState =
+    motionApi?.getHeroMotionState ??
+    ((progress) => ({
+      progress,
+      breakout: 0,
+      breakoutSoft: 0,
+      travel: 0,
+      travelSoft: 0,
+      settle: 0,
+      settleSoft: 0,
+      highlight: {
+        capture: 0,
+        organize: 0,
+        utility: 0,
+        matrix: 0
+      }
+    }))
 
   const getHeroProgress = () => {
     if (!heroScroll || prefersReducedMotion) {
@@ -28,15 +51,52 @@ document.addEventListener('DOMContentLoaded', () => {
     return clamp(distance / total, 0, 1)
   }
 
-  const getBreakoutProgress = (progress) => {
-    const stagedProgress =
-      progress < 0.22
-        ? (progress / 0.22) * 0.42
-        : progress < 0.7
-          ? 0.42 + ((progress - 0.22) / 0.48) * 0.43
-          : 0.85 + ((progress - 0.7) / 0.3) * 0.15
+  const flightBiases = {
+    capture: { x: 0, y: -30 },
+    organize: { x: -18, y: -18 },
+    clipboard: { x: 28, y: 10 },
+    utility: { x: 8, y: 18 },
+    matrix: { x: -42, y: -14 }
+  }
 
-    return clamp(stagedProgress, 0, 1)
+  const syncFlightTargets = () => {
+    if (!heroFlight) {
+      return
+    }
+
+    const flightRect = heroFlight.getBoundingClientRect()
+    const targetMap = {
+      capture: 'capture',
+      organize: 'organize',
+      clipboard: 'organize',
+      utility: 'utility',
+      matrix: 'matrix'
+    }
+
+    Object.entries(flightCards).forEach(([key, card]) => {
+      if (!card) {
+        return
+      }
+
+      const targetKey = targetMap[key]
+      const target = flightTargets[targetKey]
+
+      if (!target) {
+        card.style.setProperty('--target-x', '0px')
+        card.style.setProperty('--target-y', '0px')
+        return
+      }
+
+      const targetRect = target.getBoundingClientRect()
+      const startX = card.offsetLeft + card.offsetWidth / 2
+      const startY = card.offsetTop + card.offsetHeight / 2
+      const targetX = targetRect.left - flightRect.left + targetRect.width / 2
+      const targetY = targetRect.top - flightRect.top + targetRect.height / 2
+      const bias = flightBiases[key] ?? { x: 0, y: 0 }
+
+      card.style.setProperty('--target-x', `${targetX - startX + bias.x}px`)
+      card.style.setProperty('--target-y', `${targetY - startY + bias.y}px`)
+    })
   }
 
   const syncScrollState = () => {
@@ -51,27 +111,45 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const progress = getHeroProgress()
-    const breakoutProgress = prefersReducedMotion ? 0 : getBreakoutProgress(progress)
-    const breakoutSoft = prefersReducedMotion ? 0 : easeOutCubic(breakoutProgress)
-    const breakoutDrift = prefersReducedMotion ? 0 : easeInOutSine(progress)
-    const handoffProgress = prefersReducedMotion ? 0 : getPhase(progress, 0.48, 0.82)
-    const handoffSoft = prefersReducedMotion ? 0 : easeInOutSine(handoffProgress)
-    const sectionLinkProgress = prefersReducedMotion ? 0 : getPhase(progress, 0.66, 1)
-    const sectionLinkSoft = prefersReducedMotion ? 0 : easeOutCubic(sectionLinkProgress)
+    const state = getHeroMotionState(progress, prefersReducedMotion)
 
-    root.style.setProperty('--hero-progress', progress.toFixed(4))
-    root.style.setProperty('--breakout-progress', breakoutProgress.toFixed(4))
-    root.style.setProperty('--breakout-soft', breakoutSoft.toFixed(4))
-    root.style.setProperty('--breakout-drift', breakoutDrift.toFixed(4))
-    root.style.setProperty('--handoff-progress', handoffProgress.toFixed(4))
-    root.style.setProperty('--handoff-soft', handoffSoft.toFixed(4))
-    root.style.setProperty('--section-link-progress', sectionLinkProgress.toFixed(4))
-    root.style.setProperty('--section-link-soft', sectionLinkSoft.toFixed(4))
+    root.style.setProperty('--hero-progress', state.progress.toFixed(4))
+    root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
+    root.style.setProperty('--flight-breakout-soft', state.breakoutSoft.toFixed(4))
+    root.style.setProperty('--flight-travel', state.travel.toFixed(4))
+    root.style.setProperty('--flight-travel-soft', state.travelSoft.toFixed(4))
+    root.style.setProperty('--flight-settle', state.settle.toFixed(4))
+    root.style.setProperty('--flight-settle-soft', state.settleSoft.toFixed(4))
+    root.style.setProperty('--capture-highlight', state.highlight.capture.toFixed(4))
+    root.style.setProperty('--organize-highlight', state.highlight.organize.toFixed(4))
+    root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
+    root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
   }
 
+  syncFlightTargets()
   syncScrollState()
   window.addEventListener('scroll', syncScrollState, { passive: true })
-  window.addEventListener('resize', syncScrollState)
+  window.addEventListener('resize', () => {
+    syncFlightTargets()
+    syncScrollState()
+  })
+
+  window.addEventListener('load', () => {
+    syncFlightTargets()
+    syncScrollState()
+  })
+
+  window.addEventListener('pageshow', () => {
+    syncFlightTargets()
+    syncScrollState()
+  })
+
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      syncFlightTargets()
+      syncScrollState()
+    })
+  }
 
   const revealObserver = new IntersectionObserver(
     (entries) => {

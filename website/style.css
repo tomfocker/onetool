@@ -22,13 +22,17 @@
   --section-gap: clamp(72px, 10vw, 120px);
   --panel-padding: clamp(24px, 3vw, 34px);
   --hero-progress: 0;
-  --breakout-progress: 0;
-  --breakout-soft: 0;
-  --breakout-drift: 0;
-  --handoff-progress: 0;
-  --handoff-soft: 0;
-  --section-link-progress: 0;
-  --section-link-soft: 0;
+  --flight-breakout: 0;
+  --flight-breakout-soft: 0;
+  --flight-travel: 0;
+  --flight-travel-soft: 0;
+  --flight-settle: 0;
+  --flight-settle-soft: 0;
+  --capture-highlight: 0;
+  --organize-highlight: 0;
+  --utility-highlight: 0;
+  --matrix-highlight: 0;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 * {
@@ -316,28 +320,13 @@ select {
   min-height: 100dvh;
   padding-top: 120px;
   padding-bottom: 48px;
-  background-image:
-    url('hero-shot-main.png'), url('hero-shot-capture.png'), url('hero-shot-rename.png'),
-    url('hero-shot-clipboard.png'), url('hero-shot-qr.png');
-  background-repeat: no-repeat;
-  background-size:
-    min(40vw, 540px) auto,
-    min(16vw, 210px) auto,
-    min(15vw, 196px) auto,
-    min(16vw, 210px) auto,
-    min(13vw, 160px) auto;
-  background-position:
-    calc(100% - 14px - (var(--handoff-soft) * 92px))
-      calc(50% - (var(--hero-progress) * 18px) + (var(--section-link-progress) * 10px)),
-    calc(100% - 30px - (var(--breakout-progress) * 74px) - (var(--handoff-soft) * 22px))
-      calc(14% - (var(--breakout-soft) * 42px) + (var(--handoff-progress) * 54px)),
-    calc(58% - (var(--breakout-progress) * 44px) - (var(--handoff-progress) * 12px))
-      calc(22% + (var(--breakout-drift) * 18px) + (var(--handoff-soft) * 74px)),
-    calc(100% - 76px - (var(--breakout-progress) * 42px) - (var(--handoff-progress) * 88px))
-      calc(78% - (var(--handoff-soft) * 84px)),
-    calc(63% - (var(--breakout-progress) * 18px) + (var(--handoff-progress) * 34px))
-      calc(82% - (var(--handoff-soft) * 144px));
-  transition: background-position 200ms linear;
+  background:
+    radial-gradient(
+      circle at calc(72% - var(--hero-progress) * 10%) calc(34% - var(--flight-breakout-soft) * 8%),
+      rgba(223, 235, 255, 0.9),
+      transparent 26%
+    ),
+    radial-gradient(circle at 78% 64%, rgba(255, 255, 255, 0.9), transparent 24%);
 }
 
 .hero-home::before,
@@ -352,25 +341,27 @@ select {
 }
 
 .hero-home::before {
-  top: calc(16% + (var(--handoff-progress) * 8%));
-  right: calc(12% - (var(--handoff-soft) * 8%));
+  top: calc(16% + (var(--flight-travel-soft) * 5%));
+  right: calc(10% - (var(--flight-breakout-soft) * 5%));
   width: min(36vw, 420px);
   height: min(36vw, 420px);
   background: radial-gradient(circle, rgba(212, 228, 255, 0.72), rgba(212, 228, 255, 0) 68%);
-  opacity: calc(0.48 - (var(--section-link-progress) * 0.12));
+  opacity: calc(0.56 - (var(--flight-settle-soft) * 0.2));
 }
 
 .hero-home::after {
-  right: calc(26% + (var(--handoff-progress) * 3%));
-  bottom: calc(10% - (var(--handoff-progress) * 3%));
+  right: calc(24% + (var(--flight-breakout-soft) * 2%));
+  bottom: calc(10% - (var(--flight-breakout-soft) * 2%));
   width: min(30vw, 340px);
   height: min(30vw, 340px);
   background: radial-gradient(circle, rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0) 70%);
-  opacity: calc(0.4 + (var(--handoff-progress) * 0.22));
+  opacity: calc(0.38 + (var(--flight-travel-soft) * 0.2));
 }
 
 .hero-layout {
   position: relative;
+  display: grid;
+  align-items: center;
   min-height: clamp(520px, 72vh, 720px);
   width: 100%;
 }
@@ -481,34 +472,197 @@ select {
   display: none;
 }
 
-.value-strip {
-  position: relative;
-  padding-top: 24px;
+.hero-flight {
+  position: absolute;
+  inset: 24px 0 0 42%;
+  z-index: 1;
+  pointer-events: none;
+  perspective: 1800px;
 }
 
-.value-strip::before {
+.hero-flight::before,
+.hero-flight::after {
   content: '';
   position: absolute;
-  left: 50%;
-  top: -38px;
-  width: min(900px, 84vw);
-  height: 120px;
-  transform: translateX(-50%)
-    translateY(calc(26px - (var(--handoff-soft) * 26px)))
-    scaleX(calc(0.86 + (var(--handoff-progress) * 0.14)));
+  pointer-events: none;
+  border-radius: 999px;
+}
+
+.hero-flight::before {
+  inset: 28% 14% auto auto;
+  width: min(30vw, 360px);
+  height: min(30vw, 360px);
+  background: radial-gradient(circle, rgba(194, 218, 255, 0.5), rgba(194, 218, 255, 0) 70%);
+  filter: blur(18px);
+}
+
+.hero-flight::after {
+  inset: auto auto 10% 20%;
+  width: min(22vw, 260px);
+  height: min(22vw, 260px);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0) 72%);
+  filter: blur(20px);
+}
+
+.hero-flight-card {
+  --target-x: 0px;
+  --target-y: 0px;
+  --break-x: 0px;
+  --break-y: 0px;
+  --break-rotate: 0deg;
+  --travel-factor: 1;
+  --travel-scale: 0.32;
+  --card-tilt-x: 0deg;
+  --card-tilt-y: 0deg;
+  position: absolute;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.88);
+  border-radius: calc(var(--radius-lg) + 2px);
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-color: rgba(246, 250, 255, 0.92);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    inset 0 -1px 0 rgba(210, 224, 247, 0.68),
+    var(--hero-shadow);
+  backdrop-filter: blur(16px) saturate(1.06);
+  transform-origin: center center;
+  opacity: calc(1 - (var(--flight-settle-soft) * 0.92));
+  will-change: transform, opacity;
+  transition: opacity 220ms linear;
+}
+
+.hero-flight-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 auto;
+  height: 38px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(244, 248, 255, 0.78)),
+    linear-gradient(90deg, rgba(226, 235, 250, 0.66), rgba(255, 255, 255, 0));
+  border-bottom: 1px solid rgba(187, 205, 236, 0.64);
+}
+
+.hero-flight-card::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: 18px;
+  width: 40px;
+  height: 10px;
   border-radius: 999px;
   background:
-    linear-gradient(
-      90deg,
-      rgba(198, 218, 248, 0),
-      rgba(198, 218, 248, 0.36),
-      rgba(255, 255, 255, 0.78),
-      rgba(198, 218, 248, 0.34),
-      rgba(198, 218, 248, 0)
-    );
-  filter: blur(18px);
-  opacity: calc(var(--handoff-progress) * 0.9);
-  pointer-events: none;
+    radial-gradient(circle at 5px 50%, #ffb7b7 0 4px, transparent 4.5px),
+    radial-gradient(circle at 20px 50%, #ffd580 0 4px, transparent 4.5px),
+    radial-gradient(circle at 35px 50%, #bde7a3 0 4px, transparent 4.5px);
+}
+
+.hero-flight-card-main {
+  top: 24%;
+  right: 4%;
+  width: min(34vw, 470px);
+  aspect-ratio: 1.35 / 1;
+  background-image: url('hero-shot-main.png');
+  --break-x: -18px;
+  --break-y: -8px;
+  --break-rotate: -3deg;
+  --travel-factor: 0.68;
+  --travel-scale: 0.42;
+  --card-tilt-x: -2deg;
+  --card-tilt-y: -4deg;
+  transform:
+    translate3d(
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * 0.78 * var(--flight-travel-soft))),
+      0
+    )
+    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
+    rotate(calc(-4deg + (var(--break-rotate) * var(--flight-breakout-soft))))
+    rotateX(calc(var(--card-tilt-x) * var(--flight-breakout-soft)))
+    rotateY(calc(var(--card-tilt-y) * var(--flight-breakout-soft)));
+}
+
+.hero-flight-card-capture,
+.hero-flight-card-organize,
+.hero-flight-card-clipboard,
+.hero-flight-card-utility {
+  width: min(15vw, 210px);
+  aspect-ratio: 5 / 4;
+}
+
+.hero-flight-card-capture {
+  top: 10%;
+  right: 2%;
+  background-image: url('hero-shot-capture.png');
+  --break-x: 34px;
+  --break-y: -46px;
+  --break-rotate: 7deg;
+  transform:
+    translate3d(
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      0
+    )
+    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
+    rotate(calc(7deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+}
+
+.hero-flight-card-organize {
+  top: 16%;
+  left: 10%;
+  background-image: url('hero-shot-rename.png');
+  --break-x: -48px;
+  --break-y: -30px;
+  --break-rotate: -10deg;
+  transform:
+    translate3d(
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      0
+    )
+    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
+    rotate(calc(-8deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+}
+
+.hero-flight-card-clipboard {
+  right: 10%;
+  bottom: 12%;
+  background-image: url('hero-shot-clipboard.png');
+  --break-x: 42px;
+  --break-y: 34px;
+  --break-rotate: 9deg;
+  transform:
+    translate3d(
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      0
+    )
+    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
+    rotate(calc(10deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+}
+
+.hero-flight-card-utility {
+  left: 20%;
+  bottom: 10%;
+  width: min(13vw, 170px);
+  aspect-ratio: 1 / 1;
+  background-image: url('hero-shot-qr.png');
+  --break-x: -32px;
+  --break-y: 44px;
+  --break-rotate: -14deg;
+  transform:
+    translate3d(
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
+      0
+    )
+    scale(calc(1 - (0.38 * var(--flight-travel-soft))))
+    rotate(calc(-13deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+}
+
+.value-strip {
+  padding-top: 24px;
 }
 
 .value-strip-grid,
@@ -522,8 +676,6 @@ select {
 
 .value-strip-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  position: relative;
-  z-index: 1;
 }
 
 .value-strip-item,
@@ -574,37 +726,6 @@ select {
   display: grid;
   gap: 12px;
   min-height: 188px;
-  transition:
-    transform 420ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
-    box-shadow 260ms ease,
-    border-color 260ms ease;
-}
-
-.value-strip-item:nth-child(1) {
-  transform: translate3d(
-      calc((0.5 - var(--handoff-progress)) * 24px),
-      calc(28px - (var(--handoff-soft) * 28px)),
-      0
-    )
-    rotateX(calc((1 - var(--handoff-progress)) * 2.5deg));
-}
-
-.value-strip-item:nth-child(2) {
-  transform: translate3d(
-      0,
-      calc(40px - (var(--handoff-soft) * 40px)),
-      0
-    )
-    rotateX(calc((1 - var(--handoff-progress)) * 2deg));
-}
-
-.value-strip-item:nth-child(3) {
-  transform: translate3d(
-      calc((var(--handoff-progress) - 0.5) * 24px),
-      calc(52px - (var(--handoff-soft) * 52px)),
-      0
-    )
-    rotateX(calc((1 - var(--handoff-progress)) * 1.5deg));
 }
 
 .value-strip-item strong,
@@ -622,28 +743,8 @@ select {
   gap: 28px;
 }
 
-.scenario-section {
-  position: relative;
-}
-
-.scenario-section::before {
-  content: '';
-  position: absolute;
-  inset: -40px 10% auto;
-  height: 120px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 30% 50%, rgba(226, 236, 255, 0.76), transparent 34%),
-    radial-gradient(circle at 70% 50%, rgba(255, 255, 255, 0.88), transparent 28%);
-  filter: blur(18px);
-  opacity: calc(var(--section-link-progress) * 0.88);
-  transform: translateY(calc(36px - (var(--section-link-soft) * 36px)));
-  pointer-events: none;
-}
-
 .scenario-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  perspective: 1200px;
 }
 
 .scenario-card {
@@ -652,38 +753,9 @@ select {
   align-content: start;
   min-height: 280px;
   transition:
-    transform 460ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)),
+    transform 460ms var(--ease-out),
     box-shadow 260ms ease,
     border-color 260ms ease;
-}
-
-.scenario-card:nth-child(1) {
-  transform: translate3d(
-      calc((0.5 - var(--section-link-progress)) * 26px),
-      calc(46px - (var(--section-link-soft) * 46px)),
-      0
-    )
-    rotateX(calc((1 - var(--section-link-progress)) * 3deg))
-    rotateY(calc((1 - var(--section-link-progress)) * -2deg));
-}
-
-.scenario-card:nth-child(2) {
-  transform: translate3d(
-      0,
-      calc(34px - (var(--section-link-soft) * 34px)),
-      0
-    )
-    rotateX(calc((1 - var(--section-link-progress)) * 2deg));
-}
-
-.scenario-card:nth-child(3) {
-  transform: translate3d(
-      calc((var(--section-link-progress) - 0.5) * 26px),
-      calc(52px - (var(--section-link-soft) * 52px)),
-      0
-    )
-    rotateX(calc((1 - var(--section-link-progress)) * 3.2deg))
-    rotateY(calc((1 - var(--section-link-progress)) * 2deg));
 }
 
 .scenario-card span,
@@ -735,6 +807,62 @@ select {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.96),
     var(--glass-shadow);
+}
+
+[data-flight-target] {
+  --target-active: 0;
+  transition:
+    transform 460ms var(--ease-out),
+    box-shadow 260ms ease,
+    border-color 260ms ease,
+    background 260ms ease;
+}
+
+[data-flight-target='capture'] {
+  --target-active: var(--capture-highlight);
+}
+
+[data-flight-target='organize'] {
+  --target-active: var(--organize-highlight);
+}
+
+[data-flight-target='utility'] {
+  --target-active: var(--utility-highlight);
+}
+
+[data-flight-target='matrix'] {
+  --target-active: var(--matrix-highlight);
+}
+
+.scenario-card[data-flight-target],
+.tool-group[data-flight-target] {
+  transform:
+    translateY(calc(24px - (var(--target-active) * 24px)))
+    scale(calc(0.985 + (var(--target-active) * 0.015)));
+  border-color: rgba(
+    176,
+    198,
+    236,
+    calc(0.38 + (var(--target-active) * 0.5))
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 calc(20px + (var(--target-active) * 18px)) calc(44px + (var(--target-active) * 16px))
+      rgba(101, 124, 166, calc(0.1 + (var(--target-active) * 0.12)));
+}
+
+.scenario-card[data-flight-target]::after,
+.tool-group[data-flight-target]::after {
+  content: '';
+  position: absolute;
+  inset: -18% -8% auto;
+  height: 120px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle, rgba(228, 238, 255, 0.92), rgba(228, 238, 255, 0) 68%);
+  filter: blur(18px);
+  opacity: calc(var(--target-active) * 0.9);
+  pointer-events: none;
 }
 
 .system-strip {
@@ -866,6 +994,7 @@ select {
 
   .hero-layout {
     min-height: auto;
+    grid-template-columns: minmax(0, 430px) 1fr;
   }
 
   .system-strip {
@@ -883,13 +1012,8 @@ select {
     max-width: none;
   }
 
-  .hero-home {
-    background-size:
-      min(42vw, 480px) auto,
-      min(18vw, 210px) auto,
-      min(18vw, 198px) auto,
-      min(18vw, 208px) auto,
-      min(15vw, 164px) auto;
+  .hero-flight {
+    inset: 36px 0 0 40%;
   }
 
   .value-strip-grid,
@@ -920,18 +1044,6 @@ select {
   .hero-home {
     min-height: auto;
     padding-top: 156px;
-    background-size:
-      min(66vw, 500px) auto,
-      min(29vw, 220px) auto,
-      min(28vw, 210px) auto,
-      min(30vw, 220px) auto,
-      min(24vw, 170px) auto;
-    background-position:
-      right -22px top 56%,
-      right -8px top 15%,
-      left 54% top 23%,
-      right 18px bottom 8%,
-      left 58% bottom 8%;
   }
 
   .site-nav {
@@ -955,10 +1067,33 @@ select {
 
   .hero-layout {
     gap: 28px;
+    grid-template-columns: 1fr;
   }
 
   .hero-copy {
     gap: 20px;
+  }
+
+  .hero-flight {
+    position: relative;
+    inset: auto;
+    min-height: 420px;
+    margin-top: 18px;
+  }
+
+  .hero-flight-card-main {
+    width: min(74vw, 480px);
+    right: 8%;
+  }
+
+  .hero-flight-card-capture,
+  .hero-flight-card-organize,
+  .hero-flight-card-clipboard {
+    width: min(31vw, 210px);
+  }
+
+  .hero-flight-card-utility {
+    width: min(24vw, 164px);
   }
 
   .hero-copy h1 {
@@ -972,10 +1107,6 @@ select {
 
   .button {
     width: 100%;
-  }
-
-  .value-strip::before {
-    width: min(680px, 92vw);
   }
 
   .tool-matrix-grid {
@@ -1004,18 +1135,6 @@ select {
   .hero-home {
     padding-top: 170px;
     padding-bottom: 28px;
-    background-size:
-      min(84vw, 420px) auto,
-      min(36vw, 170px) auto,
-      min(34vw, 162px) auto,
-      min(36vw, 176px) auto,
-      min(29vw, 132px) auto;
-    background-position:
-      right -50px top 56%,
-      right -10px top 18%,
-      left 51% top 25%,
-      right 4px bottom 11%,
-      left 55% bottom 12%;
   }
 
   .hero-copy h1 {
@@ -1029,13 +1148,24 @@ select {
     font-size: 0.98rem;
   }
 
-  .value-strip-item:nth-child(1),
-  .value-strip-item:nth-child(2),
-  .value-strip-item:nth-child(3),
-  .scenario-card:nth-child(1),
-  .scenario-card:nth-child(2),
-  .scenario-card:nth-child(3) {
-    transform: none;
+  .hero-flight {
+    min-height: 360px;
+  }
+
+  .hero-flight-card-main {
+    width: min(82vw, 420px);
+    right: 0;
+    top: 30%;
+  }
+
+  .hero-flight-card-capture,
+  .hero-flight-card-organize,
+  .hero-flight-card-clipboard {
+    width: min(34vw, 170px);
+  }
+
+  .hero-flight-card-utility {
+    width: min(28vw, 132px);
   }
 
   .section {
@@ -1086,8 +1216,10 @@ select {
   .hero-aurora,
   .hero-home::before,
   .hero-home::after,
-  .value-strip::before,
-  .scenario-section::before {
+  .hero-flight::before,
+  .hero-flight::after,
+  .scenario-card[data-flight-target]::after,
+  .tool-group[data-flight-target]::after {
     filter: none;
   }
 }

@@ -82,7 +82,13 @@
                   <span class="value-chip">系统工具也能一键直达</span>
                 </div>
               </div>
-
+              <div class="hero-flight" aria-hidden="true">
+                <div class="hero-flight-card hero-flight-card-main"></div>
+                <div class="hero-flight-card hero-flight-card-capture"></div>
+                <div class="hero-flight-card hero-flight-card-organize"></div>
+                <div class="hero-flight-card hero-flight-card-clipboard"></div>
+                <div class="hero-flight-card hero-flight-card-utility"></div>
+              </div>
             </div>
           </section>
         </div>
@@ -117,17 +123,17 @@
         </div>
 
         <div class="scenario-grid">
-          <article class="scenario-card">
+          <article class="scenario-card" data-flight-target="capture">
             <span>场景 01</span>
             <h3>截图、录屏、取色，开会和沟通时直接拿来用。</h3>
             <p>需要留证据、做演示、标问题时，不用再在多个应用之间来回切换。</p>
           </article>
-          <article class="scenario-card">
+          <article class="scenario-card" data-flight-target="organize">
             <span>场景 02</span>
             <h3>批量重命名、剪贴板整理，处理文件时更省心。</h3>
             <p>重复动作交给工具做，临时复制的内容也能随时翻出来继续用。</p>
           </article>
-          <article class="scenario-card">
+          <article class="scenario-card" data-flight-target="utility">
             <span>场景 03</span>
             <h3>二维码、语音输入、悬浮收纳，零碎小事不用再单独装软件。</h3>
             <p>把看起来小、但每天都会点开的工具收在一起，桌面会清爽很多。</p>
@@ -143,7 +149,7 @@
         </div>
 
         <div class="tool-matrix-grid">
-          <article class="tool-group tool-group-primary">
+          <article class="tool-group tool-group-primary" data-flight-target="matrix">
             <span>捕获与处理</span>
             <ul>
               <li>叠加截图</li>
@@ -259,6 +265,7 @@
       </div>
     </footer>
 
+    <script src="hero-motion.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
