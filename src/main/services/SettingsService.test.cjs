@@ -5,6 +5,31 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 
+function loadTaskbarAppearanceModule() {
+  const filePath = path.join(__dirname, '..', '..', 'shared', 'taskbarAppearance.ts')
+  const source = fs.readFileSync(filePath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020
+    },
+    fileName: filePath
+  }).outputText
+
+  const module = { exports: {} }
+  vm.runInNewContext(transpiled, {
+    module,
+    exports: module.exports,
+    require,
+    __dirname: path.dirname(filePath),
+    __filename: filePath,
+    console,
+    process
+  }, { filename: filePath })
+
+  return module.exports
+}
+
 function loadSettingsServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'SettingsService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -18,6 +43,7 @@ function loadSettingsServiceModule(overrides = {}) {
   }).outputText
 
   const module = { exports: {} }
+  const taskbarAppearanceModule = loadTaskbarAppearanceModule()
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
       return overrides.electronModule || {
@@ -35,6 +61,10 @@ function loadSettingsServiceModule(overrides = {}) {
           writeFile: async () => undefined
         }
       }
+    }
+
+    if (specifier === '../../shared/taskbarAppearance') {
+      return taskbarAppearanceModule
     }
 
     return require(specifier)
@@ -55,6 +85,26 @@ function loadSettingsServiceModule(overrides = {}) {
 
   return module.exports
 }
+
+test('getSettings includes taskbar appearance defaults when no persisted file exists', () => {
+  const { SettingsService } = loadSettingsServiceModule({
+    fsModule: {
+      existsSync: () => false,
+      readFileSync: () => '',
+      promises: {
+        writeFile: async () => undefined
+      }
+    }
+  })
+
+  const service = new SettingsService()
+  const settings = service.getSettings()
+
+  assert.equal(settings.taskbarAppearanceEnabled, false)
+  assert.equal(settings.taskbarAppearancePreset, 'blur')
+  assert.equal(settings.taskbarAppearanceIntensity, 60)
+  assert.equal(settings.taskbarAppearanceTint, '#FFFFFF33')
+})
 
 test('updateSettings emits changed only after persistence succeeds', async () => {
   const written = []
