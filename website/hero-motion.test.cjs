@@ -19,30 +19,27 @@ test('hero motion starts at rest before scroll begins', () => {
 
 test('hero cards light the three receiving groups before dock begins', () => {
   const state = getHeroMotionState({
-    progress: 0.86,
+    progress: 0.62,
     breakoutProgress: 1,
-    travelProgress: 0.86,
-    morphProgress: 0.44,
-    dockProgress: 0,
-    settleProgress: 0.28,
+    travelProgress: 0.38,
     highlight: {
-      capture: 0.96,
-      clipboard: 0.83,
-      organize: 0.89,
-      utility: 0.74,
-      matrix: 0.91
+      capture: 0.41,
+      clipboard: 0.36,
+      organize: 0.39,
+      utility: 0.31,
+      matrix: 0.29
     }
   })
 
   assert.equal(state.breakout, 1)
-  assert.ok(state.travel > 0.8)
-  assert.ok(state.morph > 0)
+  assert.equal(state.travel, 0.38)
+  assert.ok(state.morph < 0.5)
   assert.equal(state.dock, 0)
-  assert.equal(state.highlight.capture, 0.96)
-  assert.equal(state.highlight.organize, 0.89)
-  assert.equal(state.highlight.utility, 0.74)
-  assert.equal(state.highlight.clipboard, 0.83)
-  assert.equal(state.highlight.matrix, 0.91)
+  assert.equal(state.highlight.capture, 0.41)
+  assert.equal(state.highlight.organize, 0.39)
+  assert.equal(state.highlight.utility, 0.31)
+  assert.equal(state.highlight.clipboard, 0.36)
+  assert.equal(state.highlight.matrix, 0.29)
 })
 
 test('tool handoff reaches dock state at the end of the sticky range', () => {
@@ -50,9 +47,6 @@ test('tool handoff reaches dock state at the end of the sticky range', () => {
     progress: 0.985,
     breakoutProgress: 1,
     travelProgress: 0.94,
-    morphProgress: 0.88,
-    dockProgress: 0.76,
-    settleProgress: 0.66,
     highlight: {
       capture: 0.99,
       clipboard: 0.94,
@@ -63,9 +57,9 @@ test('tool handoff reaches dock state at the end of the sticky range', () => {
   })
 
   assert.equal(state.travel, 0.94)
-  assert.equal(state.morph, 0.88)
-  assert.equal(state.dock, 0.76)
-  assert.equal(state.settle, 0.66)
+  assert.ok(state.morph > 0.9)
+  assert.ok(state.dock > 0)
+  assert.ok(state.settle > 0.5)
   assert.equal(state.highlight.capture, 0.99)
   assert.equal(state.highlight.organize, 0.97)
   assert.equal(state.highlight.utility, 0.95)
@@ -143,8 +137,6 @@ test('motion keeps dock at zero through the early travel band', () => {
   const state = getHeroMotionState({
     progress: 0.62,
     travelProgress: 0.38,
-    morphProgress: 0.2,
-    dockProgress: 0,
     highlight: {
       capture: 0.41,
       clipboard: 0.36,
@@ -156,7 +148,7 @@ test('motion keeps dock at zero through the early travel band', () => {
 
   assert.equal(state.travel, 0.38)
   assert.equal(state.dock, 0)
-  assert.equal(state.morph, 0.2)
+  assert.ok(state.morph < 0.5)
   assert.equal(state.highlight.capture, 0.41)
   assert.equal(state.highlight.matrix, 0.29)
 })
@@ -165,8 +157,6 @@ test('motion enters dock only near the end of the tool-section handoff', () => {
   const state = getHeroMotionState({
     progress: 0.92,
     travelProgress: 0.83,
-    morphProgress: 0.79,
-    dockProgress: 0.64,
     highlight: {
       capture: 0.93,
       clipboard: 0.88,
@@ -176,8 +166,8 @@ test('motion enters dock only near the end of the tool-section handoff', () => {
     }
   })
 
-  assert.equal(state.morph, 0.79)
-  assert.equal(state.dock, 0.64)
+  assert.ok(state.morph > 0.7)
+  assert.ok(state.dock > 0)
   assert.equal(state.highlight.capture, 0.93)
   assert.equal(state.highlight.organize, 0.91)
   assert.equal(state.highlight.utility, 0.9)

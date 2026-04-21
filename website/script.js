@@ -59,8 +59,9 @@ document.addEventListener('DOMContentLoaded', () => {
           matrix: highlight.matrix ?? 0
         }
       }
-    })
+  })
   const motionAnchors = new Map()
+  const flightGeometry = new Map()
 
   const getHeroProgress = () => {
     if (!heroScroll || prefersReducedMotion) {
@@ -80,6 +81,13 @@ document.addEventListener('DOMContentLoaded', () => {
     clipboard: { x: 28, y: 10 },
     utility: { x: 8, y: 18 },
     matrix: { x: -42, y: -14 }
+  }
+  const targetMap = {
+    capture: 'capture',
+    organize: 'organize',
+    clipboard: 'organize',
+    utility: 'utility',
+    matrix: 'capture'
   }
 
   const syncMotionAnchors = () => {
@@ -118,14 +126,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     syncMotionAnchors()
-    const flightRect = heroFlight.getBoundingClientRect()
-    const targetMap = {
-      capture: 'capture',
-      organize: 'organize',
-      clipboard: 'organize',
-      utility: 'utility',
-      matrix: 'capture'
-    }
+    flightGeometry.clear()
 
     Object.entries(flightCards).forEach(([key, card]) => {
       if (!card) {
@@ -142,22 +143,56 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const targetRect = target.getBoundingClientRect()
-      const startX = card.offsetLeft + card.offsetWidth / 2
-      const startY = card.offsetTop + card.offsetHeight / 2
-      const targetX = targetRect.left - flightRect.left + targetRect.width / 2
-      const targetY = targetRect.top - flightRect.top + targetRect.height / 2
-      const bias = flightBiases[key] ?? { x: 0, y: 0 }
       const dockTarget = dockTargets[targetKey]
       const dockRect = dockTarget?.getBoundingClientRect()
-      const dockX = dockRect ? dockRect.left - flightRect.left + dockRect.width / 2 : targetX
-      const dockY = dockRect ? dockRect.top - flightRect.top + dockRect.height / 2 : targetY
-      const dockScale = dockRect ? dockRect.width / card.offsetWidth : 1
+      const startX = card.offsetLeft + card.offsetWidth / 2
+      const startY = card.offsetTop + card.offsetHeight / 2
+      flightGeometry.set(targetKey, {
+        startX,
+        startY,
+        targetCenterX: window.scrollX + targetRect.left + targetRect.width / 2,
+        targetCenterY: window.scrollY + targetRect.top + targetRect.height / 2,
+        dockCenterX: window.scrollX + (dockRect ? dockRect.left + dockRect.width / 2 : targetRect.left + targetRect.width / 2),
+        dockCenterY: window.scrollY + (dockRect ? dockRect.top + dockRect.height / 2 : targetRect.top + targetRect.height / 2),
+        dockScale: dockRect ? dockRect.width / card.offsetWidth : 1
+      })
+    })
+  }
 
-      card.style.setProperty('--target-x', `${targetX - startX + bias.x}px`)
-      card.style.setProperty('--target-y', `${targetY - startY + bias.y}px`)
-      card.style.setProperty('--dock-x', `${dockX - startX + bias.x}px`)
-      card.style.setProperty('--dock-y', `${dockY - startY + bias.y}px`)
-      card.style.setProperty('--dock-scale', dockScale.toFixed(4))
+  const applyFlightGeometry = () => {
+    if (!heroFlight) {
+      return
+    }
+
+    const flightRect = heroFlight.getBoundingClientRect()
+    const flightLeft = window.scrollX + flightRect.left
+    const flightTop = window.scrollY + flightRect.top
+
+    Object.entries(flightCards).forEach(([key, card]) => {
+      if (!card) {
+        return
+      }
+
+      const targetKey = targetMap[key]
+      const geometry = flightGeometry.get(targetKey)
+
+      if (!geometry) {
+        card.style.setProperty('--target-x', '0px')
+        card.style.setProperty('--target-y', '0px')
+        return
+      }
+
+      const bias = flightBiases[key] ?? { x: 0, y: 0 }
+      const targetX = geometry.targetCenterX - flightLeft - geometry.startX + bias.x
+      const targetY = geometry.targetCenterY - flightTop - geometry.startY + bias.y
+      const dockX = geometry.dockCenterX - flightLeft - geometry.startX + bias.x
+      const dockY = geometry.dockCenterY - flightTop - geometry.startY + bias.y
+
+      card.style.setProperty('--target-x', `${targetX}px`)
+      card.style.setProperty('--target-y', `${targetY}px`)
+      card.style.setProperty('--dock-x', `${dockX}px`)
+      card.style.setProperty('--dock-y', `${dockY}px`)
+      card.style.setProperty('--dock-scale', geometry.dockScale.toFixed(4))
     })
   }
 
@@ -183,6 +218,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!heroScroll) {
       return
     }
+
+    applyFlightGeometry()
 
     const progress = getHeroProgress()
     const heroTargets = {
