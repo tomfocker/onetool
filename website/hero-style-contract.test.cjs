@@ -107,9 +107,9 @@ test('tool section defines a dedicated intro block', () => {
 })
 
 test('tool groups use the lighter dock takeover contract', () => {
-  assert.match(style, /\.tool-group\[data-flight-dock="capture"\]/)
-  assert.match(style, /\.tool-group\[data-flight-dock="organize"\]/)
-  assert.match(style, /\.tool-group\[data-flight-dock="utility"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="capture"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="organize"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="utility"\]/)
   assert.match(style, /transform:\s*translate3d\(0,\s*calc\(var\(--dock-lift/)
 })
 
