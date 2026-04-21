@@ -1,0 +1,194 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const script = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8')
+const style = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8')
+const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
+
+const getAttrValues = (source, attr) => [...source.matchAll(new RegExp(`${attr}="([^"]+)"`, 'g'))].map((match) => match[1])
+
+const expectAttrValues = (source, attr, expected) => {
+  assert.deepStrictEqual(getAttrValues(source, attr), expected)
+}
+
+test('index html wires the eight flight cards and four receiver docks', () => {
+  expectAttrValues(html, 'data-flight-card', [
+    'matrix',
+    'capture-stack',
+    'capture-record',
+    'text-rename',
+    'text-clipboard',
+    'web-activate',
+    'web-qr',
+    'utility-float',
+    'utility-clicker'
+  ])
+  expectAttrValues(html, 'data-flight-target', ['capture', 'text', 'web', 'utility'])
+  expectAttrValues(html, 'data-flight-dock', ['capture', 'text', 'web', 'utility'])
+  assert.equal((html.match(/<article class="tool-group/g) ?? []).length, 4)
+  assert.match(html, /<div class="tool-matrix-grid">/)
+  assert.doesNotMatch(html, /data-flight-target="(?:organize|clipboard)"/)
+  assert.doesNotMatch(html, /data-flight-dock="(?:organize|clipboard)"/)
+  assert.doesNotMatch(html, /data-flight-card="(?:organize|clipboard)"/)
+})
+
+test('hero cards map to tool groups and scroll timing comes only from toolsSection', () => {
+  assert.match(script, /const flightTargets = \{/)
+  assert.match(script, /const dockTargets = \{/)
+  assert.match(script, /const targetMap = \{/)
+  assert.match(script, /const heroTargets = \{/)
+  assert.match(script, /const scheduleSync = \(\) => \{/)
+  assert.match(script, /const syncScrollState = \(\) => \{/)
+  assert.match(script, /const syncFlightTargets = \(\) => \{/)
+  assert.match(script, /const getDockVisualOffset = \(targetKey, state\) => \{/)
+  assert.match(script, /const applyFlightGeometry = \(state\) => \{/)
+  assert.match(script, /const getViewportProgress = \(element, startRatio, endRatio\) => \{/)
+
+  assert.match(script, /\bcaptureStack:\s*document\.querySelector\('\.hero-flight-card-capture-stack'\)/)
+  assert.match(script, /\bcaptureRecord:\s*document\.querySelector\('\.hero-flight-card-capture-record'\)/)
+  assert.match(script, /\btextRename:\s*document\.querySelector\('\.hero-flight-card-text-rename'\)/)
+  assert.match(script, /\btextClipboard:\s*document\.querySelector\('\.hero-flight-card-text-clipboard'\)/)
+  assert.match(script, /\bwebActivate:\s*document\.querySelector\('\.hero-flight-card-web-activate'\)/)
+  assert.match(script, /\bwebQr:\s*document\.querySelector\('\.hero-flight-card-web-qr'\)/)
+  assert.match(script, /\butilityFloat:\s*document\.querySelector\('\.hero-flight-card-utility-float'\)/)
+  assert.match(script, /\butilityClicker:\s*document\.querySelector\('\.hero-flight-card-utility-clicker'\)/)
+  assert.match(script, /\bmatrix:\s*document\.querySelector\('\.hero-flight-card-main'\)/)
+
+  assert.match(script, /\bcapture:\s*document\.querySelector\('\[data-flight-target="capture"\]'\)/)
+  assert.match(script, /\btext:\s*document\.querySelector\('\[data-flight-target="text"\]'\)/)
+  assert.match(script, /\bweb:\s*document\.querySelector\('\[data-flight-target="web"\]'\)/)
+  assert.match(script, /\butility:\s*document\.querySelector\('\[data-flight-target="utility"\]'\)/)
+  assert.doesNotMatch(script, /organize:\s*document\.querySelector\('\[data-flight-target="/)
+  assert.doesNotMatch(script, /clipboard:\s*document\.querySelector\('\[data-flight-target="/)
+  assert.doesNotMatch(script, /matrix:\s*document\.querySelector\('\[data-flight-target="/)
+
+  assert.match(script, /\bcapture:\s*document\.querySelector\('\[data-flight-dock="capture"\]'\)/)
+  assert.match(script, /\btext:\s*document\.querySelector\('\[data-flight-dock="text"\]'\)/)
+  assert.match(script, /\bweb:\s*document\.querySelector\('\[data-flight-dock="web"\]'\)/)
+  assert.match(script, /\butility:\s*document\.querySelector\('\[data-flight-dock="utility"\]'\)/)
+  assert.doesNotMatch(script, /organize:\s*document\.querySelector\('\[data-flight-dock="/)
+  assert.doesNotMatch(script, /clipboard:\s*document\.querySelector\('\[data-flight-dock="/)
+  assert.doesNotMatch(script, /matrix:\s*document\.querySelector\('\[data-flight-dock="/)
+
+  assert.match(script, /captureStack:\s*'capture'/)
+  assert.match(script, /captureRecord:\s*'capture'/)
+  assert.match(script, /textRename:\s*'text'/)
+  assert.match(script, /textClipboard:\s*'text'/)
+  assert.match(script, /webActivate:\s*'web'/)
+  assert.match(script, /webQr:\s*'web'/)
+  assert.match(script, /utilityFloat:\s*'utility'/)
+  assert.match(script, /utilityClicker:\s*'utility'/)
+  assert.match(script, /matrix:\s*'capture'/)
+  assert.match(script, /flightGeometry\.clear\(\)/)
+  assert.match(script, /flightGeometry\.set\(targetKey, \{/)
+  assert.match(script, /targetCenterX:/)
+  assert.match(script, /dockScale:/)
+  assert.match(script, /const highlight = state\?\.highlight\?\.\[targetKey\] \?\? 0/)
+  assert.match(script, /y:\s*-22 \* highlight/)
+  assert.match(script, /const flightLeft = window\.scrollX \+ flightRect\.left/)
+  assert.match(script, /const geometry = flightGeometry\.get\(targetKey\)/)
+  assert.match(script, /const dockOffset = getDockVisualOffset\(targetKey, state\)/)
+  assert.match(script, /card\.style\.setProperty\('--dock-x',/)
+  assert.match(script, /card\.style\.setProperty\('--dock-y',/)
+  assert.match(script, /card\.style\.setProperty\('--dock-scale', geometry\.dockScale\.toFixed\(4\)\)/)
+
+  assert.doesNotMatch(script, /document\.querySelector\('#scenarios'\)/)
+  assert.doesNotMatch(script, /document\.querySelector\('#system'\)/)
+  assert.doesNotMatch(script, /getViewportProgress\(scenariosSection/)
+  assert.match(script, /const state = getHeroMotionState\(/)
+  assert.match(script, /applyFlightGeometry\(state\)/)
+  assert.match(script, /travelProgress:\s*getViewportProgress\(toolsSection, 1\.1, 0\.34\)/)
+  assert.match(script, /morphProgress:\s*getViewportProgress\(toolsSection, 0\.74, 0\.2\)/)
+  assert.match(script, /dockProgress:\s*getViewportProgress\(toolsSection, 0\.46, 0\.08\)/)
+  assert.match(script, /settleProgress:\s*getViewportProgress\(toolsSection, 0\.92, 0\.14\)/)
+  assert.match(script, /capture:\s*flightTargets\.capture/)
+  assert.match(script, /text:\s*flightTargets\.text/)
+  assert.match(script, /web:\s*flightTargets\.web/)
+  assert.match(script, /utility:\s*flightTargets\.utility/)
+  assert.match(script, /matrix:\s*flightTargets\.capture/)
+  assert.match(script, /text:\s*easeOutCubic\(getViewportProgress\(heroTargets\.text, 0\.82, 0\.22\)\)/)
+  assert.match(script, /web:\s*easeOutCubic\(getViewportProgress\(heroTargets\.web, 0\.88, 0\.4\)\)/)
+  assert.match(script, /matrix:\s*easeOutCubic\(getViewportProgress\(heroTargets\.matrix, 0\.72, 0\.18\)\)/)
+  assert.doesNotMatch(script, /travelLead/)
+  assert.doesNotMatch(script, /travelFollow/)
+
+  assert.match(script, /window\.requestAnimationFrame\(\(\) => \{/)
+  assert.match(script, /--flight-morph/)
+  assert.match(script, /--flight-dock/)
+  assert.doesNotMatch(script, /--clipboard-highlight/)
+  assert.doesNotMatch(script, /--organize-highlight/)
+})
+
+test('local hero motion fallback accepts object context and returns the full state shape', () => {
+  assert.match(script, /const getHeroMotionState =/)
+  assert.match(script, /typeof progressInput === 'number'/)
+  assert.match(script, /progress:\s*context\.progress \?\? 0/)
+  assert.match(script, /breakout:\s*context\.breakoutProgress \?\? 0/)
+  assert.match(script, /morph:\s*context\.morphProgress \?\? 0/)
+  assert.match(script, /dock:\s*context\.dockProgress \?\? 0/)
+  assert.match(script, /settle:\s*context\.settleProgress \?\? 0/)
+  assert.match(script, /highlight: \{/)
+  assert.match(script, /text:\s*highlight\.text \?\?\s*highlight\.clipboard \?\? 0/)
+  assert.match(script, /web:\s*highlight\.web \?\?\s*highlight\.organize \?\? 0/)
+  assert.match(script, /matrix:\s*highlight\.matrix \?\? 0/)
+})
+
+test('hero sticky keeps the dock handoff style contract', () => {
+  const heroStickyRule = style.match(/\.hero-sticky\s*\{[\s\S]*?\n\}/)
+
+  assert.ok(heroStickyRule, 'expected .hero-sticky rule in style.css')
+  assert.match(style, /--dock-x/)
+  assert.match(style, /--dock-y/)
+  assert.match(style, /--dock-scale/)
+  assert.match(style, /--text-highlight/)
+  assert.match(style, /--web-highlight/)
+  assert.doesNotMatch(style, /--clipboard-highlight/)
+  assert.doesNotMatch(style, /--organize-highlight/)
+  assert.match(heroStickyRule[0], /overflow:\s*visible/)
+  assert.match(style, /var\(--flight-dock-soft\)/)
+  assert.match(style, /\.hero-flight-card\[data-flight-card\]/)
+})
+
+test('hero flight uses the new eight-card ring and grouped receiver offsets', () => {
+  assert.match(style, /\.hero-flight-card-main\s*\{/)
+  assert.match(style, /\.hero-flight-card-capture-stack\s*\{/)
+  assert.match(style, /\.hero-flight-card-capture-record\s*\{/)
+  assert.match(style, /\.hero-flight-card-text-rename\s*\{/)
+  assert.match(style, /\.hero-flight-card-text-clipboard\s*\{/)
+  assert.match(style, /\.hero-flight-card-web-activate\s*\{/)
+  assert.match(style, /\.hero-flight-card-web-qr\s*\{/)
+  assert.match(style, /\.hero-flight-card-utility-float\s*\{/)
+  assert.match(style, /\.hero-flight-card-utility-clicker\s*\{/)
+  assert.match(style, /\.tool-matrix-grid-four\s*\{/)
+  assert.match(style, /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/)
+  assert.match(style, /\.hero-flight-card-(capture|text|web|utility)-[a-z-]+\s*\{[\s\S]*--receiver-dock-x:/)
+  assert.match(style, /\.hero-flight-card-(capture|text|web|utility)-[a-z-]+\s*\{[\s\S]*--receiver-dock-y:/)
+  assert.match(style, /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.tool-matrix-grid-four\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
+})
+
+test('hero title uses launch-page typography instead of the old stacked tower', () => {
+  assert.match(style, /\.hero-title\s*{/)
+  assert.match(style, /\.hero-title-line-wide\s*{/)
+  assert.match(style, /max-width:\s*10ch/)
+  assert.match(style, /font-size:\s*clamp\(3\.4rem,\s*6\.2vw,\s*6\.4rem\)/)
+  assert.match(style, /letter-spacing:\s*-0\.07em/)
+})
+
+test('tool section defines a dedicated intro block', () => {
+  assert.match(style, /\.tool-matrix-intro\s*\{/)
+  assert.match(style, /\.tool-matrix-intro h2\s*\{/)
+})
+
+test('tool groups use the lighter dock takeover contract', () => {
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="capture"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="text"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="web"\]/)
+  assert.match(style, /\.tool-group\[data-flight-target\]\[data-flight-dock="utility"\]/)
+  assert.match(style, /transform:\s*translate3d\(0,\s*calc\(var\(--dock-lift/)
+})
+
+test('contract no longer requires scenario-card takeover rules', () => {
+  assert.doesNotMatch(style, /\.scenario-card\[data-flight-dock=/)
+})

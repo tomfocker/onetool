@@ -12,7 +12,13 @@
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
   const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3)
   const easeInOutSine = (value) => -(Math.cos(Math.PI * value) - 1) / 2
-  const easeInQuart = (value) => Math.pow(value, 4)
+  const getSafeProgress = (value, fallback = 0) => {
+    if (typeof value !== 'number' || Number.isNaN(value)) {
+      return clamp(fallback, 0, 1)
+    }
+
+    return clamp(value, 0, 1)
+  }
 
   const getPhase = (value, start, end) => {
     if (end <= start) {
@@ -23,43 +29,79 @@
   }
 
   const getHeroMotionState = (progress, prefersReducedMotion = false) => {
-    const safeProgress = clamp(progress, 0, 1)
+    const context =
+      typeof progress === 'number'
+        ? { progress }
+        : progress && typeof progress === 'object'
+          ? progress
+          : {}
+    const safeProgress = getSafeProgress(context.progress)
 
     if (prefersReducedMotion) {
       return {
         progress: 0,
         breakout: 0,
         breakoutSoft: 0,
+        cluster: 0,
+        clusterSoft: 0,
         travel: 0,
         travelSoft: 0,
+        morph: 0,
+        morphSoft: 0,
         settle: 0,
         settleSoft: 0,
+        dock: 0,
+        dockSoft: 0,
         highlight: {
           capture: 0,
-          organize: 0,
+          text: 0,
+          web: 0,
           utility: 0,
           matrix: 0
         }
       }
     }
 
-    const breakout = getPhase(safeProgress, 0.08, 0.34)
-    const travel = getPhase(safeProgress, 0.42, 0.9)
-    const settle = getPhase(safeProgress, 0.7, 1)
+    const breakout = getSafeProgress(context.breakoutProgress, getPhase(safeProgress, 0.12, 0.34))
+    const cluster = getSafeProgress(context.clusterProgress, getPhase(safeProgress, 0.44, 0.82))
+    const travel = getSafeProgress(context.travelProgress, getPhase(safeProgress, 0.34, 0.84))
+    const morph = getSafeProgress(context.morphProgress, getPhase(safeProgress, 0.7, 0.94))
+    const settle = getSafeProgress(context.settleProgress, getPhase(safeProgress, 0.7, 1))
+    const dock = getSafeProgress(context.dockProgress, getPhase(safeProgress, 0.88, 1))
+    const highlight = context.highlight ?? {}
+    const captureHighlight = getSafeProgress(
+      highlight.capture,
+      easeOutCubic(getPhase(safeProgress, 0.68, 0.94))
+    )
+    const organizeHighlight = getSafeProgress(
+      highlight.organize,
+      easeOutCubic(getPhase(safeProgress, 0.72, 0.95))
+    )
+    const utilityHighlight = getSafeProgress(
+      highlight.utility,
+      easeOutCubic(getPhase(safeProgress, 0.76, 0.97))
+    )
 
     return {
       progress: safeProgress,
       breakout,
       breakoutSoft: easeOutCubic(breakout),
+      cluster,
+      clusterSoft: easeOutCubic(cluster),
       travel,
-      travelSoft: easeInQuart(easeInOutSine(travel)),
+      travelSoft: easeInOutSine(travel),
+      morph,
+      morphSoft: easeInOutSine(morph),
       settle,
       settleSoft: easeOutCubic(settle),
+      dock,
+      dockSoft: easeOutCubic(dock),
       highlight: {
-        capture: easeOutCubic(getPhase(safeProgress, 0.58, 0.82)),
-        organize: easeOutCubic(getPhase(safeProgress, 0.63, 0.86)),
-        utility: easeOutCubic(getPhase(safeProgress, 0.67, 0.9)),
-        matrix: easeOutCubic(getPhase(safeProgress, 0.84, 1))
+        capture: captureHighlight,
+        text: getSafeProgress(highlight.text, getSafeProgress(highlight.clipboard, organizeHighlight)),
+        web: getSafeProgress(highlight.web, getSafeProgress(highlight.organize, organizeHighlight)),
+        utility: utilityHighlight,
+        matrix: getSafeProgress(highlight.matrix, captureHighlight)
       }
     }
   }
@@ -68,6 +110,7 @@
     clamp,
     easeOutCubic,
     easeInOutSine,
+    getSafeProgress,
     getPhase,
     getHeroMotionState
   }

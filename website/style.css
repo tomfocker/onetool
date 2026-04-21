@@ -24,12 +24,17 @@
   --hero-progress: 0;
   --flight-breakout: 0;
   --flight-breakout-soft: 0;
+  --flight-morph: 0;
+  --flight-morph-soft: 0;
   --flight-travel: 0;
   --flight-travel-soft: 0;
+  --flight-dock: 0;
+  --flight-dock-soft: 0;
   --flight-settle: 0;
   --flight-settle-soft: 0;
   --capture-highlight: 0;
-  --organize-highlight: 0;
+  --text-highlight: 0;
+  --web-highlight: 0;
   --utility-highlight: 0;
   --matrix-highlight: 0;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -200,7 +205,6 @@ select {
 .hero-kicker,
 .value-chip,
 .value-strip-item strong,
-.scenario-card span,
 .tool-group span,
 .system-card strong,
 .download-card strong {
@@ -230,7 +234,6 @@ select {
 .download-copy p:last-child,
 .hero-description,
 .value-strip-item p,
-.scenario-card p,
 .tool-group li,
 .system-card p,
 .download-card span,
@@ -241,14 +244,15 @@ select {
 
 .hero-scroll {
   position: relative;
-  height: 220dvh;
+  height: 236dvh;
+  z-index: 6;
 }
 
 .hero-sticky {
   position: sticky;
   top: 0;
   min-height: 100dvh;
-  overflow: hidden;
+  overflow: visible;
   isolation: isolate;
 }
 
@@ -370,20 +374,31 @@ select {
   position: relative;
   z-index: 2;
   display: grid;
-  gap: 22px;
-  max-width: 460px;
+  gap: 18px;
+  max-width: 560px;
 }
 
-.hero-copy h1 {
-  max-width: 6.4ch;
-  font-size: clamp(2.7rem, 5vw, 4.8rem);
-  line-height: 0.92;
-  letter-spacing: -0.065em;
+.hero-title {
+  display: grid;
+  max-width: 10ch;
+  font-size: clamp(3.4rem, 6.2vw, 6.4rem);
+  line-height: 0.9;
+  letter-spacing: -0.07em;
+  text-wrap: balance;
+}
+
+.hero-title-line {
+  display: block;
+}
+
+.hero-title-line-wide {
+  font-size: 0.9em;
+  letter-spacing: -0.06em;
 }
 
 .hero-description {
-  max-width: 32ch;
-  font-size: 1.06rem;
+  max-width: 30ch;
+  font-size: 1.02rem;
 }
 
 .hero-actions {
@@ -478,6 +493,7 @@ select {
   z-index: 1;
   pointer-events: none;
   perspective: 1800px;
+  overflow: visible;
 }
 
 .hero-flight::before,
@@ -507,11 +523,14 @@ select {
 .hero-flight-card {
   --target-x: 0px;
   --target-y: 0px;
+  --dock-x: 0px;
+  --dock-y: 0px;
+  --dock-scale: 1;
   --break-x: 0px;
   --break-y: 0px;
   --break-rotate: 0deg;
   --travel-factor: 1;
-  --travel-scale: 0.32;
+  --travel-scale: 0.42;
   --card-tilt-x: 0deg;
   --card-tilt-y: 0deg;
   position: absolute;
@@ -531,6 +550,23 @@ select {
   opacity: calc(1 - (var(--flight-settle-soft) * 0.92));
   will-change: transform, opacity;
   transition: opacity 220ms linear;
+}
+
+.hero-flight-card[data-flight-card] {
+  transform-style: preserve-3d;
+}
+
+.hero-flight-card-capture-stack,
+.hero-flight-card-capture-record,
+.hero-flight-card-text-rename,
+.hero-flight-card-text-clipboard,
+.hero-flight-card-web-activate,
+.hero-flight-card-web-qr,
+.hero-flight-card-utility-float,
+.hero-flight-card-utility-clicker {
+  transform-style: preserve-3d;
+  width: min(14vw, 200px);
+  aspect-ratio: 5 / 4;
 }
 
 .hero-flight-card::before {
@@ -573,92 +609,163 @@ select {
   --card-tilt-y: -4deg;
   transform:
     translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * 0.78 * var(--flight-travel-soft))),
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
+        (var(--dock-x) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
+        (var(--dock-y) * var(--flight-dock-soft))
+      ),
       0
     )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(-4deg + (var(--break-rotate) * var(--flight-breakout-soft))))
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+      )
+    )
+    rotate(calc((-4deg + (var(--break-rotate) * var(--flight-breakout-soft))) * (1 - var(--flight-morph-soft))))
     rotateX(calc(var(--card-tilt-x) * var(--flight-breakout-soft)))
     rotateY(calc(var(--card-tilt-y) * var(--flight-breakout-soft)));
+  opacity: calc(1 - (0.96 * var(--flight-dock-soft)));
 }
 
-.hero-flight-card-capture,
-.hero-flight-card-organize,
-.hero-flight-card-clipboard,
-.hero-flight-card-utility {
-  width: min(15vw, 210px);
-  aspect-ratio: 5 / 4;
+.hero-flight-card-capture-stack,
+.hero-flight-card-capture-record,
+.hero-flight-card-text-rename,
+.hero-flight-card-text-clipboard,
+.hero-flight-card-web-activate,
+.hero-flight-card-web-qr,
+.hero-flight-card-utility-float,
+.hero-flight-card-utility-clicker {
+  --receiver-dock-x: 0px;
+  --receiver-dock-y: 0px;
+  --receiver-dock-scale: 1;
+  --receiver-dock-rotate: 0deg;
+  transform:
+    translate3d(
+      calc(
+        (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
+        ((var(--dock-x) + var(--receiver-dock-x)) * var(--flight-dock-soft))
+      ),
+      calc(
+        (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
+        ((var(--dock-y) + var(--receiver-dock-y)) * var(--flight-dock-soft))
+      ),
+      0
+    )
+    scale(
+      calc(
+        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
+        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft))) *
+        var(--receiver-dock-scale)
+      )
+    )
+    rotate(
+      calc(
+        ((var(--break-rotate) * (1 - var(--flight-morph-soft))) + var(--receiver-dock-rotate))
+      )
+    );
+  opacity: calc(1 - (0.94 * var(--flight-dock-soft)));
 }
 
-.hero-flight-card-capture {
-  top: 10%;
-  right: 2%;
+.hero-flight-card-capture-stack,
+.hero-flight-card-capture-record {
   background-image: url('hero-shot-capture.png');
-  --break-x: 34px;
-  --break-y: -46px;
   --break-rotate: 7deg;
-  transform:
-    translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
-      0
-    )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(7deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+  --receiver-dock-x: 20px;
+  --receiver-dock-y: -22px;
+  --receiver-dock-rotate: 2deg;
 }
 
-.hero-flight-card-organize {
-  top: 16%;
-  left: 10%;
+.hero-flight-card-capture-stack {
+  top: 8%;
+  right: 4%;
+  --break-x: 34px;
+  --break-y: -48px;
+}
+
+.hero-flight-card-capture-record {
+  top: 20%;
+  right: 14%;
+  --break-x: 22px;
+  --break-y: -22px;
+}
+
+.hero-flight-card-text-rename,
+.hero-flight-card-text-clipboard {
+  --break-rotate: -9deg;
+  --receiver-dock-x: -18px;
+  --receiver-dock-y: -18px;
+  --receiver-dock-rotate: -2deg;
+}
+
+.hero-flight-card-text-rename {
+  top: 14%;
+  left: 9%;
   background-image: url('hero-shot-rename.png');
-  --break-x: -48px;
-  --break-y: -30px;
-  --break-rotate: -10deg;
-  transform:
-    translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
-      0
-    )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(-8deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+  --break-x: -46px;
+  --break-y: -28px;
 }
 
-.hero-flight-card-clipboard {
-  right: 10%;
-  bottom: 12%;
+.hero-flight-card-text-clipboard {
+  bottom: 18%;
+  left: 3%;
   background-image: url('hero-shot-clipboard.png');
-  --break-x: 42px;
-  --break-y: 34px;
-  --break-rotate: 9deg;
-  transform:
-    translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
-      0
-    )
-    scale(calc(1 - (var(--travel-scale) * var(--flight-travel-soft))))
-    rotate(calc(10deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+  --break-x: -34px;
+  --break-y: 20px;
 }
 
-.hero-flight-card-utility {
-  left: 20%;
-  bottom: 10%;
-  width: min(13vw, 170px);
-  aspect-ratio: 1 / 1;
+.hero-flight-card-web-activate,
+.hero-flight-card-web-qr {
   background-image: url('hero-shot-qr.png');
-  --break-x: -32px;
-  --break-y: 44px;
-  --break-rotate: -14deg;
-  transform:
-    translate3d(
-      calc((var(--break-x) * var(--flight-breakout-soft)) + (var(--target-x) * var(--flight-travel-soft))),
-      calc((var(--break-y) * var(--flight-breakout-soft)) + (var(--target-y) * var(--flight-travel-soft))),
-      0
-    )
-    scale(calc(1 - (0.38 * var(--flight-travel-soft))))
-    rotate(calc(-13deg + (var(--break-rotate) * var(--flight-breakout-soft))));
+  --break-rotate: 8deg;
+  --receiver-dock-x: 18px;
+  --receiver-dock-y: 20px;
+  --receiver-dock-rotate: 1deg;
+}
+
+.hero-flight-card-web-activate {
+  right: 16%;
+  bottom: 14%;
+  --break-x: 30px;
+  --break-y: 28px;
+}
+
+.hero-flight-card-web-qr {
+  right: 4%;
+  bottom: 24%;
+  --break-x: 18px;
+  --break-y: 40px;
+}
+
+.hero-flight-card-utility-float,
+.hero-flight-card-utility-clicker {
+  background-image: url('hero-shot-main.png');
+  --break-rotate: -11deg;
+  --receiver-dock-x: -20px;
+  --receiver-dock-y: 18px;
+  --receiver-dock-rotate: -1deg;
+}
+
+.hero-flight-card-utility-float {
+  left: 18%;
+  bottom: 12%;
+  --break-x: -30px;
+  --break-y: 36px;
+}
+
+.hero-flight-card-utility-clicker {
+  left: 6%;
+  bottom: 24%;
+  background-image: url('hero-shot-qr.png');
+  --break-x: -18px;
+  --break-y: 24px;
 }
 
 .value-strip {
@@ -679,7 +786,6 @@ select {
 }
 
 .value-strip-item,
-.scenario-card,
 .tool-group,
 .system-card,
 .download-card {
@@ -696,7 +802,6 @@ select {
 }
 
 .value-strip-item::before,
-.scenario-card::before,
 .tool-group::before,
 .system-card::before,
 .download-card::before {
@@ -714,7 +819,6 @@ select {
 }
 
 .value-strip-item,
-.scenario-card,
 .tool-group,
 .system-card,
 .download-card,
@@ -735,49 +839,48 @@ select {
   font-size: 0.77rem;
 }
 
-.scenario-section,
 .tool-matrix,
-.system-strip,
 .download-close {
   display: grid;
   gap: 28px;
 }
 
-.scenario-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.scenario-card {
-  display: grid;
-  gap: 16px;
-  align-content: start;
-  min-height: 280px;
-  transition:
-    transform 460ms var(--ease-out),
-    box-shadow 260ms ease,
-    border-color 260ms ease;
-}
-
-.scenario-card span,
 .tool-group span {
   color: #6780a9;
   font-size: 0.76rem;
   font-weight: 700;
 }
 
-.scenario-card h3,
 .tool-group li,
 .download-card strong {
   letter-spacing: -0.03em;
 }
 
-.scenario-card h3 {
-  font-size: 1.5rem;
-  line-height: 1.15;
-}
-
 .tool-matrix-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.tool-matrix-grid-four {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tool-matrix-intro {
+  max-width: 720px;
+  margin: 0 0 2.8rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.tool-matrix-intro h2 {
+  margin: 0.3rem 0 0.8rem;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+  letter-spacing: -0.06em;
+}
+
+.tool-matrix-intro p {
+  color: var(--ink-soft);
+  max-width: 44ch;
 }
 
 .tool-group {
@@ -822,8 +925,12 @@ select {
   --target-active: var(--capture-highlight);
 }
 
-[data-flight-target='organize'] {
-  --target-active: var(--organize-highlight);
+[data-flight-target='text'] {
+  --target-active: var(--text-highlight);
+}
+
+[data-flight-target='web'] {
+  --target-active: var(--web-highlight);
 }
 
 [data-flight-target='utility'] {
@@ -834,25 +941,41 @@ select {
   --target-active: var(--matrix-highlight);
 }
 
-.scenario-card[data-flight-target],
-.tool-group[data-flight-target] {
+.tool-group[data-flight-target][data-flight-dock="capture"],
+.tool-group[data-flight-target][data-flight-dock="text"],
+.tool-group[data-flight-target][data-flight-dock="web"],
+.tool-group[data-flight-target][data-flight-dock="utility"] {
+  --dock-lift: calc(var(--flight-highlight, 0) * -22px);
   transform:
-    translateY(calc(24px - (var(--target-active) * 24px)))
-    scale(calc(0.985 + (var(--target-active) * 0.015)));
-  border-color: rgba(
-    176,
-    198,
-    236,
-    calc(0.38 + (var(--target-active) * 0.5))
-  );
+    translate3d(0, calc(var(--dock-lift) + var(--group-shift, 0px)), 0)
+    scale(calc(1 + var(--flight-highlight, 0) * 0.025));
+  border-color: color-mix(in srgb, rgba(130, 164, 255, 0.42) 70%, rgba(209, 221, 255, 0.28));
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.94),
-    0 calc(20px + (var(--target-active) * 18px)) calc(44px + (var(--target-active) * 16px))
-      rgba(101, 124, 166, calc(0.1 + (var(--target-active) * 0.12)));
+    0 28px 66px rgba(110, 134, 182, calc(0.06 + (var(--flight-highlight, 0) * 0.12))),
+    0 18px 36px rgba(101, 124, 166, calc(0.08 + (var(--flight-highlight, 0) * 0.1)));
 }
 
-.scenario-card[data-flight-target]::after,
-.tool-group[data-flight-target]::after {
+.tool-group[data-flight-target][data-flight-dock="capture"] {
+  --flight-highlight: var(--capture-highlight);
+}
+
+.tool-group[data-flight-target][data-flight-dock="text"] {
+  --flight-highlight: var(--text-highlight);
+}
+
+.tool-group[data-flight-target][data-flight-dock="web"] {
+  --flight-highlight: var(--web-highlight);
+}
+
+.tool-group[data-flight-target][data-flight-dock="utility"] {
+  --flight-highlight: var(--utility-highlight);
+}
+
+.tool-group[data-flight-target][data-flight-dock="capture"]::after,
+.tool-group[data-flight-target][data-flight-dock="text"]::after,
+.tool-group[data-flight-target][data-flight-dock="web"]::after,
+.tool-group[data-flight-target][data-flight-dock="utility"]::after {
   content: '';
   position: absolute;
   inset: -18% -8% auto;
@@ -861,34 +984,31 @@ select {
   background:
     radial-gradient(circle, rgba(228, 238, 255, 0.92), rgba(228, 238, 255, 0) 68%);
   filter: blur(18px);
-  opacity: calc(var(--target-active) * 0.9);
+  opacity: calc((var(--flight-highlight, 0) * 0.86) + 0.14);
   pointer-events: none;
 }
 
-.system-strip {
-  grid-template-columns: minmax(300px, 0.92fr) minmax(0, 1.08fr);
-  align-items: start;
-  border: 1px solid rgba(255, 255, 255, 0.9);
-  border-radius: calc(var(--radius-xl) + 2px);
-  background:
-    linear-gradient(180deg, rgba(252, 253, 255, 0.84), rgba(244, 248, 255, 0.72)), var(--glass);
+.tool-group[data-flight-target] {
+  transform:
+    translateY(
+      calc(
+        34px -
+        (var(--target-active) * 34px) +
+        ((1 - var(--flight-dock-soft)) * 22px)
+      )
+    )
+    scale(calc(0.972 + (var(--target-active) * 0.02) + (var(--flight-dock-soft) * 0.012)));
+  border-color: rgba(
+    176,
+    198,
+    236,
+    calc(0.38 + (var(--target-active) * 0.5))
+  );
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.96),
-    var(--glass-shadow);
-  backdrop-filter: blur(18px) saturate(1.06);
-}
-
-.system-strip-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  align-items: stretch;
-}
-
-.system-card {
-  min-height: 100%;
-}
-
-.system-card p {
-  margin-top: 14px;
+    inset 0 1px 0 rgba(255, 255, 255, 0.94),
+    0 26px 72px rgba(110, 134, 182, calc(0.05 + (var(--flight-dock-soft) * 0.12))),
+    0 calc(22px + (var(--target-active) * 22px)) calc(46px + (var(--target-active) * 22px))
+      rgba(101, 124, 166, calc(0.1 + (var(--target-active) * 0.16)));
 }
 
 .download-close {
@@ -1017,14 +1137,16 @@ select {
   }
 
   .value-strip-grid,
-  .scenario-grid,
-  .system-strip-grid,
   .download-actions {
     grid-template-columns: 1fr;
   }
 
   .tool-matrix-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .tool-matrix-grid-four {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1074,6 +1196,11 @@ select {
     gap: 20px;
   }
 
+  .hero-title {
+    max-width: none;
+    font-size: clamp(3rem, 10vw, 5rem);
+  }
+
   .hero-flight {
     position: relative;
     inset: auto;
@@ -1086,18 +1213,15 @@ select {
     right: 8%;
   }
 
-  .hero-flight-card-capture,
-  .hero-flight-card-organize,
-  .hero-flight-card-clipboard {
-    width: min(31vw, 210px);
-  }
-
-  .hero-flight-card-utility {
-    width: min(24vw, 164px);
-  }
-
-  .hero-copy h1 {
-    font-size: clamp(3.2rem, 11vw, 5.2rem);
+  .hero-flight-card-capture-stack,
+  .hero-flight-card-capture-record,
+  .hero-flight-card-text-rename,
+  .hero-flight-card-text-clipboard,
+  .hero-flight-card-web-activate,
+  .hero-flight-card-web-qr,
+  .hero-flight-card-utility-float,
+  .hero-flight-card-utility-clicker {
+    width: min(28vw, 180px);
   }
 
   .hero-actions {
@@ -1110,6 +1234,10 @@ select {
   }
 
   .tool-matrix-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tool-matrix-grid-four {
     grid-template-columns: 1fr;
   }
 }
@@ -1137,8 +1265,8 @@ select {
     padding-bottom: 28px;
   }
 
-  .hero-copy h1 {
-    font-size: clamp(2.8rem, 14vw, 4rem);
+  .hero-title {
+    font-size: clamp(2.7rem, 12vw, 4rem);
   }
 
   .hero-description,
@@ -1158,22 +1286,19 @@ select {
     top: 30%;
   }
 
-  .hero-flight-card-capture,
-  .hero-flight-card-organize,
-  .hero-flight-card-clipboard {
-    width: min(34vw, 170px);
-  }
-
-  .hero-flight-card-utility {
-    width: min(28vw, 132px);
+  .hero-flight-card-capture-stack,
+  .hero-flight-card-capture-record,
+  .hero-flight-card-text-rename,
+  .hero-flight-card-text-clipboard,
+  .hero-flight-card-web-activate,
+  .hero-flight-card-web-qr,
+  .hero-flight-card-utility-float,
+  .hero-flight-card-utility-clicker {
+    width: min(34vw, 150px);
   }
 
   .section {
     padding: 72px 0;
-  }
-
-  .scenario-card h3 {
-    font-size: 1.28rem;
   }
 
   .download-card {
@@ -1218,8 +1343,10 @@ select {
   .hero-home::after,
   .hero-flight::before,
   .hero-flight::after,
-  .scenario-card[data-flight-target]::after,
-  .tool-group[data-flight-target]::after {
-    filter: none;
-  }
+.tool-group[data-flight-target][data-flight-dock="capture"]::after,
+.tool-group[data-flight-target][data-flight-dock="text"]::after,
+.tool-group[data-flight-target][data-flight-dock="web"]::after,
+.tool-group[data-flight-target][data-flight-dock="utility"]::after {
+  filter: none;
+}
 }

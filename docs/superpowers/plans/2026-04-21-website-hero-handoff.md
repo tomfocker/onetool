@@ -2,179 +2,70 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Refine the website hero so the title reads like a stable launch-page headline and each hero card docks into its matching lower module as a shared-element-style handoff during scroll.
+**Goal:** Restructure the website into `首页 Hero + 工具展示 + 下载` and make every hero flight card dock only into the second-page tool groups with a readable, delayed handoff.
 
-**Architecture:** Keep the static `website/` implementation, but tighten responsibilities. `hero-motion.js` owns the staged progress model, `index.html` exposes stable title and dock targets, `script.js` performs cached target measurement plus `requestAnimationFrame` scroll syncing, and `style.css` renders the typography and dock-state transforms. Verification stays inside lightweight Node tests plus manual preview.
+**Architecture:** Keep the static `website/` stack and remove the middle layers instead of adding new animation infrastructure. `index.html` becomes the source of truth for the three-section layout and unique dock targets, `script.js` owns the single-target mapping plus section-driven scroll timing, `hero-motion.js` keeps the pure phase math, and `style.css` renders the lighter second-page takeover states.
 
-**Tech Stack:** Static HTML, CSS custom properties, vanilla JavaScript, Node test runner (`node --test`), local browser preview via file open or `python -m http.server`.
+**Tech Stack:** Static HTML, CSS custom properties, vanilla JavaScript, Node test runner (`node --test`), local file preview in the browser.
 
 ---
 
 ## File Structure
 
-**Create:**
-- `D:/code/onetool/website/homepage-structure.test.cjs`
-- `D:/code/onetool/website/hero-style-contract.test.cjs`
-
 **Modify:**
-- `D:/code/onetool/website/index.html`
-- `D:/code/onetool/website/style.css`
-- `D:/code/onetool/website/script.js`
-- `D:/code/onetool/website/hero-motion.js`
-- `D:/code/onetool/website/hero-motion.test.cjs`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/index.html`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/style.css`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/script.js`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.js`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/homepage-structure.test.cjs`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-style-contract.test.cjs`
+- `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.test.cjs`
 
 **Responsibilities:**
-- `index.html`: expose the new two-line headline structure and stable `data-flight-target` / `data-flight-dock` anchors.
-- `style.css`: define headline rhythm, per-card dock variables, and lower-module takeover states.
-- `script.js`: cache target rectangles, schedule scroll writes through `requestAnimationFrame`, and publish per-card CSS variables.
-- `hero-motion.js`: provide pure stage math for `break`, `travel`, `morph`, `dock`, and target highlights.
-- `hero-motion.test.cjs`: prove the stage model.
-- `homepage-structure.test.cjs`: prove the markup contract for the new headline and dock targets.
-- `hero-style-contract.test.cjs`: prove the JS/CSS contract for rAF sync and dock variables exists.
+- `index.html`: remove `日常场景` and `系统支持`, rewrite navigation, expose the second-page intro plus three stable tool-group dock targets.
+- `style.css`: delete obsolete section styles, restyle the tool section as the only receiving page, and make group takeover states readable without an extra stage.
+- `script.js`: drop `#scenarios` dependencies, remap every hero card to one of three tool groups, and delay `travel/morph/dock` until the tool section is actually entering the viewport.
+- `hero-motion.js`: keep reduced-motion-safe phase helpers aligned with the new single-target flow.
+- `homepage-structure.test.cjs`: prove the page only has three primary sections and only three navigation anchors.
+- `hero-style-contract.test.cjs`: prove the script/CSS contract uses only tool-section targets and publishes the new dock variables.
+- `hero-motion.test.cjs`: prove the motion phases remain delayed enough that docking cannot complete before the tool section is readable.
 
 ---
 
-### Task 1: Expand The Pure Motion Model
+### Task 1: Lock The Three-Section Markup Contract
 
 **Files:**
-- Modify: `D:/code/onetool/website/hero-motion.js`
-- Modify: `D:/code/onetool/website/hero-motion.test.cjs`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/homepage-structure.test.cjs`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/index.html`
 
-- [ ] **Step 1: Write the failing motion-state tests**
+- [ ] **Step 1: Rewrite the failing structure tests**
 
-Add these cases to `D:/code/onetool/website/hero-motion.test.cjs` below the existing tests:
-
-```js
-test('hero motion enters morph before final dock takeover', () => {
-  const state = getHeroMotionState(0.86)
-
-  assert.ok(state.travelSoft > 0.9)
-  assert.ok(state.morph > 0)
-  assert.ok(state.dock === 0)
-  assert.ok(state.highlight.capture > 0.95)
-  assert.ok(state.highlight.matrix > 0)
-})
-
-test('hero motion reaches dock state at the end of the sticky range', () => {
-  const state = getHeroMotionState(0.985)
-
-  assert.ok(state.morph > 0.9)
-  assert.ok(state.dock > 0)
-  assert.ok(state.dockSoft > 0)
-  assert.equal(state.breakout <= 1, true)
-})
-
-test('reduced motion zeros morph and dock stages too', () => {
-  const state = getHeroMotionState(0.95, true)
-
-  assert.equal(state.morph, 0)
-  assert.equal(state.dock, 0)
-  assert.equal(state.dockSoft, 0)
-})
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run:
-
-```powershell
-node --test website/hero-motion.test.cjs
-```
-
-Expected: FAIL because `morph`, `dock`, and `dockSoft` are not defined on the current motion state.
-
-- [ ] **Step 3: Implement the minimal motion-state fields**
-
-Update `D:/code/onetool/website/hero-motion.js` so `getHeroMotionState()` computes the extra phases:
+Replace the old section assertions in `D:/code/onetool/.worktrees/website-hero-handoff/website/homepage-structure.test.cjs` with:
 
 ```js
-  const morph = getPhase(safeProgress, 0.78, 0.94)
-  const dock = getPhase(safeProgress, 0.94, 1)
-
-  return {
-    progress: safeProgress,
-    breakout,
-    breakoutSoft: easeOutCubic(breakout),
-    travel,
-    travelSoft: easeInQuart(easeInOutSine(travel)),
-    morph,
-    morphSoft: easeInOutSine(morph),
-    settle,
-    settleSoft: easeOutCubic(settle),
-    dock,
-    dockSoft: easeOutCubic(dock),
-    highlight: {
-      capture: easeOutCubic(getPhase(safeProgress, 0.56, 0.8)),
-      organize: easeOutCubic(getPhase(safeProgress, 0.61, 0.84)),
-      utility: easeOutCubic(getPhase(safeProgress, 0.66, 0.88)),
-      matrix: easeOutCubic(getPhase(safeProgress, 0.82, 0.96))
-    }
-  }
-```
-
-Also extend the reduced-motion branch:
-
-```js
-      morph: 0,
-      morphSoft: 0,
-      dock: 0,
-      dockSoft: 0,
-```
-
-- [ ] **Step 4: Run the test to verify it passes**
-
-Run:
-
-```powershell
-node --test website/hero-motion.test.cjs
-```
-
-Expected: PASS with all motion-stage tests green.
-
-- [ ] **Step 5: Commit**
-
-```powershell
-git add website/hero-motion.js website/hero-motion.test.cjs
-git commit -m "test: expand website hero motion phases"
-```
-
----
-
-### Task 2: Lock The Markup Contract For Headline And Dock Targets
-
-**Files:**
-- Create: `D:/code/onetool/website/homepage-structure.test.cjs`
-- Modify: `D:/code/onetool/website/index.html`
-
-- [ ] **Step 1: Write the failing structure test**
-
-Create `D:/code/onetool/website/homepage-structure.test.cjs`:
-
-```js
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-
-const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
-
-test('hero heading uses dedicated title lines instead of raw line breaks', () => {
-  assert.match(html, /class="hero-title"/)
-  assert.match(html, /class="hero-title-line">一个应用，收齐</)
-  assert.match(html, /class="hero-title-line hero-title-line-wide">Windows 日常高频工具</)
-  assert.doesNotMatch(html, /<h1 id="hero-title">一个应用，<br \/>收齐 Windows<br \/>日常高频工具。<\/h1>/)
+test('homepage keeps only hero, tools, and download sections', () => {
+  assert.match(html, /<section class="hero-section" id="hero">/)
+  assert.match(html, /<section class="tool-matrix" id="tools">/)
+  assert.match(html, /<section class="download-close" id="download">/)
+  assert.doesNotMatch(html, /id="scenarios"/)
+  assert.doesNotMatch(html, /id="system"/)
 })
 
-test('hero cards and landing modules expose stable dock keys', () => {
-  assert.match(html, /data-flight-card="capture"/)
-  assert.match(html, /data-flight-card="organize"/)
-  assert.match(html, /data-flight-card="clipboard"/)
-  assert.match(html, /data-flight-card="utility"/)
-  assert.match(html, /data-flight-card="matrix"/)
-  assert.match(html, /data-flight-dock="capture"/)
-  assert.match(html, /data-flight-dock="organize"/)
-  assert.match(html, /data-flight-dock="utility"/)
-  assert.match(html, /data-flight-dock="matrix"/)
+test('top navigation exposes only three in-page anchors', () => {
+  assert.match(html, /<a href="#hero">首页<\/a>/)
+  assert.match(html, /<a href="#tools">工具展示<\/a>/)
+  assert.match(html, /<a href="#download">下载<\/a>/)
+  assert.doesNotMatch(html, /href="#scenarios"/)
+  assert.doesNotMatch(html, /href="#system"/)
+})
+
+test('tool section includes a short intro and three dock groups', () => {
+  assert.match(html, /class="tool-matrix-intro"/)
+  assert.match(html, /data-flight-target="capture"/)
+  assert.match(html, /data-flight-target="organize"/)
+  assert.match(html, /data-flight-target="utility"/)
+  assert.doesNotMatch(html, /data-flight-target="matrix"/)
+  assert.doesNotMatch(html, /data-flight-target="clipboard"/)
 })
 ```
 
@@ -186,39 +77,38 @@ Run:
 node --test website/homepage-structure.test.cjs
 ```
 
-Expected: FAIL because the current `h1` still uses `<br />` and the hero cards do not expose `data-flight-card` / `data-flight-dock`.
+Expected: FAIL because the current HTML still contains `#scenarios`, `#system`, and five nav/target variants.
 
-- [ ] **Step 3: Implement the headline and dock markup**
+- [ ] **Step 3: Implement the three-section HTML**
 
-Update the hero title in `D:/code/onetool/website/index.html`:
+Update `D:/code/onetool/.worktrees/website-hero-handoff/website/index.html` so the nav becomes:
 
 ```html
-<h1 class="hero-title" id="hero-title">
-  <span class="hero-title-line">一个应用，收齐</span>
-  <span class="hero-title-line hero-title-line-wide">Windows 日常高频工具</span>
-</h1>
+<nav class="site-nav-links" aria-label="主导航">
+  <a href="#hero">首页</a>
+  <a href="#tools">工具展示</a>
+  <a href="#download">下载</a>
+</nav>
 ```
 
-Update the hero cards:
+Remove the whole `#scenarios` section and the whole `#system` section. At the top of `#tools`, insert the short intro block:
 
 ```html
-<div class="hero-flight-card hero-flight-card-main" data-flight-card="matrix"></div>
-<div class="hero-flight-card hero-flight-card-capture" data-flight-card="capture"></div>
-<div class="hero-flight-card hero-flight-card-organize" data-flight-card="organize"></div>
-<div class="hero-flight-card hero-flight-card-clipboard" data-flight-card="clipboard"></div>
-<div class="hero-flight-card hero-flight-card-utility" data-flight-card="utility"></div>
+<div class="tool-matrix-intro">
+  <p class="tool-matrix-eyebrow">TOOLS</p>
+  <h2>常用工具已经整理好，滚动到这里就能直接接住。</h2>
+  <p>截图、文件处理、剪贴板和零碎小工具不再分散展示，第二页就是唯一落点。</p>
+</div>
 ```
 
-Update the lower targets:
+Retarget the three receiving groups:
 
 ```html
-<article class="scenario-card" data-flight-target="capture" data-flight-dock="capture">
+<article class="tool-group tool-group-primary" data-flight-target="capture" data-flight-dock="capture">
 ...
-<article class="scenario-card" data-flight-target="organize" data-flight-dock="organize">
+<article class="tool-group" data-flight-target="organize" data-flight-dock="organize">
 ...
-<article class="scenario-card" data-flight-target="utility" data-flight-dock="utility">
-...
-<article class="tool-group tool-group-primary" data-flight-target="matrix" data-flight-dock="matrix">
+<article class="tool-group" data-flight-target="utility" data-flight-dock="utility">
 ```
 
 - [ ] **Step 4: Run the test to verify it passes**
@@ -229,51 +119,46 @@ Run:
 node --test website/homepage-structure.test.cjs
 ```
 
-Expected: PASS with both structure checks green.
+Expected: PASS with the three-section structure locked in.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
 git add website/index.html website/homepage-structure.test.cjs
-git commit -m "feat: add website hero dock markup contract"
+git commit -m "feat: simplify website to three-section layout"
 ```
 
 ---
 
-### Task 3: Wire Shared-Element Handoff Through Cached Targets And rAF
+### Task 2: Retarget Hero Cards To The Tool Section Only
 
 **Files:**
-- Create: `D:/code/onetool/website/hero-style-contract.test.cjs`
-- Modify: `D:/code/onetool/website/script.js`
-- Modify: `D:/code/onetool/website/style.css`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-style-contract.test.cjs`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/script.js`
 
-- [ ] **Step 1: Write the failing JS/CSS contract test**
+- [ ] **Step 1: Rewrite the failing JS contract test**
 
-Create `D:/code/onetool/website/hero-style-contract.test.cjs`:
+Update `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-style-contract.test.cjs` with assertions like:
 
 ```js
-const test = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const path = require('node:path')
-
-const script = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8')
-const style = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8')
-
-test('scroll syncing uses requestAnimationFrame and publishes morph and dock variables', () => {
-  assert.match(script, /requestAnimationFrame/)
-  assert.match(script, /--flight-morph/)
-  assert.match(script, /--flight-dock/)
-  assert.match(script, /data-flight-dock/)
+test('script maps every hero card to one of the three tool groups', () => {
+  assert.match(script, /capture:\s*'capture'/)
+  assert.match(script, /organize:\s*'organize'/)
+  assert.match(script, /clipboard:\s*'organize'/)
+  assert.match(script, /utility:\s*'utility'/)
+  assert.match(script, /matrix:\s*'capture'/)
 })
 
-test('hero cards expose dock transforms and target modules expose takeover styling', () => {
-  assert.match(style, /--dock-x/)
-  assert.match(style, /--dock-y/)
-  assert.match(style, /--dock-scale/)
-  assert.match(style, /\.hero-flight-card\[data-flight-card=/)
-  assert.match(style, /\[data-flight-dock='capture'\]/)
-  assert.match(style, /var\(--flight-dock-soft\)/)
+test('script no longer queries scenarios or system sections', () => {
+  assert.doesNotMatch(script, /#scenarios/)
+  assert.doesNotMatch(script, /#system/)
+  assert.match(script, /const toolsSection = document\.querySelector\('#tools'\)/)
+})
+
+test('script publishes travel, morph, and dock progress from the tool section', () => {
+  assert.match(script, /travelProgress:\s*getViewportProgress\(toolsSection,/)
+  assert.match(script, /morphProgress:\s*getViewportProgress\(toolsSection,/)
+  assert.match(script, /dockProgress:\s*getViewportProgress\(toolsSection,/)
 })
 ```
 
@@ -285,215 +170,44 @@ Run:
 node --test website/hero-style-contract.test.cjs
 ```
 
-Expected: FAIL because the current script does not use `requestAnimationFrame` for scroll syncing and the CSS does not define dock variables.
+Expected: FAIL because `script.js` still references `#scenarios` and still maps `clipboard` / `matrix` to separate targets.
 
-- [ ] **Step 3: Implement cached target measurement and rAF scroll syncing**
+- [ ] **Step 3: Implement the single-target mapping and timing**
 
-In `D:/code/onetool/website/script.js`, replace direct scroll writes with a scheduled sync:
-
-```js
-  const dockTargets = {
-    capture: document.querySelector('[data-flight-dock="capture"]'),
-    organize: document.querySelector('[data-flight-dock="organize"]'),
-    utility: document.querySelector('[data-flight-dock="utility"]'),
-    matrix: document.querySelector('[data-flight-dock="matrix"]')
-  }
-
-  let frameRequested = false
-
-  const scheduleSync = () => {
-    if (frameRequested) {
-      return
-    }
-
-    frameRequested = true
-    window.requestAnimationFrame(() => {
-      frameRequested = false
-      syncScrollState()
-    })
-  }
-```
-
-Publish the new motion variables inside `syncScrollState()`:
+In `D:/code/onetool/.worktrees/website-hero-handoff/website/script.js`, collapse the receiving map to:
 
 ```js
-    root.style.setProperty('--flight-morph', state.morph.toFixed(4))
-    root.style.setProperty('--flight-morph-soft', state.morphSoft.toFixed(4))
-    root.style.setProperty('--flight-dock', state.dock.toFixed(4))
-    root.style.setProperty('--flight-dock-soft', state.dockSoft.toFixed(4))
+const flightTargets = {
+  capture: document.querySelector('[data-flight-target="capture"]'),
+  organize: document.querySelector('[data-flight-target="organize"]'),
+  utility: document.querySelector('[data-flight-target="utility"]')
+}
+
+const dockTargets = {
+  capture: document.querySelector('[data-flight-dock="capture"]'),
+  organize: document.querySelector('[data-flight-dock="organize"]'),
+  utility: document.querySelector('[data-flight-dock="utility"]')
+}
+
+const targetMap = {
+  capture: 'capture',
+  organize: 'organize',
+  clipboard: 'organize',
+  utility: 'utility',
+  matrix: 'capture'
+}
 ```
 
-Extend target syncing so each card gets dock coordinates and a dock scale:
+Replace the old mixed-section timing with tool-only timing:
 
 ```js
-      const dockTarget = dockTargets[targetKey]
-      const dockRect = dockTarget?.getBoundingClientRect()
-      const dockX = dockRect ? dockRect.left - flightRect.left + dockRect.width / 2 : targetX
-      const dockY = dockRect ? dockRect.top - flightRect.top + dockRect.height / 2 : targetY
-      const dockScale = dockRect ? dockRect.width / card.offsetWidth : 1
-
-      card.style.setProperty('--dock-x', `${dockX - startX + bias.x}px`)
-      card.style.setProperty('--dock-y', `${dockY - startY + bias.y}px`)
-      card.style.setProperty('--dock-scale', dockScale.toFixed(4))
+const travelProgress = getViewportProgress(toolsSection, 1.1, 0.34)
+const morphProgress = getViewportProgress(toolsSection, 0.74, 0.2)
+const dockProgress = getViewportProgress(toolsSection, 0.46, 0.08)
+const settleProgress = getViewportProgress(toolsSection, 0.92, 0.14)
 ```
 
-Swap the scroll listener to:
-
-```js
-  window.addEventListener('scroll', scheduleSync, { passive: true })
-```
-
-- [ ] **Step 4: Implement dock transforms and takeover styling**
-
-In `D:/code/onetool/website/style.css`, add the new card variables:
-
-```css
-.hero-flight-card {
-  --dock-x: 0px;
-  --dock-y: 0px;
-  --dock-scale: 1;
-}
-```
-
-Update a representative card transform pattern; apply the same shape to the other cards:
-
-```css
-.hero-flight-card-capture {
-  transform:
-    translate3d(
-      calc(
-        (var(--break-x) * var(--flight-breakout-soft)) +
-        (var(--target-x) * var(--flight-travel-soft)) +
-        (var(--dock-x) * var(--flight-dock-soft))
-      ),
-      calc(
-        (var(--break-y) * var(--flight-breakout-soft)) +
-        (var(--target-y) * var(--flight-travel-soft)) +
-        (var(--dock-y) * var(--flight-dock-soft))
-      ),
-      0
-    )
-    scale(
-      calc(
-        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
-        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
-      )
-    )
-    rotate(calc(7deg * (1 - var(--flight-morph-soft))));
-  opacity: calc(1 - (0.82 * var(--flight-dock-soft)));
-}
-```
-
-Add lower-module takeover styling:
-
-```css
-[data-flight-dock='capture'],
-[data-flight-dock='organize'],
-[data-flight-dock='utility'],
-[data-flight-dock='matrix'] {
-  transform: translateY(calc((1 - var(--flight-dock-soft)) * 16px));
-  box-shadow: 0 20px 60px rgba(110, 134, 182, calc(0.04 + (var(--flight-dock-soft) * 0.08)));
-}
-```
-
-- [ ] **Step 5: Run the test to verify it passes**
-
-Run:
-
-```powershell
-node --test website/hero-style-contract.test.cjs
-```
-
-Expected: PASS with both contract checks green.
-
-- [ ] **Step 6: Commit**
-
-```powershell
-git add website/script.js website/style.css website/hero-style-contract.test.cjs
-git commit -m "feat: add website shared-element hero handoff"
-```
-
----
-
-### Task 4: Polish The Launch-Page Headline And Dock-State Visual Rhythm
-
-**Files:**
-- Modify: `D:/code/onetool/website/style.css`
-
-- [ ] **Step 1: Add the failing typography contract**
-
-Append this test to `D:/code/onetool/website/hero-style-contract.test.cjs`:
-
-```js
-test('hero title uses launch-page typography instead of the old stacked tower', () => {
-  assert.match(style, /\.hero-title\s*{/)
-  assert.match(style, /\.hero-title-line-wide\s*{/)
-  assert.match(style, /max-width:\s*10ch/)
-  assert.match(style, /font-size:\s*clamp\(3\.4rem,\s*6\.2vw,\s*6\.4rem\)/)
-  assert.match(style, /letter-spacing:\s*-0\.07em/)
-})
-```
-
-- [ ] **Step 2: Run the test to verify it fails**
-
-Run:
-
-```powershell
-node --test website/hero-style-contract.test.cjs
-```
-
-Expected: FAIL because `.hero-title` and `.hero-title-line-wide` rules do not exist yet.
-
-- [ ] **Step 3: Implement the headline typography**
-
-Add these rules to `D:/code/onetool/website/style.css` and remove the old `.hero-copy h1` tower-specific sizing:
-
-```css
-.hero-copy {
-  gap: 18px;
-  max-width: 560px;
-}
-
-.hero-title {
-  display: grid;
-  max-width: 10ch;
-  font-size: clamp(3.4rem, 6.2vw, 6.4rem);
-  line-height: 0.9;
-  letter-spacing: -0.07em;
-  text-wrap: balance;
-}
-
-.hero-title-line {
-  display: block;
-}
-
-.hero-title-line-wide {
-  font-size: 0.9em;
-  letter-spacing: -0.06em;
-}
-
-.hero-description {
-  max-width: 30ch;
-  font-size: 1.02rem;
-}
-```
-
-Also update responsive overrides:
-
-```css
-@media (max-width: 860px) {
-  .hero-title {
-    max-width: none;
-    font-size: clamp(3rem, 10vw, 5rem);
-  }
-}
-
-@media (max-width: 560px) {
-  .hero-title {
-    font-size: clamp(2.7rem, 12vw, 4rem);
-  }
-}
-```
+Keep `syncFlightTargets()` and the cached measurement flow, but remove any dependency on `scenariosSection`.
 
 - [ ] **Step 4: Run the test to verify it passes**
 
@@ -503,26 +217,177 @@ Run:
 node --test website/hero-style-contract.test.cjs
 ```
 
-Expected: PASS with the new typography contract green alongside the handoff contract.
+Expected: PASS with only tool-section mappings and timing left.
+
+- [ ] **Step 5: Commit**
+
+```powershell
+git add website/script.js website/hero-style-contract.test.cjs
+git commit -m "feat: retarget website hero handoff to tool groups"
+```
+
+---
+
+### Task 3: Restyle The Tool Section As The Only Receiving Page
+
+**Files:**
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-style-contract.test.cjs`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/style.css`
+
+- [ ] **Step 1: Add the failing CSS contract assertions**
+
+Extend `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-style-contract.test.cjs` with:
+
+```js
+test('styles define a dedicated intro block for the tool section', () => {
+  assert.match(style, /\.tool-matrix-intro\s*\{/)
+  assert.match(style, /\.tool-matrix-intro h2\s*\{/)
+})
+
+test('styles expose the lighter dock takeover states on tool groups', () => {
+  assert.match(style, /\.tool-group\[data-flight-dock="capture"\]/)
+  assert.match(style, /\.tool-group\[data-flight-dock="organize"\]/)
+  assert.match(style, /\.tool-group\[data-flight-dock="utility"\]/)
+  assert.match(style, /transform:\s*translate3d\(0,\s*calc\(var\(--dock-lift/)
+})
+
+test('styles no longer require scenario-card takeover rules', () => {
+  assert.doesNotMatch(style, /\.scenario-card\[data-flight-dock=/)
+})
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run:
+
+```powershell
+node --test website/hero-style-contract.test.cjs
+```
+
+Expected: FAIL because the stylesheet still contains scenario-card takeover selectors and does not yet style `tool-matrix-intro`.
+
+- [ ] **Step 3: Implement the lighter receiving-page styling**
+
+In `D:/code/onetool/.worktrees/website-hero-handoff/website/style.css`, add the intro block:
+
+```css
+.tool-matrix-intro {
+  max-width: 720px;
+  margin: 0 0 2.8rem;
+}
+
+.tool-matrix-intro h2 {
+  margin: 0.3rem 0 0.8rem;
+  font-size: clamp(2rem, 4vw, 3.4rem);
+  line-height: 1.02;
+}
+```
+
+Replace the old scenario takeover rules with tool-group takeover rules:
+
+```css
+.tool-group[data-flight-dock] {
+  --dock-lift: calc(var(--flight-highlight, 0) * -22px);
+  transform: translate3d(0, calc(var(--dock-lift) + var(--group-shift, 0px)), 0)
+    scale(calc(1 + var(--flight-highlight, 0) * 0.025));
+  border-color: color-mix(in srgb, rgba(130, 164, 255, 0.42) 70%, rgba(209, 221, 255, 0.28));
+  box-shadow:
+    0 32px 70px rgba(142, 166, 224, calc(0.14 + var(--flight-highlight, 0) * 0.14)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+}
+```
+
+Delete obsolete `.scenario-section`, `.scenario-grid`, `.scenario-card`, and `.system-strip` takeover rules after the HTML removal.
+
+- [ ] **Step 4: Run the test to verify it passes**
+
+Run:
+
+```powershell
+node --test website/hero-style-contract.test.cjs
+```
+
+Expected: PASS with the tool section now acting as the only receiver.
 
 - [ ] **Step 5: Commit**
 
 ```powershell
 git add website/style.css website/hero-style-contract.test.cjs
-git commit -m "feat: refine website hero launch-page typography"
+git commit -m "feat: style website tool page as hero handoff target"
 ```
 
 ---
 
-### Task 5: Verify The Whole Hero Flow
+### Task 4: Recalibrate Motion Phases For The Shorter Page
 
 **Files:**
-- Modify if needed: `D:/code/onetool/website/index.html`
-- Modify if needed: `D:/code/onetool/website/style.css`
-- Modify if needed: `D:/code/onetool/website/script.js`
-- Modify if needed: `D:/code/onetool/website/hero-motion.js`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.test.cjs`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.js`
+- Modify: `D:/code/onetool/.worktrees/website-hero-handoff/website/script.js`
 
-- [ ] **Step 1: Run the full website test set**
+- [ ] **Step 1: Add the failing delayed-handoff tests**
+
+Update `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.test.cjs` with:
+
+```js
+test('motion keeps dock at zero through the early travel band', () => {
+  const state = getHeroMotionState(0.62)
+
+  assert.ok(state.travel > 0)
+  assert.equal(state.dock, 0)
+  assert.ok(state.morph < 0.5)
+})
+
+test('motion enters dock only near the end of the tool-section handoff', () => {
+  const state = getHeroMotionState(0.92)
+
+  assert.ok(state.morph > 0.7)
+  assert.ok(state.dock > 0)
+})
+
+test('reduced motion still zeros travel-adjacent takeover phases', () => {
+  const state = getHeroMotionState(0.92, true)
+
+  assert.equal(state.morph, 0)
+  assert.equal(state.dock, 0)
+  assert.equal(state.highlight.capture, 0)
+})
+```
+
+- [ ] **Step 2: Run the test to verify it fails**
+
+Run:
+
+```powershell
+node --test website/hero-motion.test.cjs
+```
+
+Expected: FAIL because the current phase windows were tuned for a longer page and begin completing too early.
+
+- [ ] **Step 3: Implement the shorter-page phase windows**
+
+In `D:/code/onetool/.worktrees/website-hero-handoff/website/hero-motion.js`, retune the pure helper:
+
+```js
+const breakout = getPhase(safeProgress, 0.12, 0.34)
+const travel = getPhase(safeProgress, 0.34, 0.84)
+const morph = getPhase(safeProgress, 0.7, 0.94)
+const dock = getPhase(safeProgress, 0.88, 1)
+```
+
+Keep the existing returned shape, but ensure the highlight keys match the three receiving groups:
+
+```js
+highlight: {
+  capture: easeOutCubic(getPhase(safeProgress, 0.68, 0.94)),
+  organize: easeOutCubic(getPhase(safeProgress, 0.72, 0.95)),
+  utility: easeOutCubic(getPhase(safeProgress, 0.76, 0.97))
+}
+```
+
+Mirror the same intent in `D:/code/onetool/.worktrees/website-hero-handoff/website/script.js` by keeping `dockProgress` late enough that it cannot finish before the tool groups sit in the readable center of the viewport.
+
+- [ ] **Step 4: Run the full website test suite**
 
 Run:
 
@@ -530,49 +395,28 @@ Run:
 node --test website/hero-motion.test.cjs website/homepage-structure.test.cjs website/hero-style-contract.test.cjs
 ```
 
-Expected: PASS with all tests green and zero failing suites.
+Expected: PASS with all website contract tests green.
 
-- [ ] **Step 2: Format the static site files**
+- [ ] **Step 5: Manual preview and commit**
 
-Run:
-
-```powershell
-npx prettier --write website/index.html website/style.css website/script.js website/hero-motion.js website/hero-motion.test.cjs website/homepage-structure.test.cjs website/hero-style-contract.test.cjs
-```
-
-Expected: Prettier rewrites the touched files with no syntax errors.
-
-- [ ] **Step 3: Preview the page locally**
-
-Run:
+Preview:
 
 ```powershell
-Start-Process 'D:\\code\\onetool\\website\\index.html'
+Start-Process 'D:/code/onetool/.worktrees/website-hero-handoff/website/index.html'
 ```
 
-Expected: the local browser opens the updated static page.
+Manual check:
+- Hero still reads cleanly at the top.
+- Second page opens with the short intro plus exactly three tool groups.
+- Cards remain visible while the tool page enters and clearly dock into those three groups.
+- No `日常场景` or `系统支持` sections remain.
 
-- [ ] **Step 4: Perform manual verification**
-
-Check all of the following:
-
-- the left headline reads as two launch-page lines instead of a vertical tower
-- the hero body copy and buttons sit higher and feel less cramped
-- the `capture`, `organize`, `clipboard`, `utility`, and `matrix` cards visibly move toward their real target modules
-- near the end of the sticky range, the cards rotate and scale down into the lower modules instead of floating past them
-- scrolling feels smoother than before, with no obvious jitter from target recomputation
-- mobile width still collapses cleanly and reduced motion remains readable
-
-- [ ] **Step 5: Commit any verification-driven fixups**
-
-If Step 4 required any follow-up polish, commit exactly those changes:
+Commit:
 
 ```powershell
-git add website/index.html website/style.css website/script.js website/hero-motion.js website/hero-motion.test.cjs website/homepage-structure.test.cjs website/hero-style-contract.test.cjs
-git commit -m "fix: polish website hero handoff verification issues"
+git add website/index.html website/style.css website/script.js website/hero-motion.js website/homepage-structure.test.cjs website/hero-style-contract.test.cjs website/hero-motion.test.cjs
+git commit -m "feat: simplify website hero handoff flow"
 ```
-
-If no polish was needed, skip this step.
 
 ---
 
@@ -580,19 +424,19 @@ If no polish was needed, skip this step.
 
 ### Spec coverage
 
-- The stable launch-page title is covered in Task 2 and Task 4.
-- Shared-element-style handoff stages are covered in Task 1 and Task 3.
-- Performance constraints (`requestAnimationFrame`, cached measurements, no per-scroll rect churn) are covered in Task 3.
-- Validation requirements are covered in Task 5.
+- Three-section structure: covered by Task 1.
+- Short tool-page intro plus three groups: covered by Tasks 1 and 3.
+- Single-target hero mapping: covered by Task 2.
+- Delayed, readable dock timing: covered by Task 4.
+- Removal of `日常场景` and `系统支持`: covered by Tasks 1 and 3.
 
 ### Placeholder scan
 
-- No `TODO`, `TBD`, or “implement later” placeholders remain.
-- Every task names exact files and exact commands.
-- Every code-changing step includes concrete code to add or modify.
+- No `TODO` / `TBD`.
+- Every code-changing step includes exact file paths, commands, and concrete snippets.
 
-### Type consistency
+### Type and naming consistency
 
-- Stage property names are consistent across plan tasks: `morph`, `morphSoft`, `dock`, `dockSoft`.
-- Markup contract names are consistent across HTML, CSS, and JS: `data-flight-card`, `data-flight-target`, `data-flight-dock`.
-- CSS variable names are consistent across script and style steps: `--flight-morph`, `--flight-morph-soft`, `--flight-dock`, `--flight-dock-soft`, `--dock-x`, `--dock-y`, `--dock-scale`.
+- Receiving keys are consistently `capture`, `organize`, and `utility`.
+- Hero card keys remain `capture`, `organize`, `clipboard`, `utility`, and `matrix`.
+- The remap stays consistent across `index.html`, `script.js`, `style.css`, and the tests.
