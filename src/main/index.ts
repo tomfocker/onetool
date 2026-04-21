@@ -47,6 +47,7 @@ import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
+import { registerTaskbarAppearanceIpc, restoreTaskbarAppearanceOnStartup } from './ipc/taskbarAppearanceIpc'
 import { registerUpdateIpc } from './ipc/updateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 import { registerWslIpc } from './ipc/wslIpc'
@@ -179,6 +180,7 @@ app.whenReady().then(() => {
   registerLocalProxyIpc()
   registerNetworkIpc()
   registerTranslateIpc()
+  registerTaskbarAppearanceIpc()
   registerRenameIpc()
   registerQuickInstallerIpc()
   registerScreenOverlayIpc()
@@ -220,6 +222,7 @@ app.whenReady().then(() => {
 
   // Global Initializations
   createWindow()
+  void restoreTaskbarAppearanceOnStartup()
   void downloadOrganizerService.initialize()
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
@@ -282,3 +285,4 @@ app.on('window-all-closed', () => {
     app.quit()
   }
 })
+

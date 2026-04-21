@@ -11,6 +11,7 @@ import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
+import type { TaskbarAppearancePreset } from '../shared/taskbarAppearance'
 import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
@@ -275,6 +276,13 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     translateImage: (base64Image: string) => ipcRenderer.invoke('translate:image', base64Image)
   }
 
+  const taskbarAppearanceAPI = {
+    getStatus: () => ipcRenderer.invoke('taskbar-appearance-get-status'),
+    applyPreset: (input: { preset: TaskbarAppearancePreset; intensity: number; tintHex: string }) => {
+      return ipcRenderer.invoke('taskbar-appearance-apply-preset', input)
+    },
+    restoreDefault: () => ipcRenderer.invoke('taskbar-appearance-restore-default')
+  }
   const appAPI = {
     onOpenTool: (callback: (toolId: string) => void) => onChannel('open-tool', callback),
     onNotification: (callback: (data: any) => void) => onChannel('app-notification', callback)
@@ -372,6 +380,8 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     localProxy: localProxyAPI,
     network: networkAPI,
     translate: translateAPI,
+    taskbarAppearance: taskbarAppearanceAPI,
     wsl: wslAPI
   }
 }
+
