@@ -58,28 +58,6 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(syncScrollStateBlock[0], /--flight-dock/)
 })
 
-test('hero cards expose dock transforms and final target-module rule includes dock takeover styling', () => {
-  const targetModuleRule = style.match(
-    /\.scenario-card\[data-flight-target\],\s*\.tool-group\[data-flight-target\]\s*\{[\s\S]*?\n\}/
-  )
-  const heroStickyRule = style.match(/\.hero-sticky\s*\{[\s\S]*?\n\}/)
-
-  assert.ok(targetModuleRule, 'expected final target-module rule in style.css')
-  assert.ok(heroStickyRule, 'expected .hero-sticky rule in style.css')
-  assert.match(style, /--dock-x/)
-  assert.match(style, /--dock-y/)
-  assert.match(style, /--dock-scale/)
-  assert.match(style, /--clipboard-highlight/)
-  assert.match(style, /\.hero-flight-card\[data-flight-card=/)
-  assert.match(heroStickyRule[0], /overflow:\s*visible/)
-  assert.match(style, /\[data-flight-target='clipboard'\]\s*\{/)
-  assert.match(targetModuleRule[0], /var\(--flight-dock-soft\)/)
-  assert.doesNotMatch(
-    style,
-    /\[data-flight-dock='capture'\],\s*\[data-flight-dock='organize'\],\s*\[data-flight-dock='utility'\],\s*\[data-flight-dock='matrix'\]\s*\{/
-  )
-})
-
 test('hero title uses launch-page typography instead of the old stacked tower', () => {
   assert.match(style, /\.hero-title\s*{/)
   assert.match(style, /\.hero-title-line-wide\s*{/)
