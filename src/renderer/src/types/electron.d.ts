@@ -16,7 +16,13 @@ import {
   WslOverview,
   WslRestoreMode,
   WslSpaceReclaimResult,
-  AppNotification
+  AppNotification,
+  BilibiliDownloaderState,
+  BilibiliExportMode,
+  BilibiliLinkKind,
+  BilibiliLoginSession,
+  BilibiliParsedLink,
+  BilibiliStreamOptionSummary
 } from '../../../shared/types'
 import type { UpdateState } from '../../../shared/appUpdate'
 import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
@@ -73,6 +79,30 @@ declare global {
         downloadUpdate: () => Promise<IpcResponse>
         quitAndInstall: () => Promise<IpcResponse>
         onStateChanged: (callback: (state: UpdateState) => void) => () => void
+      }
+      bilibiliDownloader: {
+        getSession: () => Promise<IpcResponse<BilibiliLoginSession>>
+        startLogin: () => Promise<IpcResponse<{ qrUrl: string; authCode: string }>>
+        pollLogin: () => Promise<IpcResponse<{ status: 'pending' | 'scanned' | 'confirmed'; loginSession?: BilibiliLoginSession }>>
+        logout: () => Promise<IpcResponse>
+        parseLink: (link: string) => Promise<IpcResponse<BilibiliParsedLink>>
+        loadStreamOptions: (kind: BilibiliLinkKind, itemId: string) => Promise<IpcResponse<{
+          itemId: string
+          qnOptions: Array<{
+            qn: number
+            label: string
+            selected: boolean
+            available: boolean
+          }>
+          summary: BilibiliStreamOptionSummary
+        }>>
+        startDownload: (exportMode: BilibiliExportMode, outputDirectory?: string) => Promise<IpcResponse<{
+          outputPaths: string[]
+          tempDirectory: string
+        }>>
+        cancelDownload: () => Promise<IpcResponse>
+        selectOutputDirectory: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+        onStateChanged: (callback: (state: BilibiliDownloaderState) => void) => () => void
       }
       webUtils: {
         getPathForFile: (file: File) => string

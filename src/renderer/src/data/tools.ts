@@ -130,6 +130,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'ImageProcessorTool'
   },
   {
+    id: 'bilibili-downloader',
+    name: 'B站下载',
+    description: '扫码登录后下载当前账号可访问的 B 站视频或剧集条目',
+    category: '媒体处理',
+    icon: 'Download',
+    componentPath: 'BilibiliDownloaderTool'
+  },
+  {
     id: 'autoclicker',
     name: '连点器',
     description: '极速模拟鼠标连点操作',

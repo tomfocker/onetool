@@ -55,6 +55,7 @@ import { spaceCleanupService } from './services/SpaceCleanupService'
 import { registerDownloadOrganizerIpc } from './ipc/downloadOrganizerIpc'
 import { downloadOrganizerService } from './services/DownloadOrganizerService'
 import { registerModelDownloadIpc } from './ipc/modelDownloadIpc'
+import { registerBilibiliDownloaderIpc } from './ipc/bilibiliDownloaderIpc'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -198,6 +199,7 @@ app.whenReady().then(() => {
   registerSpaceCleanupIpc(() => mainWindow)
   registerDownloadOrganizerIpc(() => mainWindow)
   registerModelDownloadIpc(() => mainWindow)
+  registerBilibiliDownloaderIpc(() => mainWindow)
 
   // Silent system health check
   setTimeout(async () => {

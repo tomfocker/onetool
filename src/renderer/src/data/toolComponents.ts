@@ -70,6 +70,16 @@ export const toolComponents: ToolComponent[] = [
     installed: true
   },
   {
+    id: 'bilibili-downloader',
+    name: 'B站下载',
+    description: '扫码登录、选择条目并导出当前账号可访问的 B 站视频流',
+    category: '多媒体',
+    size: 4,
+    version: '1.0.0',
+    icon: 'Download',
+    installed: true
+  },
+  {
     id: 'web-activator',
     name: '网页激活器',
     description: '自动激活网页元素，支持自定义规则',
