@@ -23,7 +23,7 @@ pub fn summary(snapshot: &ScanSnapshot, largest_files: &[LargestFile]) -> ScanSu
 }
 
 pub fn tree(snapshot: &ScanSnapshot) -> TreeNode {
-    map_tree_node(&snapshot.root)
+    map_tree_node(&snapshot.root, 2)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -128,7 +128,30 @@ fn count_directories(entry: &ScanEntry) -> u64 {
     }
 }
 
-fn map_tree_node(entry: &ScanEntry) -> TreeNode {
+fn count_files(entry: &ScanEntry) -> u64 {
+    match entry.kind {
+        EntryKind::File => 1,
+        EntryKind::Directory => entry.children.iter().map(count_files).sum(),
+    }
+}
+
+fn count_directories_recursive(entry: &ScanEntry) -> u64 {
+    match entry.kind {
+        EntryKind::File => 0,
+        EntryKind::Directory => entry.children.iter().map(|child| 1 + count_directories_recursive(child)).sum(),
+    }
+}
+
+fn count_skipped_children_recursive(entry: &ScanEntry) -> u64 {
+    match entry.kind {
+        EntryKind::File => entry.skipped_children,
+        EntryKind::Directory => {
+            entry.skipped_children + entry.children.iter().map(count_skipped_children_recursive).sum::<u64>()
+        }
+    }
+}
+
+fn map_tree_node(entry: &ScanEntry, remaining_depth: usize) -> TreeNode {
     match entry.kind {
         EntryKind::File => TreeNode {
             id: entry.path.clone(),
@@ -144,7 +167,15 @@ fn map_tree_node(entry: &ScanEntry) -> TreeNode {
             children: Vec::new(),
         },
         EntryKind::Directory => {
-            let mut children = entry.children.iter().map(map_tree_node).collect::<Vec<_>>();
+            let mut children = if remaining_depth > 0 {
+                entry
+                    .children
+                    .iter()
+                    .map(|child| map_tree_node(child, remaining_depth - 1))
+                    .collect::<Vec<_>>()
+            } else {
+                Vec::new()
+            };
             children.sort_by(|left, right| {
                 right
                     .size_bytes
@@ -152,27 +183,9 @@ fn map_tree_node(entry: &ScanEntry) -> TreeNode {
                     .then_with(|| left.path.cmp(&right.path))
             });
 
-            let file_count = children
-                .iter()
-                .map(|child| {
-                    if child.node_type == "file" {
-                        1
-                    } else {
-                        child.file_count
-                    }
-                })
-                .sum();
-            let directory_count = children
-                .iter()
-                .map(|child| {
-                    if child.node_type == "directory" {
-                        child.directory_count + 1
-                    } else {
-                        0
-                    }
-                })
-                .sum();
-            let skipped_children = children.iter().map(|child| child.skipped_children).sum();
+            let file_count = count_files(entry);
+            let directory_count = count_directories_recursive(entry);
+            let skipped_children = count_skipped_children_recursive(entry);
 
             TreeNode {
                 id: entry.path.clone(),
@@ -180,10 +193,10 @@ fn map_tree_node(entry: &ScanEntry) -> TreeNode {
                 path: entry.path.clone(),
                 node_type: "directory".to_owned(),
                 size_bytes: entry.size_bytes,
-                children_count: children.len() as u64,
+                children_count: entry.children.len() as u64,
                 file_count,
                 directory_count,
-                skipped_children: entry.skipped_children.max(skipped_children),
+                skipped_children,
                 extension: None,
                 children,
             }
@@ -285,5 +298,26 @@ mod tests {
         assert_eq!(candidates.len(), 2);
         assert_eq!(candidates[0].path, r"C:\nested\largest.iso");
         assert_eq!(candidates[1].path, r"C:\alpha.bin");
+    }
+
+    #[test]
+    fn tree_keeps_second_level_children_for_fast_scan_payloads() {
+        let snapshot = sample_snapshot();
+
+        let tree = tree(&snapshot);
+
+        assert_eq!(tree.path, r"C:\");
+        assert_eq!(tree.children.len(), 3);
+        let nested = tree
+            .children
+            .iter()
+            .find(|child| child.path == r"C:\nested")
+            .expect("nested directory");
+        assert_eq!(nested.children.len(), 2);
+        assert_eq!(nested.children[0].path, r"C:\nested\largest.iso");
+        assert_eq!(nested.children[1].path, r"C:\nested\middle.txt");
+        assert_eq!(nested.file_count, 2);
+        assert_eq!(nested.directory_count, 0);
+        assert_eq!(nested.children_count, 2);
     }
 }

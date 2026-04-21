@@ -19,7 +19,7 @@ export const tools: ToolDefinition[] = [
   },
   {
     id: 'space-cleanup',
-    name: '空间清理',
+    name: '空间分析',
     description: '扫描目录体积并快速清理大文件',
     category: '系统维护',
     icon: 'HardDrive',

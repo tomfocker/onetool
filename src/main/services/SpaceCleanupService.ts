@@ -38,6 +38,7 @@ type TraversalState = {
   largestFiles: SpaceCleanupLargestFile[]
   cancelled: boolean
   processedEntries: number
+  emitProgress: boolean
 }
 
 type MutableSummary = ReturnType<typeof createEmptySpaceCleanupSummary>
@@ -232,6 +233,23 @@ export class SpaceCleanupService {
     return { success: true }
   }
 
+  async scanDirectoryBreakdown(targetPath: string): Promise<IpcResponse<SpaceCleanupNode>> {
+    try {
+      const summary = createEmptySpaceCleanupSummary()
+      const traversalState: TraversalState = {
+        largestFiles: [],
+        cancelled: false,
+        processedEntries: 0,
+        emitProgress: false
+      }
+      const node = await this.scanNode(targetPath, summary, traversalState, 1)
+      return { success: true, data: node }
+    } catch (error) {
+      logger.error('SpaceCleanup: directory breakdown scan failed', error)
+      return { success: false, error: getErrorMessage(error) }
+    }
+  }
+
   private createScanningSession(
     rootPath: string,
     scanMode: SpaceCleanupScanMode,
@@ -268,7 +286,8 @@ export class SpaceCleanupService {
     const traversalState: TraversalState = {
       largestFiles: [],
       cancelled: false,
-      processedEntries: 0
+      processedEntries: 0,
+      emitProgress: true
     }
 
     const summary = createEmptySpaceCleanupSummary()
@@ -304,7 +323,7 @@ export class SpaceCleanupService {
     }
   }
 
-  private async startNtfsFastScan(rootPath: string): Promise<IpcResponse<SpaceCleanupSession>> {
+  private startNtfsFastScan(rootPath: string): IpcResponse<SpaceCleanupSession> {
     this.currentSession = {
       ...this.currentSession,
       rootPath,
@@ -322,24 +341,25 @@ export class SpaceCleanupService {
       })
     } catch (error) {
       logger.warn('SpaceCleanup: ntfs-fast startup failed, falling back to filesystem scan', error)
-      return this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${getErrorMessage(error)}`)
+      void this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${getErrorMessage(error)}`)
+      return { success: true, data: this.currentSession }
     }
     this.activeNtfsFastScanRun = run
 
-    try {
-      await run.done
+    void run.done.then(() => {
+      if (this.currentSession.status !== 'scanning') {
+        return
+      }
+
       this.currentSession = {
         ...this.currentSession,
-        status: this.currentSession.status === 'cancelled' ? 'cancelled' : 'completed',
+        status: 'completed',
         finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString(),
-        isPartial:
-          this.currentSession.status === 'cancelled'
-            ? this.currentSession.isPartial
-            : shouldKeepNtfsSessionPartial(this.currentSession)
+        isPartial: shouldKeepNtfsSessionPartial(this.currentSession),
+        error: null
       }
       this.emit('space-cleanup-complete', this.currentSession)
-      return { success: true, data: this.currentSession }
-    } catch (error) {
+    }).catch((error) => {
       const message = getErrorMessage(error)
       if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
         this.currentSession = {
@@ -348,16 +368,18 @@ export class SpaceCleanupService {
           finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
         }
         this.emit('space-cleanup-complete', this.currentSession)
-        return { success: true, data: this.currentSession }
+        return
       }
 
       logger.warn('SpaceCleanup: ntfs-fast scan failed after start, falling back to filesystem scan', error)
-      return this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
-    } finally {
+      void this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
+    }).finally(() => {
       if (this.activeNtfsFastScanRun === run) {
         this.activeNtfsFastScanRun = null
       }
-    }
+    })
+
+    return { success: true, data: this.currentSession }
   }
 
   private emit(channel: string, payload: SpaceCleanupSession) {
@@ -406,6 +428,9 @@ export class SpaceCleanupService {
       nextSession.finishedAt = new Date(this.now()).toISOString()
       nextSession.isPartial = shouldKeepNtfsSessionPartial(nextSession)
       nextSession.error = null
+      this.currentSession = nextSession
+      this.emit('space-cleanup-complete', this.currentSession)
+      return
     }
 
     this.currentSession = nextSession
@@ -415,7 +440,8 @@ export class SpaceCleanupService {
   private async scanNode(
     targetPath: string,
     summary: MutableSummary,
-    traversalState: TraversalState
+    traversalState: TraversalState,
+    retainedDepth = Number.POSITIVE_INFINITY
   ): Promise<SpaceCleanupNode> {
     if (this.cancelled || this.currentSession.status === 'cancelled') {
       traversalState.cancelled = true
@@ -497,8 +523,10 @@ export class SpaceCleanupService {
           continue
         }
 
-        const childNode = await this.scanNode(childPath, summary, traversalState)
-        children.push(childNode)
+        const childNode = await this.scanNode(childPath, summary, traversalState, retainedDepth - 1)
+        if (retainedDepth > 0) {
+          children.push(childNode)
+        }
         totalSize += childNode.sizeBytes
         fileCount += childNode.type === 'file' ? 1 : childNode.fileCount
         directoryCount += childNode.type === 'directory' ? childNode.directoryCount + 1 : 0
@@ -519,7 +547,7 @@ export class SpaceCleanupService {
       path: targetPath,
       type: 'directory',
       sizeBytes: totalSize,
-      childrenCount: children.length,
+      childrenCount: dirEntries.length,
       fileCount,
       directoryCount,
       skippedChildren,
@@ -528,6 +556,10 @@ export class SpaceCleanupService {
   }
 
   private async maybeYield(summary: MutableSummary, traversalState: TraversalState) {
+    if (!traversalState.emitProgress) {
+      return
+    }
+
     if (traversalState.processedEntries % this.yieldEvery !== 0) {
       return
     }

@@ -24,6 +24,10 @@ export function registerSpaceCleanupIpc(getMainWindow: () => BrowserWindow | nul
     return spaceCleanupService.getSession()
   })
 
+  ipcMain.handle('space-cleanup-scan-directory-breakdown', async (_event, targetPath: string) => {
+    return spaceCleanupService.scanDirectoryBreakdown(targetPath)
+  })
+
   ipcMain.handle('space-cleanup-open-path', async (_event, targetPath: string) => {
     return spaceCleanupService.openPath(targetPath)
   })

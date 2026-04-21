@@ -9,7 +9,7 @@ import {
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
-import type { SpaceCleanupSession } from '../shared/spaceCleanup'
+import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
 import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
 type IpcRendererLike = Pick<IpcRenderer, 'invoke' | 'send' | 'on' | 'removeListener'>
@@ -307,6 +307,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     startScan: (rootPath: string) => ipcRenderer.invoke('space-cleanup-start-scan', rootPath) as Promise<IpcResponse<SpaceCleanupSession>>,
     cancelScan: () => ipcRenderer.invoke('space-cleanup-cancel-scan') as Promise<IpcResponse<SpaceCleanupSession>>,
     getSession: () => ipcRenderer.invoke('space-cleanup-get-session') as Promise<IpcResponse<SpaceCleanupSession>>,
+    scanDirectoryBreakdown: (targetPath: string) => ipcRenderer.invoke('space-cleanup-scan-directory-breakdown', targetPath) as Promise<IpcResponse<SpaceCleanupNode>>,
     openPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-open-path', targetPath) as Promise<IpcResponse>,
     copyPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-copy-path', targetPath) as Promise<IpcResponse>,
     deleteToTrash: (targetPath: string) => ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath) as Promise<IpcResponse>,

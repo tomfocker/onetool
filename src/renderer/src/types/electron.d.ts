@@ -21,7 +21,7 @@ import {
 import type { UpdateState } from '../../../shared/appUpdate'
 import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
-import type { SpaceCleanupSession } from '../../../shared/spaceCleanup'
+import type { SpaceCleanupNode, SpaceCleanupSession } from '../../../shared/spaceCleanup'
 
 declare global {
   interface Window {
@@ -50,6 +50,7 @@ declare global {
         startScan: (rootPath: string) => Promise<IpcResponse<SpaceCleanupSession>>
         cancelScan: () => Promise<IpcResponse<SpaceCleanupSession>>
         getSession: () => Promise<IpcResponse<SpaceCleanupSession>>
+        scanDirectoryBreakdown: (targetPath: string) => Promise<IpcResponse<SpaceCleanupNode>>
         openPath: (targetPath: string) => Promise<IpcResponse>
         copyPath: (targetPath: string) => Promise<IpcResponse>
         deleteToTrash: (targetPath: string) => Promise<IpcResponse>

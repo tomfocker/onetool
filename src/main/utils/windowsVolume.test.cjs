@@ -102,3 +102,21 @@ test('getFastScanEligibility returns filesystem mode when the fsutil probe fails
   assert.equal(result.mode, 'filesystem')
   assert.match(result.reason, /fsutil/i)
 })
+
+test('getFastScanEligibility probes root volumes with a drive specifier instead of a backslash path', async () => {
+  const calls = []
+  const { getFastScanEligibility } = loadWindowsVolumeModule({
+    platform: 'win32',
+    execFile: async (file, args) => {
+      calls.push([file, args])
+      return { stdout: '文件系统名称 : NTFS' }
+    }
+  })
+
+  const result = await getFastScanEligibility('D:\\')
+
+  assert.equal(result.mode, 'ntfs-fast')
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], 'fsutil')
+  assert.deepEqual(Array.from(calls[0][1]), ['fsinfo', 'volumeinfo', 'D:'])
+})

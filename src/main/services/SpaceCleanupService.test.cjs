@@ -29,6 +29,10 @@ function createTree(rootPath, sizeBytes, skippedChildren = 0) {
   }
 }
 
+function waitForAsyncTick() {
+  return new Promise((resolve) => setImmediate(resolve))
+}
+
 function loadSpaceCleanupServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'SpaceCleanupService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -163,11 +167,15 @@ test('startScan uses ntfs-fast mode for eligible NTFS root volumes', async () =>
 
   const service = new SpaceCleanupService({ now: () => 4000, createId: () => 'session-fast-1' })
   const result = await service.startScan('D:\\')
+  await Promise.resolve()
+  const finalSession = service.getSession()
 
   assert.equal(result.success, true)
   assert.equal(result.data.scanMode, 'ntfs-fast')
-  assert.equal(result.data.summary.totalBytes, 123)
-  assert.equal(result.data.tree.path, 'D:\\')
+  assert.match(result.data.status, /scanning|completed/)
+  assert.equal(finalSession.data.status, 'completed')
+  assert.equal(finalSession.data.summary.totalBytes, 123)
+  assert.equal(finalSession.data.tree.path, 'D:\\')
 })
 
 test('startScan keeps ntfs-fast sessions partial when native complete reports skipped entries', async () => {
@@ -198,12 +206,15 @@ test('startScan keeps ntfs-fast sessions partial when native complete reports sk
 
   const service = new SpaceCleanupService({ now: () => 4500, createId: () => 'session-fast-partial-1' })
   const result = await service.startScan('D:\\')
+  await Promise.resolve()
+  const finalSession = service.getSession()
 
   assert.equal(result.success, true)
-  assert.equal(result.data.status, 'completed')
-  assert.equal(result.data.isPartial, true)
-  assert.equal(result.data.summary.skippedEntries, 3)
-  assert.equal(result.data.tree.skippedChildren, 3)
+  assert.match(result.data.status, /scanning|completed/)
+  assert.equal(finalSession.data.status, 'completed')
+  assert.equal(finalSession.data.isPartial, true)
+  assert.equal(finalSession.data.summary.skippedEntries, 3)
+  assert.equal(finalSession.data.tree.skippedChildren, 3)
 })
 
 test('startScan keeps filesystem mode and ineligibility reason for non-eligible paths', async () => {
@@ -283,10 +294,12 @@ test('startScan falls back to filesystem scan when ntfs-fast startup throws', as
 
   const service = new SpaceCleanupService({ now: () => 5750, createId: () => 'session-filesystem-3' })
   const result = await service.startScan('D:\\')
+  await waitForAsyncTick()
+  const finalSession = service.getSession()
 
   assert.equal(result.success, true)
-  assert.equal(result.data.scanMode, 'filesystem')
-  assert.equal(result.data.summary.totalBytes, 13)
+  assert.equal(finalSession.data.scanMode, 'filesystem')
+  assert.equal(finalSession.data.summary.totalBytes, 13)
 })
 
 test('startScan falls back to filesystem scan when a started ntfs-fast run fails', async () => {
@@ -317,11 +330,13 @@ test('startScan falls back to filesystem scan when a started ntfs-fast run fails
 
   const service = new SpaceCleanupService({ now: () => 5875, createId: () => 'session-filesystem-4' })
   const result = await service.startScan('D:\\')
+  await waitForAsyncTick()
+  const finalSession = service.getSession()
 
   assert.equal(result.success, true)
-  assert.equal(result.data.scanMode, 'filesystem')
-  assert.equal(result.data.scanModeReason, 'NTFS 极速扫描失败，已回退到普通扫描：native worker crashed')
-  assert.equal(result.data.summary.totalBytes, 17)
+  assert.equal(finalSession.data.scanMode, 'filesystem')
+  assert.equal(finalSession.data.scanModeReason, 'NTFS 极速扫描失败，已回退到普通扫描：native worker crashed')
+  assert.equal(finalSession.data.summary.totalBytes, 17)
 })
 
 test('cancelScan cancels an active ntfs-fast run through the bridge handle', async () => {
@@ -360,7 +375,7 @@ test('cancelScan cancels an active ntfs-fast run through the bridge handle', asy
   assert.equal(cancelResult.success, true)
   assert.equal(cancelCalls, 1)
   assert.equal(cancelResult.data.status, 'cancelled')
-  assert.equal(result.data.status, 'cancelled')
+  assert.match(result.data.status, /scanning|cancelled/)
 })
 
 test('startScan updates largest files from standalone ntfs-fast largest-files events', async () => {
@@ -388,10 +403,57 @@ test('startScan updates largest files from standalone ntfs-fast largest-files ev
 
   const service = new SpaceCleanupService({ now: () => 6100, createId: () => 'session-fast-largest-files-1' })
   const result = await service.startScan('D:\\')
+  await Promise.resolve()
+  const finalSession = service.getSession()
 
   assert.equal(result.success, true)
-  assert.deepEqual(result.data.largestFiles, [largestFile])
-  assert.deepEqual(result.data.summary.largestFile, largestFile)
+  assert.match(result.data.status, /scanning|completed/)
+  assert.deepEqual(finalSession.data.largestFiles, [largestFile])
+  assert.deepEqual(finalSession.data.summary.largestFile, largestFile)
+})
+
+test('startScan lets ntfs-fast completion settle through events before bridge close resolves', async () => {
+  let releaseDone
+  const done = new Promise((resolve) => {
+    releaseDone = resolve
+  })
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 99,
+            scannedFiles: 1,
+            scannedDirectories: 1,
+            skippedEntries: 0,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\', 99)
+        })
+        return {
+          done,
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 6200, createId: () => 'session-fast-complete-before-close' })
+  const result = await service.startScan('D:\\')
+  const midSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.status, 'completed')
+  assert.equal(midSession.data.status, 'completed')
+  assert.equal(midSession.data.summary.totalBytes, 99)
+
+  releaseDone()
+  await Promise.resolve()
 })
 
 test('startScan aggregates nested directory sizes and largest files', async () => {
@@ -562,4 +624,48 @@ test('openPath reveals files in Explorer and opens directories directly', async 
 
   assert.deepEqual(showItemCalls, ['C:\\scan\\clip.mp4'])
   assert.deepEqual(openPathCalls, ['C:\\scan\\folder'])
+})
+
+test('scanDirectoryBreakdown returns only the direct children summary for a selected deep directory', async () => {
+  const entries = {
+    'D:\\vmware\\windows 10': [
+      createDirent('disk-flat.vmdk', 'file'),
+      createDirent('snapshots', 'directory')
+    ],
+    'D:\\vmware\\windows 10\\snapshots': [
+      createDirent('s1.vmdk', 'file'),
+      createDirent('nested', 'directory')
+    ],
+    'D:\\vmware\\windows 10\\snapshots\\nested': [
+      createDirent('deep.bin', 'file')
+    ]
+  }
+
+  const stats = {
+    'D:\\vmware\\windows 10': { isDirectory: () => true, size: 0 },
+    'D:\\vmware\\windows 10\\disk-flat.vmdk': { isDirectory: () => false, size: 100 },
+    'D:\\vmware\\windows 10\\snapshots': { isDirectory: () => true, size: 0 },
+    'D:\\vmware\\windows 10\\snapshots\\s1.vmdk': { isDirectory: () => false, size: 40 },
+    'D:\\vmware\\windows 10\\snapshots\\nested': { isDirectory: () => true, size: 0 },
+    'D:\\vmware\\windows 10\\snapshots\\nested\\deep.bin': { isDirectory: () => false, size: 10 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService()
+  const result = await service.scanDirectoryBreakdown('D:\\vmware\\windows 10')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.path, 'D:\\vmware\\windows 10')
+  assert.equal(result.data.children.length, 2)
+  assert.equal(result.data.children[0].path, 'D:\\vmware\\windows 10\\disk-flat.vmdk')
+  assert.equal(result.data.children[0].sizeBytes, 100)
+  assert.equal(result.data.children[1].path, 'D:\\vmware\\windows 10\\snapshots')
+  assert.equal(result.data.children[1].sizeBytes, 50)
+  assert.equal(result.data.children[1].children.length, 0)
 })

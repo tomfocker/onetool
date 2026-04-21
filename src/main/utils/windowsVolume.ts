@@ -51,6 +51,10 @@ function isWindowsLocalRootVolume(targetPath: string): boolean {
   return /^[A-Za-z]:[\\/]+$/.test(targetPath)
 }
 
+function toVolumeSpecifier(targetPath: string): string {
+  return `${targetPath.slice(0, 2)}`
+}
+
 function extractFilesystemName(output: string): string | null {
   const normalized = output.replace(/\u0000/g, '')
   const knownFilesystems = ['exFAT', 'NTFS', 'ReFS', 'FAT32', 'FAT']
@@ -90,7 +94,7 @@ export async function getFastScanEligibility(
   const execFile = options.execFile ?? execFileCallback
 
   try {
-    const stdout = await execFileAsync(execFile, 'fsutil', ['fsinfo', 'volumeinfo', targetPath])
+    const stdout = await execFileAsync(execFile, 'fsutil', ['fsinfo', 'volumeinfo', toVolumeSpecifier(targetPath)])
     const filesystem = extractFilesystemName(stdout)
 
     if (filesystem?.toUpperCase() !== 'NTFS') {

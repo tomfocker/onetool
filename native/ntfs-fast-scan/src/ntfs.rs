@@ -31,6 +31,8 @@ const FILE_SHARES: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 const GENERIC_READ_ACCESS: u32 = 0x8000_0000;
 #[cfg(windows)]
 const FILE_RECORD_BUFFER_SIZE: usize = 64 * 1024;
+#[cfg(windows)]
+const FILE_RECORD_SEGMENT_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 
 #[cfg(windows)]
 #[allow(
@@ -506,6 +508,11 @@ fn sort_children(nodes: &HashMap<FileReference, NodeRecord>, children: &mut [Fil
 
 fn path_string(path: &Path) -> String {
     normalize_windows_path(path.to_string_lossy().into_owned())
+}
+
+#[cfg(windows)]
+fn file_record_segment_number(file_reference_number: u64) -> u64 {
+    file_reference_number & FILE_RECORD_SEGMENT_MASK
 }
 
 fn entry_rank(kind: &EntryKind) -> u8 {
@@ -1006,8 +1013,9 @@ fn query_file_size_from_file_record(
     file_reference_number: u64,
     file_record_buffer: &mut FileRecordQueryBuffer,
 ) -> io::Result<u64> {
+    let requested_segment_number = file_record_segment_number(file_reference_number);
     let mut input = NTFS_FILE_RECORD_INPUT_BUFFER {
-        FileReferenceNumber: file_reference_number as i64,
+        FileReferenceNumber: requested_segment_number as i64,
     };
     let mut bytes_returned = 0u32;
     let ok = unsafe {
@@ -1051,7 +1059,9 @@ fn parse_file_record_output(requested_file_reference_number: u64, bytes: &[u8]) 
             .try_into()
             .expect("file reference number"),
     ) as u64;
-    if returned_file_reference_number != requested_file_reference_number {
+    if file_record_segment_number(returned_file_reference_number)
+        != file_record_segment_number(requested_file_reference_number)
+    {
         return Err(io::Error::other(format!(
             "returned file reference {returned_file_reference_number} did not match requested {requested_file_reference_number}"
         )));
@@ -1400,15 +1410,33 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn parse_file_record_output_rejects_mismatched_returned_reference() {
-        let output = build_test_file_record_output(41);
+    fn parse_file_record_output_accepts_sequence_number_differences_for_the_same_segment() {
+        let requested = 0x0001_0000_0000_002A_u64;
+        let returned = 0x0002_0000_0000_002A_u64;
+        let output = build_test_file_record_output(returned);
 
-        let error =
-            parse_file_record_output(42, &output).expect_err("mismatched file record output");
+        assert_eq!(
+            parse_file_record_output(requested, &output)
+                .expect("matched file record output with different sequence number"),
+            1234
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_output_rejects_mismatched_returned_reference() {
+        let requested = 0x0001_0000_0000_002A_u64;
+        let returned = 0x0001_0000_0000_002B_u64;
+        let output = build_test_file_record_output(returned);
+
+        let error = parse_file_record_output(requested, &output)
+            .expect_err("mismatched file record output");
         assert!(
             error
                 .to_string()
-                .contains("returned file reference 41 did not match requested 42"),
+                .contains(&format!(
+                    "returned file reference {returned} did not match requested {requested}"
+                )),
             "unexpected error: {error}"
         );
     }
