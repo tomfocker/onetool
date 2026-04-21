@@ -259,6 +259,131 @@ test('logout clears persisted session and emits logged-out state once', async ()
   ])
 })
 
+test('pollLogin clears state and persistence when QR login expires', async () => {
+  const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
+  const fsMock = createFsMock({
+    [sessionPath]: JSON.stringify({
+      isLoggedIn: true,
+      nickname: 'Old User',
+      avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
+      expiresAt: '2099-01-01T00:00:00.000Z'
+    })
+  })
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    fsModule: fsMock
+  })
+
+  let callCount = 0
+  const service = new BilibiliDownloaderService({
+    fs: fsMock,
+    fetch: async () => {
+      callCount += 1
+
+      if (callCount === 1) {
+        return createFetchResponse({
+          code: 0,
+          data: {
+            url: 'https://passport.bilibili.com/h5-app/passport/login/scan',
+            qrcode_key: 'qr-auth-token'
+          }
+        })
+      }
+
+      return createFetchResponse({
+        code: 0,
+        data: {
+          code: 86038,
+          status: 'expired'
+        }
+      })
+    }
+  })
+
+  service.loadSession()
+
+  const stateChanges = []
+  service.onStateChanged((state) => {
+    stateChanges.push(state.loginSession)
+  })
+
+  await service.bootstrapQrLogin()
+  const result = await service.pollLogin()
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'QR login expired')
+  assert.equal(fsMock.files.has(sessionPath), false)
+  assert.deepEqual(toPlain(service.getState().loginSession), {
+    isLoggedIn: false,
+    nickname: null,
+    avatarUrl: null,
+    expiresAt: null
+  })
+  assert.deepEqual(toPlain(stateChanges), [
+    {
+      isLoggedIn: false,
+      nickname: null,
+      avatarUrl: null,
+      expiresAt: null
+    }
+  ])
+})
+
+test('pollLogin clears state and persistence when QR login response is invalid', async () => {
+  const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
+  const fsMock = createFsMock({
+    [sessionPath]: JSON.stringify({
+      isLoggedIn: true,
+      nickname: 'Old User',
+      avatarUrl: 'https://i0.hdslb.com/old-avatar.jpg',
+      expiresAt: '2099-01-01T00:00:00.000Z'
+    })
+  })
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    fsModule: fsMock
+  })
+
+  let callCount = 0
+  const service = new BilibiliDownloaderService({
+    fs: fsMock,
+    fetch: async () => {
+      callCount += 1
+
+      if (callCount === 1) {
+        return createFetchResponse({
+          code: 0,
+          data: {
+            url: 'https://passport.bilibili.com/h5-app/passport/login/scan',
+            qrcode_key: 'qr-auth-token'
+          }
+        })
+      }
+
+      return createFetchResponse({
+        code: 0,
+        data: {
+          code: 12345,
+          status: 'unexpected-status'
+        }
+      })
+    }
+  })
+
+  service.loadSession()
+  await service.bootstrapQrLogin()
+
+  const result = await service.pollLogin()
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'Bilibili login status was invalid')
+  assert.equal(fsMock.files.has(sessionPath), false)
+  assert.deepEqual(toPlain(service.getState().loginSession), {
+    isLoggedIn: false,
+    nickname: null,
+    avatarUrl: null,
+    expiresAt: null
+  })
+})
+
 test('loadSession clears expired persisted login sessions', () => {
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
