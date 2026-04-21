@@ -32,35 +32,7 @@ function loadAppRoutingModule() {
   return module.exports
 }
 
-function loadToolsModule() {
-  const filePath = path.join(__dirname, 'data', 'tools.ts')
-  const source = fs.readFileSync(filePath, 'utf8')
-  const transpiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-      esModuleInterop: true
-    },
-    fileName: filePath
-  }).outputText
-
-  const module = { exports: {} }
-
-  vm.runInNewContext(transpiled, {
-    module,
-    exports: module.exports,
-    require,
-    __dirname: path.dirname(filePath),
-    __filename: filePath,
-    console,
-    process
-  }, { filename: filePath })
-
-  return module.exports
-}
-
 const { createToolRouteModuleMap } = loadAppRoutingModule()
-const { tools: actualTools } = loadToolsModule()
 
 const tools = [
   {
@@ -159,33 +131,4 @@ test('createToolRouteModuleMap reports missing modules without dropping valid ro
     }
   )
   assert.equal(warnings.length, 1)
-})
-
-test('tools registry exposes the taskbar appearance tool through the main shell route map', () => {
-  const taskbarAppearanceTool = actualTools.find((tool) => tool.id === 'taskbar-appearance')
-
-  assert.ok(taskbarAppearanceTool)
-  assert.deepEqual(
-    toPlainObject(taskbarAppearanceTool),
-    {
-      id: 'taskbar-appearance',
-      name: '任务栏外观',
-      description: '预设任务栏透明、模糊与亚克力效果',
-      category: '系统维护',
-      icon: 'PanelTop',
-      componentPath: 'TaskbarAppearanceTool'
-    }
-  )
-
-  const { result: map, warnings } = captureWarnings(() => createToolRouteModuleMap([taskbarAppearanceTool], {
-    './components/ConfigChecker.tsx': () => 'config',
-    './components/SettingsPage.tsx': () => 'settings',
-    './components/WebActivator.tsx': () => 'web-activator'
-  }, {
-    './tools/TaskbarAppearanceTool.tsx': () => 'taskbar-appearance'
-  }))
-
-  assert.equal(typeof map['taskbar-appearance'], 'function')
-  assert.equal(typeof map.settings, 'function')
-  assert.equal(warnings.length, 0)
 })

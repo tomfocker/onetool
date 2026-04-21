@@ -1,5 +1,4 @@
 import type { DownloadOrganizerStoredState } from './downloadOrganizer'
-import type { TaskbarAppearancePreset } from './taskbarAppearance'
 
 /**
  * 应用全局设置
@@ -18,11 +17,6 @@ export interface AppSettings {
   translateApiUrl: string
   translateApiKey: string
   translateModel: string
-
-  taskbarAppearanceEnabled: boolean
-  taskbarAppearancePreset: TaskbarAppearancePreset
-  taskbarAppearanceIntensity: number
-  taskbarAppearanceTint: string
 }
 
 /**

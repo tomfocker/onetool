@@ -3,7 +3,7 @@ import {
   Package, Terminal, Mic, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
-  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop
+  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop
+  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload
 }
 
 const toolGradientMap: Record<string, string> = {

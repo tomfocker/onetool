@@ -192,13 +192,5 @@ export const tools: ToolDefinition[] = [
     category: '系统维护',
     icon: 'LayoutGrid',
     componentPath: 'WindowsManagerTool'
-  },
-  {
-    id: 'taskbar-appearance',
-    name: '任务栏外观',
-    description: '预设任务栏透明、模糊与亚克力效果',
-    category: '系统维护',
-    icon: 'PanelTop',
-    componentPath: 'TaskbarAppearanceTool'
   }
 ]

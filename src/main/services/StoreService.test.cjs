@@ -51,7 +51,6 @@ function loadStoreServiceModule(overrides = {}) {
       writeFile: async () => {}
     }
   }
-  const taskbarAppearanceModule = overrides.taskbarAppearanceModule || require(path.join(__dirname, '../../shared/taskbarAppearance.ts'))
 
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
@@ -80,10 +79,6 @@ function loadStoreServiceModule(overrides = {}) {
 
     if (specifier === '../../shared/downloadOrganizer') {
       return require(path.join(__dirname, '../../shared/downloadOrganizer.ts'))
-    }
-
-    if (specifier === '../../shared/taskbarAppearance') {
-      return taskbarAppearanceModule
     }
 
     if (specifier === '../utils/logger') {
@@ -116,27 +111,4 @@ test('StoreService backfills new nested settings defaults during schema migratio
   assert.equal(service.get('settings').autoCheckForUpdates, true)
   assert.equal(service.get('settings').screenshotSavePath, 'D:/shots')
   assert.equal(service.get('settings').autoSaveScreenshot, true)
-  assert.equal(service.get('settings').taskbarAppearanceEnabled, false)
-  assert.equal(service.get('settings').taskbarAppearancePreset, 'blur')
-  assert.equal(service.get('settings').taskbarAppearanceIntensity, 60)
-  assert.equal(service.get('settings').taskbarAppearanceTint, '#FFFFFF33')
-})
-
-test('StoreService reuses shared taskbar appearance defaults instead of duplicating them locally', () => {
-  const { StoreService } = loadStoreServiceModule({
-    taskbarAppearanceModule: {
-      createDefaultTaskbarAppearanceSettings: () => ({
-        enabled: true,
-        preset: 'acrylic',
-        intensity: 91,
-        tintHex: '#12345678'
-      })
-    }
-  })
-  const service = new StoreService()
-
-  assert.equal(service.get('settings').taskbarAppearanceEnabled, true)
-  assert.equal(service.get('settings').taskbarAppearancePreset, 'acrylic')
-  assert.equal(service.get('settings').taskbarAppearanceIntensity, 91)
-  assert.equal(service.get('settings').taskbarAppearanceTint, '#12345678')
 })

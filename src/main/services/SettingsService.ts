@@ -3,9 +3,6 @@ import fs from 'fs'
 import path from 'path'
 import { EventEmitter } from 'events'
 import type { AppSettings, IpcResponse } from '../../shared/types'
-import { createDefaultTaskbarAppearanceSettings } from '../../shared/taskbarAppearance'
-
-const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
 
 export class SettingsService extends EventEmitter {
   private settings: AppSettings = {
@@ -19,11 +16,7 @@ export class SettingsService extends EventEmitter {
     minimizeToTray: true,
     translateApiUrl: 'https://api.openai.com/v1',
     translateApiKey: '',
-    translateModel: 'gpt-4o',
-    taskbarAppearanceEnabled: defaultTaskbarAppearanceSettings.enabled,
-    taskbarAppearancePreset: defaultTaskbarAppearanceSettings.preset,
-    taskbarAppearanceIntensity: defaultTaskbarAppearanceSettings.intensity,
-    taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex
+    translateModel: 'gpt-4o'
   }
 
   constructor() {
