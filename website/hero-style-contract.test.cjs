@@ -100,3 +100,19 @@ test('hero title uses launch-page typography instead of the old stacked tower', 
   assert.match(style, /font-size:\s*clamp\(3\.4rem,\s*6\.2vw,\s*6\.4rem\)/)
   assert.match(style, /letter-spacing:\s*-0\.07em/)
 })
+
+test('tool section defines a dedicated intro block', () => {
+  assert.match(style, /\.tool-matrix-intro\s*\{/)
+  assert.match(style, /\.tool-matrix-intro h2\s*\{/)
+})
+
+test('tool groups use the lighter dock takeover contract', () => {
+  assert.match(style, /\.tool-group\[data-flight-dock="capture"\]/)
+  assert.match(style, /\.tool-group\[data-flight-dock="organize"\]/)
+  assert.match(style, /\.tool-group\[data-flight-dock="utility"\]/)
+  assert.match(style, /transform:\s*translate3d\(0,\s*calc\(var\(--dock-lift/)
+})
+
+test('contract no longer requires scenario-card takeover rules', () => {
+  assert.doesNotMatch(style, /\.scenario-card\[data-flight-dock=/)
+})
