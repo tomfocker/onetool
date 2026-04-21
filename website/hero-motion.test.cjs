@@ -48,3 +48,30 @@ test('reduced motion disables staged hero travel', () => {
   assert.equal(state.highlight.utility, 0)
   assert.equal(state.highlight.matrix, 0)
 })
+
+test('hero motion enters morph before final dock takeover', () => {
+  const state = getHeroMotionState(0.86)
+
+  assert.ok(state.travelSoft > 0.9)
+  assert.ok(state.morph > 0)
+  assert.ok(state.dock === 0)
+  assert.ok(state.highlight.capture > 0.95)
+  assert.ok(state.highlight.matrix > 0)
+})
+
+test('hero motion reaches dock state at the end of the sticky range', () => {
+  const state = getHeroMotionState(0.985)
+
+  assert.ok(state.morph > 0.9)
+  assert.ok(state.dock > 0)
+  assert.ok(state.dockSoft > 0)
+  assert.equal(state.breakout <= 1, true)
+})
+
+test('reduced motion zeros morph and dock stages too', () => {
+  const state = getHeroMotionState(0.95, true)
+
+  assert.equal(state.morph, 0)
+  assert.equal(state.dock, 0)
+  assert.equal(state.dockSoft, 0)
+})

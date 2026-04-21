@@ -32,8 +32,12 @@
         breakoutSoft: 0,
         travel: 0,
         travelSoft: 0,
+        morph: 0,
+        morphSoft: 0,
         settle: 0,
         settleSoft: 0,
+        dock: 0,
+        dockSoft: 0,
         highlight: {
           capture: 0,
           organize: 0,
@@ -45,7 +49,9 @@
 
     const breakout = getPhase(safeProgress, 0.08, 0.34)
     const travel = getPhase(safeProgress, 0.42, 0.9)
+    const morph = getPhase(safeProgress, 0.78, 0.94)
     const settle = getPhase(safeProgress, 0.7, 1)
+    const dock = getPhase(safeProgress, 0.94, 1)
 
     return {
       progress: safeProgress,
@@ -53,13 +59,17 @@
       breakoutSoft: easeOutCubic(breakout),
       travel,
       travelSoft: easeInQuart(easeInOutSine(travel)),
+      morph,
+      morphSoft: easeInOutSine(morph),
       settle,
       settleSoft: easeOutCubic(settle),
+      dock,
+      dockSoft: easeOutCubic(dock),
       highlight: {
-        capture: easeOutCubic(getPhase(safeProgress, 0.58, 0.82)),
-        organize: easeOutCubic(getPhase(safeProgress, 0.63, 0.86)),
-        utility: easeOutCubic(getPhase(safeProgress, 0.67, 0.9)),
-        matrix: easeOutCubic(getPhase(safeProgress, 0.84, 1))
+        capture: easeOutCubic(getPhase(safeProgress, 0.56, 0.8)),
+        organize: easeOutCubic(getPhase(safeProgress, 0.61, 0.84)),
+        utility: easeOutCubic(getPhase(safeProgress, 0.66, 0.88)),
+        matrix: easeOutCubic(getPhase(safeProgress, 0.82, 0.96))
       }
     }
   }
