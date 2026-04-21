@@ -159,7 +159,16 @@ document.addEventListener('DOMContentLoaded', () => {
     })
   }
 
-  const applyFlightGeometry = () => {
+  const getDockVisualOffset = (targetKey, state) => {
+    const highlight = state?.highlight?.[targetKey] ?? 0
+
+    return {
+      x: 0,
+      y: -22 * highlight
+    }
+  }
+
+  const applyFlightGeometry = (state) => {
     if (!heroFlight) {
       return
     }
@@ -183,10 +192,11 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const bias = flightBiases[key] ?? { x: 0, y: 0 }
+      const dockOffset = getDockVisualOffset(targetKey, state)
       const targetX = geometry.targetCenterX - flightLeft - geometry.startX + bias.x
       const targetY = geometry.targetCenterY - flightTop - geometry.startY + bias.y
-      const dockX = geometry.dockCenterX - flightLeft - geometry.startX + bias.x
-      const dockY = geometry.dockCenterY - flightTop - geometry.startY + bias.y
+      const dockX = geometry.dockCenterX + dockOffset.x - flightLeft - geometry.startX + bias.x
+      const dockY = geometry.dockCenterY + dockOffset.y - flightTop - geometry.startY + bias.y
 
       card.style.setProperty('--target-x', `${targetX}px`)
       card.style.setProperty('--target-y', `${targetY}px`)
@@ -219,8 +229,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return
     }
 
-    applyFlightGeometry()
-
     const progress = getHeroProgress()
     const heroTargets = {
       capture: flightTargets.capture,
@@ -248,6 +256,8 @@ document.addEventListener('DOMContentLoaded', () => {
       },
       prefersReducedMotion
     )
+
+    applyFlightGeometry(state)
 
     root.style.setProperty('--hero-progress', state.progress.toFixed(4))
     root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
