@@ -8,14 +8,14 @@ import {
 } from '../../shared/taskbarAppearance'
 import type { AppSettings, IpcResponse } from '../../shared/types'
 import { settingsService } from './SettingsService'
-import { WindowsTaskbarAdapter } from './windows/WindowsTaskbarAdapter'
+import { TaskbarAppearanceAdapter } from './windows/TaskbarAppearanceAdapter'
 
 type TaskbarRuntime = {
   platform: NodeJS.Platform
   release: string
 }
 
-type TaskbarAppearanceAdapter = {
+type TaskbarAppearanceAdapterLike = {
   applyAppearance(input: {
     preset: TaskbarAppearancePreset
     intensity: number
@@ -41,11 +41,19 @@ type ApplyTaskbarAppearanceInput = {
 }
 
 export class TaskbarAppearanceService {
+  private readonly adapter: TaskbarAppearanceAdapterLike
+  private readonly settings: TaskbarAppearanceSettingsStore
+  private readonly runtime: TaskbarRuntime
+
   constructor(
-    private readonly adapter: TaskbarAppearanceAdapter = new WindowsTaskbarAdapter(),
-    private readonly settings: TaskbarAppearanceSettingsStore = settingsService,
-    private readonly runtime: TaskbarRuntime = { platform: process.platform, release: os.release() }
-  ) {}
+    adapter?: TaskbarAppearanceAdapterLike,
+    settings: TaskbarAppearanceSettingsStore = settingsService,
+    runtime: TaskbarRuntime = { platform: process.platform, release: os.release() }
+  ) {
+    this.runtime = runtime
+    this.settings = settings
+    this.adapter = adapter ?? new TaskbarAppearanceAdapter(runtime)
+  }
 
   private getPersistedSettings(): TaskbarAppearanceSettings {
     const persisted = this.settings.getSettings()

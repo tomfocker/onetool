@@ -66,9 +66,9 @@ function loadTaskbarAppearanceServiceModule(overrides = {}) {
       return { settingsService }
     }
 
-    if (specifier === './windows/WindowsTaskbarAdapter') {
+    if (specifier === './windows/TaskbarAppearanceAdapter') {
       return {
-        WindowsTaskbarAdapter: class WindowsTaskbarAdapter {
+        TaskbarAppearanceAdapter: class TaskbarAppearanceAdapter {
           async applyAppearance(input) {
             return adapter.applyAppearance(input)
           }
@@ -179,6 +179,45 @@ test('applyPreset blocks unsupported presets before touching the adapter or pers
 
   assert.equal(result.success, false)
   assert.match(result.error, /需要较新的 Windows 11 版本/)
+  assert.deepEqual(events, [])
+})
+
+test('applyPreset blocks modern taskbar presets on Windows 11 24H2 before touching the adapter or persisted settings', async () => {
+  const events = []
+  const { TaskbarAppearanceService } = loadTaskbarAppearanceServiceModule({
+    adapter: {
+      applyAppearance: async () => {
+        events.push('adapter')
+        return { success: true }
+      },
+      restoreDefault: async () => ({ success: true })
+    },
+    settingsService: {
+      getSettings: () => ({
+        taskbarAppearanceEnabled: false,
+        taskbarAppearancePreset: 'blur',
+        taskbarAppearanceIntensity: 60,
+        taskbarAppearanceTint: '#FFFFFF33'
+      }),
+      updateSettings: async () => {
+        events.push('settings')
+        return { success: true }
+      }
+    }
+  })
+
+  const service = new TaskbarAppearanceService(undefined, undefined, {
+    platform: 'win32',
+    release: '10.0.26200'
+  })
+  const result = await service.applyPreset({
+    preset: 'blur',
+    intensity: 60,
+    tintHex: '#FFFFFF33'
+  })
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /24H2.*兼容性问题/)
   assert.deepEqual(events, [])
 })
 

@@ -72,6 +72,21 @@ test('resolveTaskbarAppearanceAvailability pins the Windows 11 and acrylic thres
   })
   assert.equal(acrylicReady.host.acrylicAvailable, true)
   assert.equal(acrylicReady.presets.acrylic.available, true)
+
+  const unsupported24H2 = resolveTaskbarAppearanceAvailability({
+    platform: 'win32',
+    release: '10.0.26200'
+  })
+  assert.equal(unsupported24H2.host.isWindows11Capable, true)
+  assert.equal(unsupported24H2.host.acrylicAvailable, false)
+  assert.equal(unsupported24H2.supported, false)
+  assert.equal(unsupported24H2.presets.transparent.available, false)
+  assert.equal(unsupported24H2.presets.blur.available, false)
+  assert.equal(unsupported24H2.presets.acrylic.available, false)
+  assert.match(
+    unsupported24H2.presets.blur.reason,
+    /24H2.*兼容性问题/
+  )
 })
 
 test('resolveTaskbarAppearanceAvailability safely treats malformed releases as unsupported', () => {

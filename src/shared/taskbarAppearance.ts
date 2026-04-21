@@ -24,10 +24,26 @@ export interface TaskbarAppearanceAvailability {
   presets: Record<TaskbarAppearancePreset, TaskbarAppearancePresetAvailability>
 }
 
+const WINDOWS_11_BUILD = 22000
+const MODERN_HELPER_BUILD = 22621
+const MODERN_HELPER_MAX_SAFE_BUILD = 26100
+
 function getWindowsBuild(release: string): number {
   const parts = release.split('.')
   const build = Number(parts[parts.length - 1] ?? 0)
   return Number.isFinite(build) ? build : 0
+}
+
+function getWindowsOnlyReason(isWindows: boolean, isWindows11Capable: boolean): string {
+  if (!isWindows) {
+    return '仅支持 Windows'
+  }
+
+  if (!isWindows11Capable) {
+    return '仅支持 Windows 11'
+  }
+
+  return '当前系统暂不支持任务栏外观增强'
 }
 
 export function createDefaultTaskbarAppearanceSettings(): TaskbarAppearanceSettings {
@@ -45,9 +61,16 @@ export function resolveTaskbarAppearanceAvailability(runtime: {
 }): TaskbarAppearanceAvailability {
   const isWindows = runtime.platform === 'win32'
   const build = getWindowsBuild(runtime.release)
-  const isWindows11Capable = isWindows && build >= 22000
-  const acrylicAvailable = isWindows11Capable && build >= 22621
-  const supported = isWindows11Capable
+  const isWindows11Capable = isWindows && build >= WINDOWS_11_BUILD
+  const helperCompatible = isWindows11Capable &&
+    build >= MODERN_HELPER_BUILD &&
+    build < MODERN_HELPER_MAX_SAFE_BUILD
+  const hasKnown24H2CompatibilityIssue = isWindows11Capable && build >= MODERN_HELPER_MAX_SAFE_BUILD
+  const acrylicAvailable = helperCompatible
+  const supported = isWindows11Capable && !hasKnown24H2CompatibilityIssue
+  const unsupportedReason = hasKnown24H2CompatibilityIssue
+    ? '当前 Windows 11 24H2 存在已知兼容性问题，暂不支持任务栏材质增强。'
+    : getWindowsOnlyReason(isWindows, isWindows11Capable)
 
   return {
     supported,
@@ -64,16 +87,22 @@ export function resolveTaskbarAppearanceAvailability(runtime: {
         reason: isWindows ? null : '仅支持 Windows'
       },
       transparent: {
-        available: isWindows11Capable,
-        reason: isWindows11Capable ? null : '仅支持 Windows 11'
+        available: supported,
+        reason: supported ? null : unsupportedReason
       },
       blur: {
-        available: isWindows11Capable,
-        reason: isWindows11Capable ? null : '仅支持 Windows 11'
+        available: supported,
+        reason: supported ? null : unsupportedReason
       },
       acrylic: {
         available: acrylicAvailable,
-        reason: acrylicAvailable ? null : '需要较新的 Windows 11 版本'
+        reason: acrylicAvailable
+          ? null
+          : (
+              hasKnown24H2CompatibilityIssue
+                ? unsupportedReason
+                : '需要较新的 Windows 11 版本'
+            )
       }
     }
   }
