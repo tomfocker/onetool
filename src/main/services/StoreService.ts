@@ -5,6 +5,7 @@ import { EventEmitter } from 'events'
 import { GlobalStore } from '../../shared/types'
 import { logger } from '../utils/logger'
 import { DEFAULT_PINNED_TOOL_IDS } from '../../shared/devEnvironment'
+import { createDefaultDownloadOrganizerStoredState } from '../../shared/downloadOrganizer'
 
 const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
   'control',
@@ -52,6 +53,7 @@ export class StoreService extends EventEmitter {
       pinnedToolIds: [...DEFAULT_PINNED_TOOL_IDS],
       windowsManagerFavorites: [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
       clipboardHistory: [],
+      downloadOrganizer: createDefaultDownloadOrganizerStoredState(),
       version: app.getVersion()
     }
   }
@@ -68,7 +70,27 @@ export class StoreService extends EventEmitter {
           pinnedToolIds: Array.isArray(parsed.pinnedToolIds)
             ? Array.from(new Set(parsed.pinnedToolIds.filter((item: unknown): item is string => typeof item === 'string'))).slice(0, 6)
             : [...DEFAULT_PINNED_TOOL_IDS],
-          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) }
+          settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
+          downloadOrganizer: {
+            ...createDefaultDownloadOrganizerStoredState(),
+            ...(parsed.downloadOrganizer || {}),
+            config: {
+              ...createDefaultDownloadOrganizerStoredState().config,
+              ...(parsed.downloadOrganizer?.config || {}),
+              rules: Array.isArray(parsed.downloadOrganizer?.config?.rules)
+                ? parsed.downloadOrganizer.config.rules
+                : createDefaultDownloadOrganizerStoredState().config.rules,
+              ignoredExtensions: Array.isArray(parsed.downloadOrganizer?.config?.ignoredExtensions)
+                ? parsed.downloadOrganizer.config.ignoredExtensions
+                : createDefaultDownloadOrganizerStoredState().config.ignoredExtensions
+            },
+            lastPreviewItems: Array.isArray(parsed.downloadOrganizer?.lastPreviewItems)
+              ? parsed.downloadOrganizer.lastPreviewItems
+              : [],
+            activity: Array.isArray(parsed.downloadOrganizer?.activity)
+              ? parsed.downloadOrganizer.activity
+              : []
+          }
         }
 
         if (this.store.pinnedToolIds.length === 0) {

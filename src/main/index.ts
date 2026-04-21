@@ -52,6 +52,8 @@ import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 import { registerWslIpc } from './ipc/wslIpc'
 import { registerSpaceCleanupIpc } from './ipc/spaceCleanupIpc'
 import { spaceCleanupService } from './services/SpaceCleanupService'
+import { registerDownloadOrganizerIpc } from './ipc/downloadOrganizerIpc'
+import { downloadOrganizerService } from './services/DownloadOrganizerService'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -87,6 +89,7 @@ function createWindow(): void {
   webActivatorService.setMainWindow(mainWindow)
   quickInstallerService.setMainWindow(mainWindow)
   spaceCleanupService.setMainWindow(mainWindow)
+  downloadOrganizerService.setMainWindow(mainWindow)
   // DevEnvironmentService receives the window via IPC registration refresh.
   windowManagerService.setMainWindow(mainWindow)
   screenshotService.setMainWindow(mainWindow)
@@ -192,6 +195,7 @@ app.whenReady().then(() => {
   registerWebActivatorIpc()
   registerWslIpc()
   registerSpaceCleanupIpc(() => mainWindow)
+  registerDownloadOrganizerIpc(() => mainWindow)
 
   // Silent system health check
   setTimeout(async () => {
@@ -216,6 +220,7 @@ app.whenReady().then(() => {
 
   // Global Initializations
   createWindow()
+  void downloadOrganizerService.initialize()
   windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
   windowManagerService.createFloatBallWindow()
   appUpdateService.setBeforeQuitAndInstall(createBeforeQuitAndInstallHook(windowManagerService))

@@ -1,3 +1,5 @@
+import type { DownloadOrganizerStoredState } from './downloadOrganizer'
+
 /**
  * 应用全局设置
  */
@@ -260,6 +262,7 @@ export interface GlobalStore {
   pinnedToolIds: string[]
   windowsManagerFavorites: string[]
   clipboardHistory: ClipboardItem[]
+  downloadOrganizer: DownloadOrganizerStoredState
   version: string
 }
 

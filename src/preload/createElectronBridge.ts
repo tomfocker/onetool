@@ -9,6 +9,7 @@ import {
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
+import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
 import type { IpcResponse, LocalProxyConfig, WslBackupFormat, WslRestoreMode } from '../shared/types'
 
@@ -324,10 +325,30 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onStateChanged: (callback: (state: UpdateState) => void) => onChannel('updates-state-changed', callback)
   }
 
+  const downloadOrganizerAPI = {
+    getState: () => ipcRenderer.invoke('download-organizer-get-state') as Promise<IpcResponse<DownloadOrganizerState>>,
+    updateConfig: (updates: Partial<DownloadOrganizerConfig>) => {
+      return ipcRenderer.invoke('download-organizer-update-config', updates) as Promise<IpcResponse<DownloadOrganizerState>>
+    },
+    preview: () => ipcRenderer.invoke('download-organizer-preview') as Promise<IpcResponse<DownloadOrganizerState>>,
+    applyPreview: () => ipcRenderer.invoke('download-organizer-apply-preview') as Promise<IpcResponse<DownloadOrganizerState>>,
+    toggleWatch: (enabled: boolean) => {
+      return ipcRenderer.invoke('download-organizer-toggle-watch', enabled) as Promise<IpcResponse<DownloadOrganizerState>>
+    },
+    chooseWatchPath: () => {
+      return ipcRenderer.invoke('download-organizer-choose-watch-path') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+    },
+    chooseDestinationRoot: () => {
+      return ipcRenderer.invoke('download-organizer-choose-destination-root') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+    },
+    onStateChanged: (callback: (state: DownloadOrganizerState) => void) => onChannel('download-organizer-state-changed', callback)
+  }
+
   return {
     app: appAPI,
     doctor: doctorAPI,
     devEnvironment: devEnvironmentAPI,
+    downloadOrganizer: downloadOrganizerAPI,
     spaceCleanup: spaceCleanupAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,

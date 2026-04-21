@@ -82,6 +82,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'FileDropoverTool'
   },
   {
+    id: 'download-organizer',
+    name: '下载整理',
+    description: '组合规则自动归档下载目录，并支持手动补扫',
+    category: '日常办公',
+    icon: 'Inbox',
+    componentPath: 'DownloadOrganizerTool'
+  },
+  {
     id: 'screenshot-tool',
     name: '叠加截图',
     description: '支持聚焦叠加的高级截图工具',
