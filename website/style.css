@@ -311,6 +311,22 @@ select {
   min-height: 100dvh;
   padding-top: 120px;
   padding-bottom: 48px;
+  background-image:
+    url('hero-shot-main.png'), url('hero-shot-capture.png'), url('hero-shot-rename.png'),
+    url('hero-shot-clipboard.png'), url('hero-shot-qr.png');
+  background-repeat: no-repeat;
+  background-size:
+    min(40vw, 540px) auto,
+    min(16vw, 210px) auto,
+    min(15vw, 196px) auto,
+    min(16vw, 210px) auto,
+    min(13vw, 160px) auto;
+  background-position:
+    calc(100% - 12px + (var(--breakout-drift) * 10px)) calc(50% + (var(--hero-progress) * 12px)),
+    calc(100% - 28px + (var(--breakout-progress) * 46px)) calc(13% - (var(--breakout-soft) * 38px)),
+    calc(58% - (var(--breakout-progress) * 54px)) calc(22% + (var(--breakout-drift) * 18px)),
+    calc(100% - 74px + (var(--breakout-progress) * 30px)) calc(79% + (var(--breakout-soft) * 24px)),
+    calc(63% - (var(--breakout-progress) * 44px)) calc(82% + (var(--breakout-soft) * 26px));
 }
 
 .hero-layout {
@@ -422,19 +438,7 @@ select {
 }
 
 .hero-media {
-  position: absolute;
-  top: 50%;
-  right: 0;
-  width: min(46vw, 560px);
-  min-height: clamp(500px, 62vh, 620px);
-  transform: translateY(-50%);
-  overflow: visible;
-  background:
-    url('hero-shot-main.png') center center / contain no-repeat,
-    radial-gradient(circle at 60% 40%, rgba(222, 235, 255, 0.5), rgba(222, 235, 255, 0) 58%);
-  padding: 20px 12px 24px;
-  perspective: 1800px;
-  transform-style: preserve-3d;
+  display: none;
 }
 
 .hero-media::before,
@@ -536,7 +540,6 @@ select {
   inset: 10% 10% 12% 12%;
   background-image: url('hero-shot-main.png');
   z-index: 2;
-  opacity: 0;
   transform: translate3d(
       calc(var(--breakout-drift) * 12px),
       calc(var(--hero-progress) * -20px),
@@ -882,9 +885,6 @@ select {
   }
 
   .hero-layout {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 28px;
     min-height: auto;
   }
 
@@ -904,13 +904,7 @@ select {
   }
 
   .hero-media {
-    position: relative;
-    top: auto;
-    right: auto;
-    width: min(100%, 620px);
-    min-height: 620px;
-    transform: none;
-    margin-top: 12px;
+    display: none;
   }
 
   .value-strip-grid,
