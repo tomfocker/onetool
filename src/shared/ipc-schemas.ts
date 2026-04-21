@@ -1,3 +1,4 @@
+import { BILIBILI_EXPORT_MODE_VALUES } from './bilibiliDownloader.ts'
 import { z } from 'zod';
 
 // Screen Recorder Config Schema
@@ -109,3 +110,18 @@ export const FloatBallResizeSchema = z.object({
     width: z.number().positive(),
     height: z.number().positive()
 });
+
+// Bilibili Downloader Schemas
+export const BilibiliParseLinkRequestSchema = z.object({
+    link: z.string().min(1)
+});
+
+export const BilibiliDownloadRequestSchema = z.object({
+    link: z.string().min(1),
+    exportMode: z.enum(BILIBILI_EXPORT_MODE_VALUES),
+    outputDirectory: z.string().min(1).optional(),
+    selectedItemId: z.string().min(1).optional()
+});
+
+export type BilibiliParseLinkRequest = z.infer<typeof BilibiliParseLinkRequestSchema>;
+export type BilibiliDownloadRequest = z.infer<typeof BilibiliDownloadRequestSchema>;

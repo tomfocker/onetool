@@ -278,3 +278,73 @@ export interface AppNotification {
   message: string
   duration?: number
 }
+
+export type BilibiliLinkKind = 'video' | 'episode' | 'season'
+
+export const BILIBILI_EXPORT_MODE_VALUES = [
+  'video-only',
+  'audio-only',
+  'split-streams',
+  'merge-mp4'
+] as const
+
+export type BilibiliExportMode = (typeof BILIBILI_EXPORT_MODE_VALUES)[number]
+
+export const BILIBILI_DOWNLOAD_STAGE_VALUES = [
+  'idle',
+  'parsing',
+  'loading-stream-options',
+  'downloading-video',
+  'downloading-audio',
+  'merging',
+  'completed',
+  'failed'
+] as const
+
+export type BilibiliDownloadStage = (typeof BILIBILI_DOWNLOAD_STAGE_VALUES)[number]
+
+export interface BilibiliParsedLink {
+  kind: BilibiliLinkKind
+  bvid?: string
+  epId?: string
+  seasonId?: string
+  page?: number
+}
+
+export interface BilibiliLoginSession {
+  isLoggedIn: boolean
+  nickname: string | null
+  avatarUrl: string | null
+  expiresAt: string | null
+}
+
+export interface BilibiliStreamModeAvailability {
+  available: boolean
+  disabledReason: string | null
+}
+
+export interface BilibiliStreamOptionSummary {
+  hasAudio: boolean
+  hasVideo: boolean
+  mergeMp4: BilibiliStreamModeAvailability
+  exportModes: Record<BilibiliExportMode, BilibiliStreamModeAvailability>
+  availableExportModes: BilibiliExportMode[]
+}
+
+export interface BilibiliDownloadItem {
+  id: string
+  title: string
+  kind: BilibiliLinkKind
+  page: number
+  exportMode: BilibiliExportMode
+  stage: BilibiliDownloadStage
+}
+
+export interface BilibiliDownloaderState {
+  loginSession: BilibiliLoginSession
+  parsedLink: BilibiliParsedLink | null
+  streamOptionSummary: BilibiliStreamOptionSummary | null
+  downloadItem: BilibiliDownloadItem | null
+  taskStage: BilibiliDownloadStage
+  error: string | null
+}
