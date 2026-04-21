@@ -50,3 +50,11 @@ test('hero cards expose dock transforms and final target-module rule includes do
     /\[data-flight-dock='capture'\],\s*\[data-flight-dock='organize'\],\s*\[data-flight-dock='utility'\],\s*\[data-flight-dock='matrix'\]\s*\{/
   )
 })
+
+test('hero title uses launch-page typography instead of the old stacked tower', () => {
+  assert.match(style, /\.hero-title\s*{/)
+  assert.match(style, /\.hero-title-line-wide\s*{/)
+  assert.match(style, /max-width:\s*10ch/)
+  assert.match(style, /font-size:\s*clamp\(3\.4rem,\s*6\.2vw,\s*6\.4rem\)/)
+  assert.match(style, /letter-spacing:\s*-0\.07em/)
+})
