@@ -7,15 +7,26 @@ const script = fs.readFileSync(path.join(__dirname, 'script.js'), 'utf8')
 const style = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8')
 
 test('scroll syncing uses requestAnimationFrame but keeps measurement out of scroll-time state publishing', () => {
+  const dockTargetsBlock = script.match(/const dockTargets = \{[\s\S]*?\n  \}/)
   const scheduleSyncBlock = script.match(/const scheduleSync = \(\) => \{[\s\S]*?\n  \}/)
   const syncScrollStateBlock = script.match(/const syncScrollState = \(\) => \{[\s\S]*?\n  \}/)
+  const syncFlightTargetsBlock = script.match(/const syncFlightTargets = \(\) => \{[\s\S]*?\n  \}/)
 
+  assert.ok(dockTargetsBlock, 'expected dockTargets block in script.js')
   assert.ok(scheduleSyncBlock, 'expected scheduleSync block in script.js')
   assert.ok(syncScrollStateBlock, 'expected syncScrollState block in script.js')
+  assert.ok(syncFlightTargetsBlock, 'expected syncFlightTargets block in script.js')
   assert.match(scheduleSyncBlock[0], /window\.requestAnimationFrame\(\(\) => \{/)
   assert.match(syncScrollStateBlock[0], /--flight-morph/)
   assert.match(syncScrollStateBlock[0], /--flight-dock/)
   assert.doesNotMatch(syncScrollStateBlock[0], /syncFlightTargets\(\)/)
+  assert.match(dockTargetsBlock[0], /\[data-flight-dock="capture"\]/)
+  assert.match(dockTargetsBlock[0], /\[data-flight-dock="organize"\]/)
+  assert.match(dockTargetsBlock[0], /\[data-flight-dock="utility"\]/)
+  assert.match(dockTargetsBlock[0], /\[data-flight-dock="matrix"\]/)
+  assert.match(syncFlightTargetsBlock[0], /--dock-x/)
+  assert.match(syncFlightTargetsBlock[0], /--dock-y/)
+  assert.match(syncFlightTargetsBlock[0], /--dock-scale/)
 })
 
 test('hero cards expose dock transforms and final target-module rule includes dock takeover styling', () => {
