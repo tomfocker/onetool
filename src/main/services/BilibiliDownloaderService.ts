@@ -146,8 +146,6 @@ type ActiveDownloadTask = {
   tempDirectory: string
 }
 
-type ExtendedTaskStage = BilibiliDownloaderState['taskStage'] | 'cancelled'
-
 const TASK_ROOT_DIRECTORY_NAME = 'bilibili-downloader'
 const TASKS_DIRECTORY_NAME = 'tasks'
 const VIDEO_TRACK_FILE_NAME = 'video-track.m4s'
@@ -897,6 +895,7 @@ export class BilibiliDownloaderService {
       }
 
       if (exportMode === 'merge-mp4') {
+        preserveTempArtifacts = true
         const ffmpegPath = this.getFfmpegPathImpl()
         if (!ffmpegPath) {
           throw new Error('FFmpeg is not available')
@@ -914,7 +913,6 @@ export class BilibiliDownloaderService {
             outputPath: mergedOutputPath
           })
         } catch (error) {
-          preserveTempArtifacts = true
           throw error
         }
 
@@ -1342,9 +1340,9 @@ export class BilibiliDownloaderService {
     return String(error)
   }
 
-  private setTaskStage(stage: ExtendedTaskStage) {
+  private setTaskStage(stage: BilibiliDownloaderState['taskStage']) {
     this.updateState({
-      taskStage: stage as BilibiliDownloaderState['taskStage']
+      taskStage: stage
     })
   }
 

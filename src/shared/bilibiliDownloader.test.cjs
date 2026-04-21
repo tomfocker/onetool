@@ -2,6 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 const {
+  BILIBILI_DOWNLOAD_STAGE_VALUES,
   buildStreamOptionSummary,
   createDefaultBilibiliDownloaderState,
   normalizeBilibiliDownloaderSelection,
@@ -217,6 +218,17 @@ test('createDefaultBilibiliDownloaderState returns a parse-and-selection oriente
   })
 
   assert.equal(BilibiliDownloaderStateSchema.parse(state).selection.exportMode, null)
+})
+
+test('cancelled is part of the shared downloader stage contract and schema', () => {
+  assert.equal(BILIBILI_DOWNLOAD_STAGE_VALUES.includes('cancelled'), true)
+
+  const state = {
+    ...createDefaultBilibiliDownloaderState(),
+    taskStage: 'cancelled'
+  }
+
+  assert.equal(BilibiliDownloaderStateSchema.parse(state).taskStage, 'cancelled')
 })
 
 test('parsed link schema accepts selectable items', () => {

@@ -299,6 +299,7 @@ export const BILIBILI_DOWNLOAD_STAGE_VALUES = [
   'downloading-video',
   'downloading-audio',
   'merging',
+  'cancelled',
   'completed',
   'failed'
 ] as const

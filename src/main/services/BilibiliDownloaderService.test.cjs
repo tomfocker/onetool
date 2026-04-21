@@ -1512,3 +1512,100 @@ test('startDownload keeps raw streams when mp4 merge fails', async () => {
   )
   assert.equal(fsMock.files.has('C:\\Users\\Test\\Downloads\\Demo Bangumi - 2 Climax.mp4'), false)
 })
+
+test('startDownload keeps raw streams when ffmpeg is unavailable before merge starts', async () => {
+  const fsMock = createFsMock()
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    fsModule: fsMock
+  })
+  const service = new BilibiliDownloaderService({
+    fs: fsMock,
+    app: {
+      getPath(name) {
+        if (name === 'userData') {
+          return 'C:\\Users\\Test\\AppData\\Roaming\\onetool'
+        }
+
+        if (name === 'downloads') {
+          return 'C:\\Users\\Test\\Downloads'
+        }
+
+        throw new Error(`Unexpected app path request: ${name}`)
+      }
+    },
+    fetch: createDownloadFixtureFetch({
+      metadataPayload: {
+        code: 0,
+        result: {
+          season_title: 'Demo Bangumi',
+          cover: 'https://i0.hdslb.com/bangumi-cover.jpg',
+          episodes: [
+            {
+              id: 1002,
+              cid: 9002,
+              title: '2',
+              long_title: 'Climax'
+            }
+          ]
+        }
+      },
+      playPayload: {
+        code: 0,
+        result: {
+          accept_quality: [80],
+          accept_description: ['1080P'],
+          support_formats: [
+            {
+              quality: 80,
+              new_description: '1080P'
+            }
+          ],
+          dash: {
+            video: [
+              {
+                id: 80,
+                baseUrl: 'https://cdn.example.com/video.m4s'
+              }
+            ],
+            audio: [
+              {
+                id: 30280,
+                baseUrl: 'https://cdn.example.com/audio.m4s'
+              }
+            ]
+          }
+        }
+      }
+    }),
+    now: () => 1713657600004,
+    downloadBinary: async ({ url, destinationPath }) => {
+      await fsMock.promises.writeFile(destinationPath, Buffer.from(`payload:${url}`))
+    },
+    getFfmpegPath: () => null
+  })
+
+  await service.parseLink({
+    url: 'https://www.bilibili.com/bangumi/play/ep1002'
+  })
+
+  await service.loadStreamOptions({
+    kind: 'episode',
+    itemId: 'episode:ep1002'
+  })
+
+  const result = await service.startDownload({
+    exportMode: 'merge-mp4'
+  })
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'FFmpeg is not available')
+  assert.equal(service.getState().taskStage, 'failed')
+  assert.equal(
+    fsMock.files.get('C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader\\tasks\\1713657600004\\video-track.m4s').toString(),
+    'payload:https://cdn.example.com/video.m4s'
+  )
+  assert.equal(
+    fsMock.files.get('C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader\\tasks\\1713657600004\\audio-track.m4s').toString(),
+    'payload:https://cdn.example.com/audio.m4s'
+  )
+})
