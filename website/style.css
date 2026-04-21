@@ -380,13 +380,13 @@ select {
 
 .hero-title {
   display: grid;
-  max-width: 9.4ch;
+  max-width: 9ch;
   color: #16233f;
   font-family: 'Noto Sans SC', 'Manrope', 'PingFang SC', sans-serif;
-  font-size: clamp(3.25rem, 5.9vw, 6rem);
-  font-weight: 800;
-  line-height: 0.86;
-  letter-spacing: -0.082em;
+  font-size: clamp(3.18rem, 5.8vw, 5.86rem);
+  font-weight: 780;
+  line-height: 0.84;
+  letter-spacing: -0.092em;
   text-wrap: balance;
 }
 
@@ -396,10 +396,10 @@ select {
 }
 
 .hero-title-line-wide {
-  color: #1a2947;
-  font-size: 0.84em;
-  font-weight: 780;
-  letter-spacing: -0.075em;
+  color: #203154;
+  font-size: 0.82em;
+  font-weight: 760;
+  letter-spacing: -0.084em;
 }
 
 .hero-description {
@@ -495,11 +495,12 @@ select {
 
 .hero-flight {
   position: absolute;
-  inset: 18px -2% 0 44%;
+  inset: 14px -5% 0 45%;
   z-index: 1;
   pointer-events: none;
   perspective: 1800px;
   overflow: visible;
+  contain: layout paint;
 }
 
 .hero-flight::before,
@@ -515,7 +516,7 @@ select {
   width: min(30vw, 360px);
   height: min(30vw, 360px);
   background: radial-gradient(circle, rgba(194, 218, 255, 0.5), rgba(194, 218, 255, 0) 70%);
-  filter: blur(18px);
+  filter: blur(12px);
 }
 
 .hero-flight::after {
@@ -523,14 +524,14 @@ select {
   width: min(22vw, 260px);
   height: min(22vw, 260px);
   background: radial-gradient(circle, rgba(255, 255, 255, 0.76), rgba(255, 255, 255, 0) 72%);
-  filter: blur(20px);
+  filter: blur(14px);
 }
 
 .hero-flight-card {
   --target-x: 0px;
   --target-y: 0px;
-  --dock-x: 0px;
-  --dock-y: 0px;
+  --dock-x-base: 0px;
+  --dock-y-base: 0px;
   --dock-scale: 1;
   --break-x: 0px;
   --break-y: 0px;
@@ -539,6 +540,7 @@ select {
   --travel-scale: 0.42;
   --card-tilt-x: 0deg;
   --card-tilt-y: 0deg;
+  --card-highlight: 0;
   position: absolute;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.88);
@@ -550,12 +552,14 @@ select {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.96),
     inset 0 -1px 0 rgba(210, 224, 247, 0.68),
-    var(--hero-shadow);
-  backdrop-filter: blur(16px) saturate(1.06);
+    0 28px 64px rgba(103, 126, 170, 0.14);
+  backdrop-filter: blur(8px) saturate(1.03);
   transform-origin: center center;
   opacity: calc(1 - (var(--flight-settle-soft) * 0.92));
   will-change: transform, opacity;
   transition: opacity 220ms linear;
+  contain: layout paint style;
+  backface-visibility: hidden;
 }
 
 .hero-flight-card[data-flight-card] {
@@ -571,7 +575,7 @@ select {
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
   transform-style: preserve-3d;
-  width: min(12.8vw, 176px);
+  width: min(11.9vw, 166px);
   aspect-ratio: 5 / 4;
 }
 
@@ -618,12 +622,12 @@ select {
       calc(
         (var(--break-x) * var(--flight-breakout-soft)) +
         (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
-        (var(--dock-x) * var(--flight-dock-soft))
+        (var(--dock-x-base) * var(--flight-dock-soft))
       ),
       calc(
         (var(--break-y) * var(--flight-breakout-soft)) +
         (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
-        (var(--dock-y) * var(--flight-dock-soft))
+        ((var(--dock-y-base) + (var(--card-highlight) * -18px)) * var(--flight-dock-soft))
       ),
       0
     )
@@ -656,12 +660,12 @@ select {
       calc(
         (var(--break-x) * var(--flight-breakout-soft)) +
         (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
-        ((var(--dock-x) + var(--receiver-dock-x)) * var(--flight-dock-soft))
+        ((var(--dock-x-base) + var(--receiver-dock-x)) * var(--flight-dock-soft))
       ),
       calc(
         (var(--break-y) * var(--flight-breakout-soft)) +
         (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
-        ((var(--dock-y) + var(--receiver-dock-y)) * var(--flight-dock-soft))
+        ((var(--dock-y-base) + (var(--card-highlight) * -22px) + var(--receiver-dock-y)) * var(--flight-dock-soft))
       ),
       0
     )
@@ -682,6 +686,7 @@ select {
 
 .hero-flight-card-capture-stack,
 .hero-flight-card-capture-record {
+  --card-highlight: var(--capture-highlight);
   --break-rotate: 7deg;
   --receiver-dock-x: 20px;
   --receiver-dock-y: -22px;
@@ -689,23 +694,24 @@ select {
 }
 
 .hero-flight-card-capture-stack {
-  top: 3%;
-  right: 1%;
+  top: 0;
+  right: -3%;
   background-image: url('hero-shot-capture-stack-v2.png');
-  --break-x: 38px;
-  --break-y: -54px;
+  --break-x: 46px;
+  --break-y: -62px;
 }
 
 .hero-flight-card-capture-record {
-  top: 18%;
-  right: 22%;
+  top: 19%;
+  right: 30%;
   background-image: url('hero-shot-capture-record-v2.png');
-  --break-x: 20px;
-  --break-y: -18px;
+  --break-x: 18px;
+  --break-y: -14px;
 }
 
 .hero-flight-card-text-rename,
 .hero-flight-card-text-clipboard {
+  --card-highlight: var(--text-highlight);
   --break-rotate: -9deg;
   --receiver-dock-x: -18px;
   --receiver-dock-y: -18px;
@@ -713,23 +719,24 @@ select {
 }
 
 .hero-flight-card-text-rename {
-  top: 10%;
-  left: 1%;
+  top: 7%;
+  left: -5%;
   background-image: url('hero-shot-text-rename-v2.png');
-  --break-x: -52px;
-  --break-y: -30px;
+  --break-x: -58px;
+  --break-y: -34px;
 }
 
 .hero-flight-card-text-clipboard {
-  bottom: 10%;
-  left: -2%;
+  bottom: 6%;
+  left: -7%;
   background-image: url('hero-shot-text-clipboard-v2.png');
-  --break-x: -38px;
-  --break-y: 28px;
+  --break-x: -42px;
+  --break-y: 32px;
 }
 
 .hero-flight-card-web-activate,
 .hero-flight-card-web-qr {
+  --card-highlight: var(--web-highlight);
   --break-rotate: 8deg;
   --receiver-dock-x: 18px;
   --receiver-dock-y: 20px;
@@ -737,23 +744,24 @@ select {
 }
 
 .hero-flight-card-web-activate {
-  right: 20%;
-  bottom: 10%;
+  right: 24%;
+  bottom: 6%;
   background-image: url('hero-shot-web-activate-v2.png');
-  --break-x: 34px;
-  --break-y: 34px;
+  --break-x: 38px;
+  --break-y: 38px;
 }
 
 .hero-flight-card-web-qr {
-  right: 2%;
-  bottom: 24%;
+  right: -2%;
+  bottom: 26%;
   background-image: url('hero-shot-web-qr-v2.png');
-  --break-x: 24px;
-  --break-y: 42px;
+  --break-x: 30px;
+  --break-y: 46px;
 }
 
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
+  --card-highlight: var(--utility-highlight);
   --break-rotate: -11deg;
   --receiver-dock-x: -20px;
   --receiver-dock-y: 18px;
@@ -761,19 +769,19 @@ select {
 }
 
 .hero-flight-card-utility-float {
-  left: 14%;
-  bottom: 3%;
+  left: 12%;
+  bottom: -1%;
   background-image: url('hero-shot-utility-float-v2.png');
-  --break-x: -34px;
-  --break-y: 42px;
+  --break-x: -38px;
+  --break-y: 46px;
 }
 
 .hero-flight-card-utility-clicker {
-  left: 0;
-  bottom: 22%;
+  left: -6%;
+  bottom: 24%;
   background-image: url('hero-shot-utility-clicker-v2.png');
-  --break-x: -20px;
-  --break-y: 26px;
+  --break-x: -24px;
+  --break-y: 30px;
 }
 
 .value-strip {
@@ -1141,7 +1149,7 @@ select {
   }
 
   .hero-flight {
-    inset: 36px -2% 0 40%;
+    inset: 36px -4% 0 40%;
   }
 
   .value-strip-grid,
@@ -1229,7 +1237,7 @@ select {
   .hero-flight-card-web-qr,
   .hero-flight-card-utility-float,
   .hero-flight-card-utility-clicker {
-    width: min(25vw, 164px);
+    width: min(23vw, 156px);
   }
 
   .hero-actions {
@@ -1302,7 +1310,7 @@ select {
   .hero-flight-card-web-qr,
   .hero-flight-card-utility-float,
   .hero-flight-card-utility-clicker {
-    width: min(31vw, 144px);
+    width: min(29vw, 136px);
   }
 
   .section {
