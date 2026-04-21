@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { X, Trash2, File, Folder } from 'lucide-react'
 import { buildStoredFiles } from '../../../shared/fileDropover'
-import appIcon from '../../../../resources/icon.png'
+import floatBallIcon from '../../../../resources/floatball-icon.png'
 
 interface StoredFile {
   id: string
@@ -311,8 +311,8 @@ export const FileDropover: React.FC = () => {
               : 'drop-shadow(0 8px 18px rgba(78, 49, 138, 0.28))'
           }}>
           <img
-            src={appIcon}
-            alt="OneTool"
+            src={floatBallIcon}
+            alt="文件暂存悬浮球"
             className="w-full h-full object-contain pointer-events-none transition-transform duration-300 group-hover:scale-105"
             draggable={false}
           />
@@ -340,7 +340,7 @@ export const FileDropover: React.FC = () => {
         <div className="p-3 border-b border-white/20 dark:border-white/10 flex items-center justify-between no-drag">
           <div className="flex items-center gap-2">
             <div className="p-2 bg-gradient-to-br from-emerald-500/20 to-teal-400/10 backdrop-blur-sm border border-white/20 dark:border-white/10 rounded-xl">
-              <img src={appIcon} alt="OneTool" className="w-4 h-4 object-contain" draggable={false} />
+              <img src={floatBallIcon} alt="文件暂存悬浮球" className="w-4 h-4 object-contain" draggable={false} />
             </div>
             <span className="font-semibold text-sm">文件暂存</span>
           </div>
@@ -368,7 +368,7 @@ export const FileDropover: React.FC = () => {
                 ? 'from-emerald-500/20 to-teal-400/10 scale-110'
                 : 'from-muted/50 to-muted/30'
                 }`}>
-                <img src={appIcon} alt="OneTool" className="w-8 h-8 object-contain opacity-60" draggable={false} />
+                <img src={floatBallIcon} alt="文件暂存悬浮球" className="w-8 h-8 object-contain opacity-60" draggable={false} />
               </div>
               <p className="text-sm text-muted-foreground mt-3">拖入文件到此处暂存</p>
             </div>
