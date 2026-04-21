@@ -347,7 +347,6 @@ export interface BilibiliStreamOptionSummary {
 }
 
 export interface BilibiliDownloaderSelection {
-  selectedItemId: string | null
   exportMode: BilibiliExportMode | null
 }
 

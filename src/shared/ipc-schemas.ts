@@ -112,29 +112,79 @@ export const FloatBallResizeSchema = z.object({
 });
 
 // Bilibili Downloader Shared Schemas
-export const BilibiliParsedItemSchema = z.object({
+export const BilibiliPageItemSchema = z.object({
     id: z.string().min(1),
-    kind: z.enum(['page', 'episode', 'season']),
+    kind: z.literal('page'),
     title: z.string().min(1),
-    page: z.number().int().positive().optional(),
-    epId: z.string().min(1).optional(),
-    seasonId: z.string().min(1).optional()
+    page: z.number().int().positive()
 });
 
-export const BilibiliParsedLinkSchema = z.object({
-    kind: z.enum(['video', 'episode', 'season']),
-    bvid: z.string().min(1).optional(),
-    epId: z.string().min(1).optional(),
-    seasonId: z.string().min(1).optional(),
-    page: z.number().int().positive().optional(),
+export const BilibiliEpisodeItemSchema = z.object({
+    id: z.string().min(1),
+    kind: z.literal('episode'),
+    title: z.string().min(1),
+    epId: z.string().min(1)
+});
+
+export const BilibiliSeasonItemSchema = z.object({
+    id: z.string().min(1),
+    kind: z.literal('season'),
+    title: z.string().min(1),
+    seasonId: z.string().min(1)
+});
+
+export const BilibiliParsedItemSchema = z.discriminatedUnion('kind', [
+    BilibiliPageItemSchema,
+    BilibiliEpisodeItemSchema,
+    BilibiliSeasonItemSchema
+]);
+
+const BilibiliParsedLinkCommonSchema = z.object({
     title: z.string().nullable(),
     coverUrl: z.string().nullable(),
-    items: z.array(BilibiliParsedItemSchema),
-    selectedItemId: z.string().min(1).nullable()
+    items: z.array(BilibiliParsedItemSchema).min(1),
+    selectedItemId: z.string().min(1)
+});
+
+export const BilibiliVideoLinkSchema = BilibiliParsedLinkCommonSchema.extend({
+    kind: z.literal('video'),
+    bvid: z.string().min(1),
+    page: z.number().int().positive().optional()
+});
+
+export const BilibiliEpisodeLinkSchema = BilibiliParsedLinkCommonSchema.extend({
+    kind: z.literal('episode'),
+    epId: z.string().min(1)
+});
+
+export const BilibiliSeasonLinkSchema = BilibiliParsedLinkCommonSchema.extend({
+    kind: z.literal('season'),
+    seasonId: z.string().min(1)
+});
+
+export const BilibiliParsedLinkSchema = z.discriminatedUnion('kind', [
+    BilibiliVideoLinkSchema,
+    BilibiliEpisodeLinkSchema,
+    BilibiliSeasonLinkSchema
+]).superRefine((value, ctx) => {
+    const expectedItemKind = value.kind === 'video' ? 'page' : value.kind === 'episode' ? 'episode' : 'season';
+
+    if (!value.items.every((item) => item.kind === expectedItemKind)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Selectable items must match the link kind'
+        });
+    }
+
+    if (!value.items.some((item) => item.id === value.selectedItemId)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'selectedItemId must reference one of the items'
+        });
+    }
 });
 
 export const BilibiliDownloaderSelectionSchema = z.object({
-    selectedItemId: z.string().min(1).nullable(),
     exportMode: z.enum(BILIBILI_EXPORT_MODE_VALUES).nullable()
 });
 

@@ -118,14 +118,50 @@ test('normalizeBilibiliParsedLink preserves candidate items and explicit selecti
   )
 })
 
-test('normalizeBilibiliDownloaderSelection keeps explicit item selection and export mode', () => {
+test('normalizeBilibiliParsedLink rejects incomplete selectable input', () => {
+  assert.throws(
+    () => normalizeBilibiliParsedLink({
+      kind: 'episode',
+      items: []
+    }),
+    /Episode links must include epId/
+  )
+
+  assert.throws(
+    () => normalizeBilibiliParsedLink({
+      kind: 'video',
+      bvid: 'BV1xK4y1m7aA',
+      items: [
+        {
+          kind: 'page'
+        }
+      ]
+    }),
+    /Page items must include a page number/
+  )
+
+  assert.throws(
+    () => normalizeBilibiliParsedLink({
+      kind: 'video',
+      bvid: 'BV1xK4y1m7aA',
+      items: [
+        {
+          kind: 'page',
+          page: 1
+        }
+      ],
+      selectedItemId: 'page:9'
+    }),
+    /Selected item must be one of the selectable items/
+  )
+})
+
+test('normalizeBilibiliDownloaderSelection keeps export mode only', () => {
   assert.deepEqual(
     normalizeBilibiliDownloaderSelection({
-      selectedItemId: 'page:3',
       exportMode: 'merge-mp4'
     }),
     {
-      selectedItemId: 'page:3',
       exportMode: 'merge-mp4'
     }
   )
@@ -161,7 +197,6 @@ test('createDefaultBilibiliDownloaderState returns a parse-and-selection oriente
     },
     parsedLink: null,
     selection: {
-      selectedItemId: null,
       exportMode: null
     },
     streamOptionSummary: null,
@@ -169,10 +204,79 @@ test('createDefaultBilibiliDownloaderState returns a parse-and-selection oriente
     error: null
   })
 
-  assert.equal(BilibiliDownloaderStateSchema.parse(state).selection.selectedItemId, null)
+  assert.equal(BilibiliDownloaderStateSchema.parse(state).selection.exportMode, null)
 })
 
 test('parsed link schema accepts selectable items', () => {
   const parsedLink = parseBilibiliLink('https://www.bilibili.com/video/BV1xK4y1m7aA?p=1')
   assert.deepEqual(BilibiliParsedLinkSchema.parse(parsedLink), parsedLink)
+})
+
+test('parsed link schema rejects impossible selectable states', () => {
+  assert.equal(
+    BilibiliParsedLinkSchema.safeParse({
+      kind: 'episode',
+      title: null,
+      coverUrl: null,
+      items: [
+        {
+          id: 'episode:ep123456',
+          kind: 'episode',
+          title: 'EP ep123456',
+          epId: 'ep123456'
+        }
+      ],
+      selectedItemId: 'episode:ep123456'
+    }).success,
+    false
+  )
+
+  assert.equal(
+    BilibiliParsedLinkSchema.safeParse({
+      kind: 'season',
+      seasonId: 'ss98765',
+      title: null,
+      coverUrl: null,
+      items: [
+        {
+          id: 'season:ss98765',
+          kind: 'season',
+          title: 'SS ss98765'
+        }
+      ],
+      selectedItemId: 'season:ss98765'
+    }).success,
+    false
+  )
+
+  assert.equal(
+    BilibiliParsedLinkSchema.safeParse({
+      kind: 'video',
+      bvid: 'BV1xK4y1m7aA',
+      title: null,
+      coverUrl: null,
+      items: [],
+      selectedItemId: 'page:1'
+    }).success,
+    false
+  )
+
+  assert.equal(
+    BilibiliParsedLinkSchema.safeParse({
+      kind: 'video',
+      bvid: 'BV1xK4y1m7aA',
+      page: 1,
+      title: null,
+      coverUrl: null,
+      items: [
+        {
+          id: 'page:1',
+          kind: 'page',
+          title: 'P1'
+        }
+      ],
+      selectedItemId: 'page:9'
+    }).success,
+    false
+  )
 })
