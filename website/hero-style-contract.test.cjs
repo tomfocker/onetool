@@ -65,6 +65,21 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(syncScrollStateBlock[0], /--flight-dock/)
 })
 
+test('local hero motion fallback accepts object context and returns the full state shape', () => {
+  const fallbackBlock = script.match(/const getHeroMotionState =[\s\S]*?const motionAnchors = new Map\(\)/)
+
+  assert.ok(fallbackBlock, 'expected getHeroMotionState fallback block in script.js')
+  assert.match(fallbackBlock[0], /typeof progressInput === 'number'/)
+  assert.match(fallbackBlock[0], /progress:\s*context\.progress \?\? 0/)
+  assert.match(fallbackBlock[0], /breakout:\s*context\.breakoutProgress \?\? 0/)
+  assert.match(fallbackBlock[0], /morph:\s*context\.morphProgress \?\? 0/)
+  assert.match(fallbackBlock[0], /dock:\s*context\.dockProgress \?\? 0/)
+  assert.match(fallbackBlock[0], /settle:\s*context\.settleProgress \?\? 0/)
+  assert.match(fallbackBlock[0], /highlight: \{/)
+  assert.match(fallbackBlock[0], /clipboard:\s*highlight\.clipboard \?\? 0/)
+  assert.match(fallbackBlock[0], /matrix:\s*highlight\.matrix \?\? 0/)
+})
+
 test('hero sticky keeps the dock handoff style contract', () => {
   const heroStickyRule = style.match(/\.hero-sticky\s*\{[\s\S]*?\n\}/)
 

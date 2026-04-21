@@ -30,26 +30,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const easeOutCubic = motionApi?.easeOutCubic ?? ((value) => 1 - Math.pow(1 - value, 3))
   const getHeroMotionState =
     motionApi?.getHeroMotionState ??
-    ((progress) => ({
-      progress,
-      breakout: 0,
-      breakoutSoft: 0,
-      morph: 0,
-      morphSoft: 0,
-      travel: 0,
-      travelSoft: 0,
-      dock: 0,
-      dockSoft: 0,
-      settle: 0,
-      settleSoft: 0,
-      highlight: {
-        capture: 0,
-        clipboard: 0,
-        organize: 0,
-        utility: 0,
-        matrix: 0
+    ((progressInput) => {
+      const context =
+        typeof progressInput === 'number'
+          ? { progress: progressInput }
+          : progressInput && typeof progressInput === 'object'
+            ? progressInput
+            : {}
+      const highlight = context.highlight ?? {}
+
+      return {
+        progress: context.progress ?? 0,
+        breakout: context.breakoutProgress ?? 0,
+        breakoutSoft: context.breakoutSoft ?? 0,
+        morph: context.morphProgress ?? 0,
+        morphSoft: context.morphSoft ?? 0,
+        travel: context.travelProgress ?? 0,
+        travelSoft: context.travelSoft ?? 0,
+        dock: context.dockProgress ?? 0,
+        dockSoft: context.dockSoft ?? 0,
+        settle: context.settleProgress ?? 0,
+        settleSoft: context.settleSoft ?? 0,
+        highlight: {
+          capture: highlight.capture ?? 0,
+          clipboard: highlight.clipboard ?? 0,
+          organize: highlight.organize ?? 0,
+          utility: highlight.utility ?? 0,
+          matrix: highlight.matrix ?? 0
+        }
       }
-    }))
+    })
   const motionAnchors = new Map()
 
   const getHeroProgress = () => {
