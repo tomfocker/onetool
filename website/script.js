@@ -198,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
         breakoutProgress: clamp(progress / 0.3, 0, 1),
         travelProgress: getViewportProgress(toolsSection, 1.1, 0.34),
         morphProgress: getViewportProgress(toolsSection, 0.74, 0.2),
+        // Keep the dock window late so the shorter tools page stays readable before takeover.
         dockProgress: getViewportProgress(toolsSection, 0.46, 0.08),
         settleProgress: getViewportProgress(toolsSection, 0.92, 0.14),
         highlight: {
