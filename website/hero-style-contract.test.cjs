@@ -24,9 +24,14 @@ test('scroll syncing uses requestAnimationFrame but keeps measurement out of scr
   assert.match(dockTargetsBlock[0], /\[data-flight-dock="organize"\]/)
   assert.match(dockTargetsBlock[0], /\[data-flight-dock="utility"\]/)
   assert.match(dockTargetsBlock[0], /\[data-flight-dock="matrix"\]/)
-  assert.match(syncFlightTargetsBlock[0], /--dock-x/)
-  assert.match(syncFlightTargetsBlock[0], /--dock-y/)
-  assert.match(syncFlightTargetsBlock[0], /--dock-scale/)
+  assert.match(syncFlightTargetsBlock[0], /const dockTarget = dockTargets\[targetKey\]/)
+  assert.match(syncFlightTargetsBlock[0], /const dockRect = dockTarget\?\.getBoundingClientRect\(\)/)
+  assert.match(syncFlightTargetsBlock[0], /const dockX = dockRect \?[\s\S]*: targetX/)
+  assert.match(syncFlightTargetsBlock[0], /const dockY = dockRect \?[\s\S]*: targetY/)
+  assert.match(syncFlightTargetsBlock[0], /const dockScale = dockRect \? dockRect\.width \/ card\.offsetWidth : 1/)
+  assert.match(syncFlightTargetsBlock[0], /card\.style\.setProperty\('--dock-x',/)
+  assert.match(syncFlightTargetsBlock[0], /card\.style\.setProperty\('--dock-y',/)
+  assert.match(syncFlightTargetsBlock[0], /card\.style\.setProperty\('--dock-scale',/)
 })
 
 test('hero cards expose dock transforms and final target-module rule includes dock takeover styling', () => {
