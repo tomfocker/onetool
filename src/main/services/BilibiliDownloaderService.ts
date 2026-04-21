@@ -1,12 +1,30 @@
 import fs from 'fs'
 import path from 'path'
 import { app } from 'electron'
-import { createDefaultBilibiliDownloaderState } from '../../shared/bilibiliDownloader.ts'
-import type { BilibiliDownloaderState, BilibiliLoginSession, IpcResponse } from '../../shared/types.ts'
+import {
+  buildStreamOptionSummary,
+  createDefaultBilibiliDownloaderState,
+  normalizeBilibiliParsedLink,
+  parseBilibiliLink
+} from '../../shared/bilibiliDownloader.ts'
+import type {
+  BilibiliDownloaderState,
+  BilibiliLinkKind,
+  BilibiliLoginSession,
+  BilibiliParsedLink,
+  BilibiliStreamOptionSummary,
+  IpcResponse
+} from '../../shared/types.ts'
 
 const QR_BOOTSTRAP_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/generate'
 const QR_POLL_URL = 'https://passport.bilibili.com/x/passport-login/web/qrcode/poll'
 const SESSION_FILE_NAME = 'bilibili-downloader-session.json'
+const BILIBILI_VIDEO_VIEW_URL = 'https://api.bilibili.com/x/web-interface/view'
+const BILIBILI_VIDEO_PLAY_URL = 'https://api.bilibili.com/x/player/playurl'
+const BILIBILI_BANGUMI_SEASON_URL = 'https://api.bilibili.com/pgc/view/web/season'
+const BILIBILI_BANGUMI_PLAY_URL = 'https://api.bilibili.com/pgc/player/web/playurl'
+const DEFAULT_STREAM_QN = 120
+const DEFAULT_FNVAL = 4048
 
 type FetchLike = (input: string, init?: Record<string, unknown>) => Promise<{
   ok?: boolean
@@ -51,6 +69,35 @@ type PersistedSessionRecord = {
   loginSession: BilibiliLoginSession
   auth: BilibiliAuthSession | null
   source: 'current' | 'legacy'
+}
+
+type ParseLinkRequest = {
+  url: string
+}
+
+type LoadStreamOptionsRequest = {
+  kind: BilibiliLinkKind
+  itemId: string
+}
+
+type StreamOption = {
+  qn: number
+  label: string
+  selected: boolean
+  available: boolean
+}
+
+type LoadStreamOptionsPayload = {
+  itemId: string
+  qnOptions: StreamOption[]
+  summary: BilibiliStreamOptionSummary
+}
+
+type ItemPlaybackTarget = {
+  cid: number | null
+  page?: number
+  epId?: string
+  seasonId?: string
 }
 
 function cloneState(state: BilibiliDownloaderState): BilibiliDownloaderState {
@@ -215,6 +262,38 @@ function resolvePollStatus(payload: any): PollStatus {
   return 'invalid'
 }
 
+function buildItemTitle(primary: unknown, secondary?: unknown, fallback?: string) {
+  const parts = [normalizeText(primary), normalizeText(secondary)].filter(Boolean)
+  if (parts.length > 0) {
+    return parts.join(' ')
+  }
+
+  return normalizeText(fallback) ?? fallback ?? ''
+}
+
+function parseNumericId(rawValue: string | undefined, prefix: string) {
+  const normalized = String(rawValue ?? '').trim()
+  if (!normalized) {
+    return null
+  }
+
+  if (normalized.startsWith(prefix)) {
+    const stripped = normalized.slice(prefix.length)
+    return stripped || null
+  }
+
+  return normalized
+}
+
+function normalizePositiveNumber(value: unknown): number | null {
+  const numberValue = typeof value === 'number' ? value : Number(value)
+  if (!Number.isFinite(numberValue) || numberValue <= 0) {
+    return null
+  }
+
+  return Math.trunc(numberValue)
+}
+
 export class BilibiliDownloaderService {
   private readonly app: AppLike
   private readonly fs: FsLike
@@ -225,6 +304,7 @@ export class BilibiliDownloaderService {
   private state: BilibiliDownloaderState = createDefaultBilibiliDownloaderState()
   private authSession: BilibiliAuthSession | null = null
   private pendingAuthCode: string | null = null
+  private readonly itemPlaybackTargets = new Map<string, ItemPlaybackTarget>()
 
   constructor(dependencies: BilibiliDownloaderServiceDependencies = {}) {
     this.app = dependencies.app ?? app
@@ -481,8 +561,390 @@ export class BilibiliDownloaderService {
     }
   }
 
+  async parseLink(request: ParseLinkRequest): Promise<IpcResponse<BilibiliParsedLink>> {
+    const parsedInput = parseBilibiliLink(request.url)
+    if (!parsedInput) {
+      this.itemPlaybackTargets.clear()
+      this.updateState({
+        parsedLink: null,
+        selection: { exportMode: null },
+        streamOptionSummary: null,
+        taskStage: 'idle',
+        error: 'Unsupported Bilibili link'
+      })
+      return {
+        success: false,
+        error: 'Unsupported Bilibili link'
+      }
+    }
+
+    if (!this.fetchImpl) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Fetch is not available'
+      })
+      return {
+        success: false,
+        error: 'Fetch is not available'
+      }
+    }
+
+    this.itemPlaybackTargets.clear()
+    this.updateState({
+      taskStage: 'parsing',
+      error: null
+    })
+
+    try {
+      const parsedLink =
+        parsedInput.kind === 'video'
+          ? await this.loadVideoMetadata(parsedInput)
+          : await this.loadBangumiMetadata(parsedInput)
+
+      this.updateState({
+        parsedLink,
+        selection: { exportMode: null },
+        streamOptionSummary: null,
+        taskStage: 'idle',
+        error: null
+      })
+      return {
+        success: true,
+        data: parsedLink
+      }
+    } catch (error) {
+      this.itemPlaybackTargets.clear()
+      this.updateState({
+        parsedLink: null,
+        selection: { exportMode: null },
+        streamOptionSummary: null,
+        taskStage: 'failed',
+        error: this.toErrorMessage(error)
+      })
+      return {
+        success: false,
+        error: this.toErrorMessage(error)
+      }
+    }
+  }
+
+  async loadStreamOptions(request: LoadStreamOptionsRequest): Promise<IpcResponse<LoadStreamOptionsPayload>> {
+    if (!this.state.parsedLink) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Parse a Bilibili link before loading stream options'
+      })
+      return {
+        success: false,
+        error: 'Parse a Bilibili link before loading stream options'
+      }
+    }
+
+    if (this.state.parsedLink.kind !== request.kind) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Selected item does not match the parsed link type'
+      })
+      return {
+        success: false,
+        error: 'Selected item does not match the parsed link type'
+      }
+    }
+
+    const selectedItem = this.state.parsedLink.items.find((item) => item.id === request.itemId)
+    if (!selectedItem) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Selected item was not found in parsed link metadata'
+      })
+      return {
+        success: false,
+        error: 'Selected item was not found in parsed link metadata'
+      }
+    }
+
+    if (!this.fetchImpl) {
+      this.updateState({
+        taskStage: 'idle',
+        error: 'Fetch is not available'
+      })
+      return {
+        success: false,
+        error: 'Fetch is not available'
+      }
+    }
+
+    this.updateState({
+      taskStage: 'loading-stream-options',
+      error: null
+    })
+
+    try {
+      const playPayload = await this.loadPlayInfo(this.state.parsedLink, request.itemId)
+      const summary = this.buildSummaryFromPlayPayload(playPayload)
+      const qnOptions = this.normalizeStreamOptions(playPayload)
+      const nextParsedLink = {
+        ...this.state.parsedLink,
+        selectedItemId: request.itemId
+      } as BilibiliParsedLink
+
+      const result: LoadStreamOptionsPayload = {
+        itemId: request.itemId,
+        qnOptions,
+        summary
+      }
+
+      this.updateState({
+        parsedLink: nextParsedLink,
+        selection: { exportMode: null },
+        streamOptionSummary: summary,
+        taskStage: 'idle',
+        error: null
+      })
+
+      return {
+        success: true,
+        data: result
+      }
+    } catch (error) {
+      this.updateState({
+        taskStage: 'failed',
+        error: this.toErrorMessage(error)
+      })
+      return {
+        success: false,
+        error: this.toErrorMessage(error)
+      }
+    }
+  }
+
   private getSessionPath() {
     return path.join(this.app.getPath('userData'), SESSION_FILE_NAME)
+  }
+
+  private async loadVideoMetadata(parsedInput: Extract<BilibiliParsedLink, { kind: 'video' }>) {
+    const url = new URL(BILIBILI_VIDEO_VIEW_URL)
+    url.searchParams.set('bvid', parsedInput.bvid)
+
+    const payload = await this.fetchJson(url.toString())
+    const data = payload?.data ?? payload
+    const pages = Array.isArray(data?.pages) ? data.pages : []
+    const requestedPage = parsedInput.page ?? 1
+    const normalizedItems = pages.length > 0
+      ? pages.map((pageEntry: any) => {
+          const page = normalizePositiveNumber(pageEntry?.page) ?? 1
+          const item = {
+            kind: 'page' as const,
+            page,
+            title: normalizeText(pageEntry?.part) ?? `P${page}`
+          }
+          this.itemPlaybackTargets.set(`page:${page}`, {
+            cid: normalizePositiveNumber(pageEntry?.cid),
+            page
+          })
+          return item
+        })
+      : parsedInput.items.map((item) => {
+          this.itemPlaybackTargets.set(item.id, {
+            cid: null,
+            page: item.page
+          })
+          return item
+        })
+
+    const selectedPage = normalizedItems.some((item) => item.page === requestedPage)
+      ? requestedPage
+      : normalizedItems[0]?.page ?? requestedPage
+
+    return normalizeBilibiliParsedLink({
+      kind: 'video',
+      bvid: parsedInput.bvid,
+      page: selectedPage,
+      title: normalizeText(data?.title),
+      coverUrl: normalizeText(data?.pic),
+      items: normalizedItems,
+      selectedItemId: `page:${selectedPage}`
+    })
+  }
+
+  private async loadBangumiMetadata(parsedInput: Exclude<BilibiliParsedLink, { kind: 'video' }>) {
+    const url = new URL(BILIBILI_BANGUMI_SEASON_URL)
+    const selectedEpisodeId = parsedInput.kind === 'episode' ? parseNumericId(parsedInput.epId, 'ep') : null
+    const selectedSeasonId = parsedInput.kind === 'season' ? parseNumericId(parsedInput.seasonId, 'ss') : null
+
+    if (selectedEpisodeId) {
+      url.searchParams.set('ep_id', selectedEpisodeId)
+    } else if (selectedSeasonId) {
+      url.searchParams.set('season_id', selectedSeasonId)
+    }
+
+    const payload = await this.fetchJson(url.toString())
+    const data = payload?.result ?? payload?.data ?? payload
+    const episodes = Array.isArray(data?.episodes) ? data.episodes : []
+
+    if (parsedInput.kind === 'episode') {
+      const items = episodes.length > 0
+        ? episodes.map((episode: any) => {
+            const epId = `ep${episode?.id}`
+            const item = {
+              kind: 'episode' as const,
+              epId,
+              title: buildItemTitle(episode?.title, episode?.long_title, `EP ${epId}`)
+            }
+            this.itemPlaybackTargets.set(`episode:${epId}`, {
+              cid: normalizePositiveNumber(episode?.cid),
+              epId
+            })
+            return item
+          })
+        : parsedInput.items
+
+      const selectedItemId = items.some((item) => item.epId === parsedInput.epId)
+        ? `episode:${parsedInput.epId}`
+        : items[0]?.id ?? `episode:${parsedInput.epId}`
+
+      return normalizeBilibiliParsedLink({
+        kind: 'episode',
+        epId: parsedInput.epId,
+        title: normalizeText(data?.season_title) ?? normalizeText(data?.title),
+        coverUrl: normalizeText(data?.cover),
+        items,
+        selectedItemId
+      })
+    }
+
+    const seasonItem = {
+      kind: 'season' as const,
+      seasonId: parsedInput.seasonId,
+      title: normalizeText(data?.season_title) ?? normalizeText(data?.title) ?? `SS ${parsedInput.seasonId}`
+    }
+    const firstEpisode = episodes[0]
+    this.itemPlaybackTargets.set(`season:${parsedInput.seasonId}`, {
+      cid: normalizePositiveNumber(firstEpisode?.cid),
+      epId: firstEpisode ? `ep${firstEpisode.id}` : undefined,
+      seasonId: parsedInput.seasonId
+    })
+
+    return normalizeBilibiliParsedLink({
+      kind: 'season',
+      seasonId: parsedInput.seasonId,
+      title: normalizeText(data?.season_title) ?? normalizeText(data?.title),
+      coverUrl: normalizeText(data?.cover),
+      items: [seasonItem],
+      selectedItemId: `season:${parsedInput.seasonId}`
+    })
+  }
+
+  private async loadPlayInfo(parsedLink: BilibiliParsedLink, itemId: string) {
+    const target = this.itemPlaybackTargets.get(itemId)
+    if (!target?.cid) {
+      throw new Error('Selected item is missing playback metadata')
+    }
+
+    const url = new URL(parsedLink.kind === 'video' ? BILIBILI_VIDEO_PLAY_URL : BILIBILI_BANGUMI_PLAY_URL)
+
+    if (parsedLink.kind === 'video') {
+      url.searchParams.set('bvid', parsedLink.bvid)
+    } else if (parsedLink.kind === 'episode') {
+      const epId = parseNumericId(target.epId ?? parsedLink.epId, 'ep')
+      if (!epId) {
+        throw new Error('Selected episode is missing ep_id')
+      }
+      url.searchParams.set('ep_id', epId)
+    } else {
+      const epId = parseNumericId(target.epId, 'ep')
+      if (epId) {
+        url.searchParams.set('ep_id', epId)
+      } else {
+        const seasonId = parseNumericId(target.seasonId ?? parsedLink.seasonId, 'ss')
+        if (!seasonId) {
+          throw new Error('Selected season is missing season_id')
+        }
+        url.searchParams.set('season_id', seasonId)
+      }
+    }
+
+    url.searchParams.set('cid', String(target.cid))
+    url.searchParams.set('fnval', String(DEFAULT_FNVAL))
+    url.searchParams.set('qn', String(DEFAULT_STREAM_QN))
+    url.searchParams.set('fourk', '1')
+
+    const payload = await this.fetchJson(url.toString())
+    return payload?.result ?? payload?.data ?? payload
+  }
+
+  private normalizeStreamOptions(playPayload: any): StreamOption[] {
+    const qualityList = Array.isArray(playPayload?.accept_quality) ? playPayload.accept_quality : []
+    const descriptions = Array.isArray(playPayload?.accept_description) ? playPayload.accept_description : []
+    const supportFormats = Array.isArray(playPayload?.support_formats) ? playPayload.support_formats : []
+    const seen = new Set<number>()
+    const options: StreamOption[] = []
+
+    const addOption = (qnValue: unknown, labelValue: unknown, selected: boolean) => {
+      const qn = normalizePositiveNumber(qnValue)
+      if (!qn || seen.has(qn)) {
+        return
+      }
+
+      seen.add(qn)
+      options.push({
+        qn,
+        label: normalizeText(labelValue) ?? `${qn}P`,
+        selected,
+        available: true
+      })
+    }
+
+    qualityList.forEach((qn: unknown, index: number) => {
+      const format = supportFormats.find((item: any) => normalizePositiveNumber(item?.quality) === normalizePositiveNumber(qn))
+      addOption(qn, format?.new_description ?? format?.display_desc ?? descriptions[index], index === 0)
+    })
+
+    if (options.length === 0) {
+      supportFormats.forEach((item: any, index: number) => {
+        addOption(item?.quality, item?.new_description ?? item?.display_desc, index === 0)
+      })
+    }
+
+    return options
+  }
+
+  private buildSummaryFromPlayPayload(playPayload: any) {
+    const dash = playPayload?.dash ?? {}
+    const videos = Array.isArray(dash.video) ? dash.video : []
+    const audios = Array.isArray(dash.audio) ? dash.audio : []
+    return buildStreamOptionSummary({
+      hasAudio: audios.length > 0,
+      hasVideo: videos.length > 0
+    })
+  }
+
+  private async fetchJson(url: string) {
+    if (!this.fetchImpl) {
+      throw new Error('Fetch is not available')
+    }
+
+    const response = await this.fetchImpl(url, {
+      headers: this.getRequestHeaders()
+    })
+    const payload = await response.json()
+    const code = Number(payload?.code ?? 0)
+
+    if (Number.isFinite(code) && code !== 0) {
+      throw new Error(normalizeText(payload?.message) ?? 'Bilibili request failed')
+    }
+
+    return payload
+  }
+
+  private getRequestHeaders() {
+    if (!this.authSession) {
+      return {}
+    }
+
+    return {
+      cookie: `SESSDATA=${this.authSession.sessData}; bili_jct=${this.authSession.biliJct}`
+    }
   }
 
   private async persistSession(session: PersistedSessionRecord) {

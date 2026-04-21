@@ -103,6 +103,8 @@ function loadBilibiliDownloaderServiceModule(overrides = {}) {
         console,
         process,
         Buffer,
+        URL,
+        URLSearchParams,
         setTimeout,
         clearTimeout
       },
@@ -563,4 +565,284 @@ test('loadSession rejects persisted sessions with malformed expiresAt strings', 
     avatarUrl: null,
     expiresAt: null
   })
+})
+
+test('parseLink rejects unsupported links with a clear error', async () => {
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService()
+
+  const result = await service.parseLink({
+    url: 'https://example.com/watch?v=123'
+  })
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'Unsupported Bilibili link')
+  assert.equal(service.getState().parsedLink, null)
+  assert.equal(service.getState().streamOptionSummary, null)
+  assert.equal(service.getState().selection.exportMode, null)
+})
+
+test('parseLink returns page items for multi-page videos', async () => {
+  const fetchCalls = []
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService({
+    fetch: async (url) => {
+      fetchCalls.push(url)
+      return createFetchResponse({
+        code: 0,
+        data: {
+          bvid: 'BV1xK4y1m7aA',
+          title: 'Multi Page Demo',
+          pic: 'https://i0.hdslb.com/video-cover.jpg',
+          pages: [
+            {
+              page: 1,
+              part: 'Opening',
+              cid: 111
+            },
+            {
+              page: 2,
+              part: 'Main Part',
+              cid: 222
+            },
+            {
+              page: 3,
+              part: 'Ending',
+              cid: 333
+            }
+          ]
+        }
+      })
+    }
+  })
+
+  const result = await service.parseLink({
+    url: 'https://www.bilibili.com/video/BV1xK4y1m7aA?p=2'
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlain(result.data), {
+    kind: 'video',
+    bvid: 'BV1xK4y1m7aA',
+    page: 2,
+    title: 'Multi Page Demo',
+    coverUrl: 'https://i0.hdslb.com/video-cover.jpg',
+    items: [
+      {
+        id: 'page:1',
+        kind: 'page',
+        title: 'Opening',
+        page: 1
+      },
+      {
+        id: 'page:2',
+        kind: 'page',
+        title: 'Main Part',
+        page: 2
+      },
+      {
+        id: 'page:3',
+        kind: 'page',
+        title: 'Ending',
+        page: 3
+      }
+    ],
+    selectedItemId: 'page:2'
+  })
+  assert.deepEqual(fetchCalls, [
+    'https://api.bilibili.com/x/web-interface/view?bvid=BV1xK4y1m7aA'
+  ])
+  assert.deepEqual(toPlain(service.getState().parsedLink), toPlain(result.data))
+  assert.equal(service.getState().streamOptionSummary, null)
+  assert.equal(service.getState().selection.exportMode, null)
+})
+
+test('parseLink returns bangumi episode items and preserves selected episode', async () => {
+  const fetchCalls = []
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService({
+    fetch: async (url) => {
+      fetchCalls.push(url)
+      return createFetchResponse({
+        code: 0,
+        result: {
+          season_title: 'Demo Bangumi',
+          cover: 'https://i0.hdslb.com/bangumi-cover.jpg',
+          episodes: [
+            {
+              id: 1001,
+              cid: 9001,
+              title: '1',
+              long_title: 'Beginning'
+            },
+            {
+              id: 1002,
+              cid: 9002,
+              title: '2',
+              long_title: 'Climax'
+            }
+          ]
+        }
+      })
+    }
+  })
+
+  const result = await service.parseLink({
+    url: 'https://www.bilibili.com/bangumi/play/ep1002'
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlain(result.data), {
+    kind: 'episode',
+    epId: 'ep1002',
+    title: 'Demo Bangumi',
+    coverUrl: 'https://i0.hdslb.com/bangumi-cover.jpg',
+    items: [
+      {
+        id: 'episode:ep1001',
+        kind: 'episode',
+        title: '1 Beginning',
+        epId: 'ep1001'
+      },
+      {
+        id: 'episode:ep1002',
+        kind: 'episode',
+        title: '2 Climax',
+        epId: 'ep1002'
+      }
+    ],
+    selectedItemId: 'episode:ep1002'
+  })
+  assert.deepEqual(fetchCalls, [
+    'https://api.bilibili.com/pgc/view/web/season?ep_id=1002'
+  ])
+  assert.deepEqual(toPlain(service.getState().parsedLink), toPlain(result.data))
+})
+
+test('loadStreamOptions returns normalized qn options for a selected episode', async () => {
+  const fetchCalls = []
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService({
+    fetch: async (url) => {
+      fetchCalls.push(url)
+
+      if (String(url).includes('/pgc/view/web/season')) {
+        return createFetchResponse({
+          code: 0,
+          result: {
+            season_title: 'Demo Bangumi',
+            cover: 'https://i0.hdslb.com/bangumi-cover.jpg',
+            episodes: [
+              {
+                id: 1001,
+                cid: 9001,
+                title: '1',
+                long_title: 'Beginning'
+              },
+              {
+                id: 1002,
+                cid: 9002,
+                title: '2',
+                long_title: 'Climax'
+              }
+            ]
+          }
+        })
+      }
+
+      return createFetchResponse({
+        code: 0,
+        result: {
+          accept_quality: [120, 80],
+          accept_description: ['4K', '1080P'],
+          support_formats: [
+            {
+              quality: 120,
+              new_description: '4K'
+            },
+            {
+              quality: 80,
+              new_description: '1080P'
+            }
+          ],
+          dash: {
+            video: [
+              {
+                id: 120,
+                baseUrl: 'https://example.com/video-4k.m4s'
+              },
+              {
+                id: 80,
+                baseUrl: 'https://example.com/video-1080.m4s'
+              }
+            ],
+            audio: []
+          }
+        }
+      })
+    }
+  })
+
+  await service.parseLink({
+    url: 'https://www.bilibili.com/bangumi/play/ep1002'
+  })
+
+  const result = await service.loadStreamOptions({
+    kind: 'episode',
+    itemId: 'episode:ep1002'
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlain(result.data), {
+    itemId: 'episode:ep1002',
+    qnOptions: [
+      {
+        qn: 120,
+        label: '4K',
+        selected: true,
+        available: true
+      },
+      {
+        qn: 80,
+        label: '1080P',
+        selected: false,
+        available: true
+      }
+    ],
+    summary: {
+      hasAudio: false,
+      hasVideo: true,
+      mergeMp4: {
+        available: false,
+        disabledReason: 'MP4 合并需要同时具备音频和视频流'
+      },
+      exportModes: {
+        'video-only': {
+          available: true,
+          disabledReason: null
+        },
+        'audio-only': {
+          available: false,
+          disabledReason: '缺少音频流'
+        },
+        'split-streams': {
+          available: false,
+          disabledReason: '原始流分别下载需要同时具备音频和视频流'
+        },
+        'merge-mp4': {
+          available: false,
+          disabledReason: 'MP4 合并需要同时具备音频和视频流'
+        }
+      },
+      availableExportModes: [
+        'video-only'
+      ]
+    }
+  })
+  assert.deepEqual(fetchCalls, [
+    'https://api.bilibili.com/pgc/view/web/season?ep_id=1002',
+    'https://api.bilibili.com/pgc/player/web/playurl?ep_id=1002&cid=9002&fnval=4048&qn=120&fourk=1'
+  ])
+  assert.deepEqual(toPlain(service.getState().streamOptionSummary), toPlain(result.data.summary))
+  assert.equal(service.getState().parsedLink.selectedItemId, 'episode:ep1002')
 })
