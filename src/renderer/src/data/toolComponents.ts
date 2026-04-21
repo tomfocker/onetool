@@ -190,16 +190,6 @@ export const toolComponents: ToolComponent[] = [
     installed: true
   },
   {
-    id: 'bilibili-downloader',
-    name: 'B站下载',
-    description: '扫码登录 Bilibili、解析链接并导出音视频文件',
-    category: '多媒体',
-    size: 3,
-    version: '1.0.0',
-    icon: 'Download',
-    installed: true
-  },
-  {
     id: 'screen-overlay-translator',
     name: '沉浸式截屏翻译',
     description: '全屏透明遮罩框选，OCR识别加翻译，玻璃质感设计',
