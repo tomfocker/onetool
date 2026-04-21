@@ -42,6 +42,8 @@
         progress: 0,
         breakout: 0,
         breakoutSoft: 0,
+        cluster: 0,
+        clusterSoft: 0,
         travel: 0,
         travelSoft: 0,
         morph: 0,
@@ -52,8 +54,8 @@
         dockSoft: 0,
         highlight: {
           capture: 0,
-          clipboard: 0,
-          organize: 0,
+          text: 0,
+          web: 0,
           utility: 0,
           matrix: 0
         }
@@ -61,6 +63,7 @@
     }
 
     const breakout = getSafeProgress(context.breakoutProgress, getPhase(safeProgress, 0.12, 0.34))
+    const cluster = getSafeProgress(context.clusterProgress, getPhase(safeProgress, 0.44, 0.82))
     const travel = getSafeProgress(context.travelProgress, getPhase(safeProgress, 0.34, 0.84))
     const morph = getSafeProgress(context.morphProgress, getPhase(safeProgress, 0.7, 0.94))
     const settle = getSafeProgress(context.settleProgress, getPhase(safeProgress, 0.7, 1))
@@ -83,6 +86,8 @@
       progress: safeProgress,
       breakout,
       breakoutSoft: easeOutCubic(breakout),
+      cluster,
+      clusterSoft: easeOutCubic(cluster),
       travel,
       travelSoft: easeInOutSine(travel),
       morph,
@@ -93,9 +98,9 @@
       dockSoft: easeOutCubic(dock),
       highlight: {
         capture: captureHighlight,
-        organize: organizeHighlight,
+        text: getSafeProgress(highlight.text, getSafeProgress(highlight.clipboard, organizeHighlight)),
+        web: getSafeProgress(highlight.web, getSafeProgress(highlight.organize, organizeHighlight)),
         utility: utilityHighlight,
-        clipboard: getSafeProgress(highlight.clipboard, organizeHighlight),
         matrix: getSafeProgress(highlight.matrix, captureHighlight)
       }
     }

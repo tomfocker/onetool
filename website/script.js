@@ -49,6 +49,8 @@ document.addEventListener('DOMContentLoaded', () => {
         progress: context.progress ?? 0,
         breakout: context.breakoutProgress ?? 0,
         breakoutSoft: context.breakoutSoft ?? 0,
+        cluster: context.clusterProgress ?? 0,
+        clusterSoft: context.clusterSoft ?? 0,
         morph: context.morphProgress ?? 0,
         morphSoft: context.morphSoft ?? 0,
         travel: context.travelProgress ?? 0,
@@ -276,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
       {
         progress,
         breakoutProgress: clamp(progress / 0.3, 0, 1),
+        clusterProgress: getViewportProgress(toolsSection, 0.86, 0.28),
         travelProgress: getViewportProgress(toolsSection, 1.1, 0.34),
         morphProgress: getViewportProgress(toolsSection, 0.74, 0.2),
         // Keep the dock window late so the shorter tools page stays readable before takeover.
@@ -297,6 +300,8 @@ document.addEventListener('DOMContentLoaded', () => {
     root.style.setProperty('--hero-progress', state.progress.toFixed(4))
     root.style.setProperty('--flight-breakout', state.breakout.toFixed(4))
     root.style.setProperty('--flight-breakout-soft', state.breakoutSoft.toFixed(4))
+    root.style.setProperty('--flight-cluster', state.cluster.toFixed(4))
+    root.style.setProperty('--flight-cluster-soft', state.clusterSoft.toFixed(4))
     root.style.setProperty('--flight-morph', state.morph.toFixed(4))
     root.style.setProperty('--flight-morph-soft', state.morphSoft.toFixed(4))
     root.style.setProperty('--flight-travel', state.travel.toFixed(4))
