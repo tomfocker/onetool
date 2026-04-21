@@ -1,4 +1,6 @@
 import type {
+  BilibiliParsedEpisodeItem,
+  BilibiliParsedEpisodeLink,
   BilibiliDownloadStage,
   BilibiliDownloaderSelection,
   BilibiliDownloaderState,
@@ -6,6 +8,10 @@ import type {
   BilibiliLinkKind,
   BilibiliLoginSession,
   BilibiliParsedItem,
+  BilibiliParsedPageItem,
+  BilibiliParsedSeasonItem,
+  BilibiliParsedSeasonLink,
+  BilibiliParsedVideoLink,
   BilibiliParsedItemKind,
   BilibiliParsedLink,
   BilibiliStreamModeAvailability,
@@ -31,15 +37,77 @@ export const BILIBILI_DOWNLOAD_STAGE_VALUES = [
   'failed'
 ] as const
 
-type BilibiliParsedItemInput = Partial<BilibiliParsedItem> | null | undefined
-type BilibiliParsedLinkInput = Partial<Omit<BilibiliParsedLink, 'items'>> & {
-  items?: BilibiliParsedItemInput[]
+type BilibiliParsedPageItemInput = {
+  id?: string | null
+  kind?: 'page' | null
+  title?: string | null
+  page?: number | null
 }
+
+type BilibiliParsedEpisodeItemInput = {
+  id?: string | null
+  kind?: 'episode' | null
+  title?: string | null
+  epId?: string | null
+}
+
+type BilibiliParsedSeasonItemInput = {
+  id?: string | null
+  kind?: 'season' | null
+  title?: string | null
+  seasonId?: string | null
+}
+
+type BilibiliParsedItemInput =
+  | BilibiliParsedPageItemInput
+  | BilibiliParsedEpisodeItemInput
+  | BilibiliParsedSeasonItemInput
+  | null
+  | undefined
+
+type BaseParsedLinkInput = {
+  title?: string | null
+  coverUrl?: string | null
+  selectedItemId?: string | null
+}
+
+type BilibiliParsedVideoLinkInput = BaseParsedLinkInput & {
+  kind?: 'video'
+  bvid?: string | null
+  page?: number | null
+  items?: BilibiliParsedPageItemInput[]
+}
+
+type BilibiliParsedEpisodeLinkInput = BaseParsedLinkInput & {
+  kind: 'episode'
+  epId?: string | null
+  items?: BilibiliParsedEpisodeItemInput[]
+}
+
+type BilibiliParsedSeasonLinkInput = BaseParsedLinkInput & {
+  kind: 'season'
+  seasonId?: string | null
+  items?: BilibiliParsedSeasonItemInput[]
+}
+
+type BilibiliParsedLinkInput =
+  | BilibiliParsedVideoLinkInput
+  | BilibiliParsedEpisodeLinkInput
+  | BilibiliParsedSeasonLinkInput
 type BilibiliDownloaderSelectionInput = Partial<Pick<BilibiliDownloaderSelection, 'exportMode'>> | null | undefined
 
 type StreamSummaryInput = {
   hasAudio: boolean
   hasVideo: boolean
+}
+
+type ParsedItemIdentityInput = {
+  kind: BilibiliParsedItemKind
+  id?: string | null
+  title?: string | null
+  page?: number | null
+  epId?: string | null
+  seasonId?: string | null
 }
 
 const BILIBILI_VIDEO_REGEX = /\/video\/(BV[0-9A-Za-z]+)/i
@@ -97,7 +165,7 @@ function normalizeParsedItemKind(value: BilibiliParsedItemKind | null | undefine
   return value === 'page' || value === 'episode' || value === 'season' ? value : fallback
 }
 
-function buildParsedItemId(item: Pick<BilibiliParsedItem, 'kind'> & Partial<BilibiliParsedItem>) {
+function buildParsedItemId(item: ParsedItemIdentityInput) {
   const explicitId = normalizeText(item.id)
   if (explicitId) {
     return explicitId
@@ -126,7 +194,7 @@ function getExpectedItemKind(linkKind: BilibiliLinkKind): BilibiliParsedItemKind
   return 'season'
 }
 
-function buildParsedItemTitle(item: Pick<BilibiliParsedItem, 'kind'> & Partial<BilibiliParsedItem>) {
+function buildParsedItemTitle(item: ParsedItemIdentityInput) {
   const explicitTitle = normalizeText(item.title)
   if (explicitTitle) {
     return explicitTitle
@@ -148,27 +216,34 @@ export function normalizeBilibiliParsedItem(
   fallbackKind: BilibiliParsedItemKind = 'page'
 ): BilibiliParsedItem {
   const kind = normalizeParsedItemKind(input?.kind, fallbackKind)
-  if (kind === 'page' && typeof input?.page !== 'number') {
+  if (kind === 'page' && typeof (input as BilibiliParsedPageItemInput | undefined)?.page !== 'number') {
     throw new Error('Page items must include a page number')
   }
 
-  if (kind === 'episode' && !normalizeText(input?.epId)) {
+  if (kind === 'episode' && !normalizeText((input as BilibiliParsedEpisodeItemInput | undefined)?.epId)) {
     throw new Error('Episode items must include epId')
   }
 
-  if (kind === 'season' && !normalizeText(input?.seasonId)) {
+  if (kind === 'season' && !normalizeText((input as BilibiliParsedSeasonItemInput | undefined)?.seasonId)) {
     throw new Error('Season items must include seasonId')
   }
 
-  const page = kind === 'page' ? normalizePositiveInteger(input?.page, 1) : undefined
-  const epId = kind === 'episode' ? normalizeText(input?.epId) || undefined : undefined
-  const seasonId = kind === 'season' ? normalizeText(input?.seasonId) || undefined : undefined
+  const page = kind === 'page'
+    ? normalizePositiveInteger((input as BilibiliParsedPageItemInput | undefined)?.page, 1)
+    : null
+  const epId = kind === 'episode'
+    ? normalizeText((input as BilibiliParsedEpisodeItemInput | undefined)?.epId) || null
+    : null
+  const seasonId = kind === 'season'
+    ? normalizeText((input as BilibiliParsedSeasonItemInput | undefined)?.seasonId) || null
+    : null
+
   if (kind === 'page') {
     return {
       id: buildParsedItemId({ ...input, kind }),
       kind,
       title: buildParsedItemTitle({ ...input, kind }),
-      page
+      page: page as number
     }
   }
 
@@ -194,12 +269,13 @@ function buildDefaultSelectableItems(input: BilibiliParsedLinkInput): BilibiliPa
   const expectedItemKind = getExpectedItemKind(kind)
 
   if (kind === 'video') {
-    const bvid = normalizeText(input.bvid)
+    const videoInput = input as BilibiliParsedVideoLinkInput
+    const bvid = normalizeText(videoInput.bvid)
     if (!bvid) {
       throw new Error('Video links must include bvid')
     }
 
-    const page = normalizePositiveInteger(input.page, 1)
+    const page = normalizePositiveInteger(videoInput.page, 1)
     return [
       normalizeBilibiliParsedItem(
         {
@@ -213,7 +289,8 @@ function buildDefaultSelectableItems(input: BilibiliParsedLinkInput): BilibiliPa
   }
 
   if (kind === 'episode') {
-    const epId = normalizeText(input.epId)
+    const episodeInput = input as BilibiliParsedEpisodeLinkInput
+    const epId = normalizeText(episodeInput.epId)
     if (!epId) {
       throw new Error('Episode links must include epId')
     }
@@ -230,7 +307,8 @@ function buildDefaultSelectableItems(input: BilibiliParsedLinkInput): BilibiliPa
     ]
   }
 
-  const seasonId = normalizeText(input.seasonId)
+  const seasonInput = input as BilibiliParsedSeasonLinkInput
+  const seasonId = normalizeText(seasonInput.seasonId)
   if (!seasonId) {
     throw new Error('Season links must include seasonId')
   }
@@ -250,9 +328,12 @@ function buildDefaultSelectableItems(input: BilibiliParsedLinkInput): BilibiliPa
 export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): BilibiliParsedLink {
   const kind: BilibiliLinkKind = input?.kind ?? 'video'
   const expectedItemKind = getExpectedItemKind(kind)
-  const bvid = normalizeText(input?.bvid)
-  const epId = normalizeText(input?.epId)
-  const seasonId = normalizeText(input?.seasonId)
+  const videoInput = kind === 'video' ? input as BilibiliParsedVideoLinkInput : null
+  const episodeInput = kind === 'episode' ? input as BilibiliParsedEpisodeLinkInput : null
+  const seasonInput = kind === 'season' ? input as BilibiliParsedSeasonLinkInput : null
+  const bvid = videoInput ? normalizeText(videoInput.bvid) : ''
+  const epId = episodeInput ? normalizeText(episodeInput.epId) : ''
+  const seasonId = seasonInput ? normalizeText(seasonInput.seasonId) : ''
 
   if (kind === 'video' && !bvid) {
     throw new Error('Video links must include bvid')
@@ -266,7 +347,7 @@ export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): Bil
     throw new Error('Season links must include seasonId')
   }
 
-  const rawItems = input?.items ?? []
+  const rawItems = input.items ?? []
   const items =
     rawItems.length > 0
       ? rawItems.map((item) => {
@@ -277,7 +358,7 @@ export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): Bil
 
           return normalizeBilibiliParsedItem(item, expectedItemKind)
         })
-      : buildDefaultSelectableItems({ ...input, kind })
+      : buildDefaultSelectableItems(input)
 
   if (items.length === 0) {
     throw new Error('Selectable parsed links must include at least one item')
@@ -292,33 +373,41 @@ export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): Bil
     throw new Error('Selected item must be one of the selectable items')
   }
 
-  const parsedLink: BilibiliParsedLink = {
-    kind,
-    title: normalizeText(input?.title) || null,
-    coverUrl: normalizeText(input?.coverUrl) || null,
-    items,
-    selectedItemId
-  }
-
-  const page = typeof input?.page === 'number' ? normalizePositiveInteger(input.page, 1) : undefined
+  const title = normalizeText(input.title) || null
+  const coverUrl = normalizeText(input.coverUrl) || null
 
   if (kind === 'video') {
-    parsedLink.bvid = bvid
+    const page = typeof videoInput?.page === 'number' ? normalizePositiveInteger(videoInput.page, 1) : undefined
+    return {
+      kind,
+      bvid,
+      ...(typeof page === 'number' ? { page } : {}),
+      title,
+      coverUrl,
+      items: items as BilibiliParsedPageItem[],
+      selectedItemId
+    } satisfies BilibiliParsedVideoLink
   }
 
   if (kind === 'episode') {
-    parsedLink.epId = epId
+    return {
+      kind,
+      epId,
+      title,
+      coverUrl,
+      items: items as BilibiliParsedEpisodeItem[],
+      selectedItemId
+    } satisfies BilibiliParsedEpisodeLink
   }
 
-  if (kind === 'season') {
-    parsedLink.seasonId = seasonId
-  }
-
-  if (kind === 'video' && typeof page === 'number') {
-    parsedLink.page = page
-  }
-
-  return parsedLink as BilibiliParsedLink
+  return {
+    kind,
+    seasonId,
+    title,
+    coverUrl,
+    items: items as BilibiliParsedSeasonItem[],
+    selectedItemId
+  } satisfies BilibiliParsedSeasonLink
 }
 
 export function parseBilibiliLink(input: string): BilibiliParsedLink | null {

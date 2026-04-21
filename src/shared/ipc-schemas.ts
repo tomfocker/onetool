@@ -1,4 +1,4 @@
-import { BILIBILI_DOWNLOAD_STAGE_VALUES, BILIBILI_EXPORT_MODE_VALUES } from './bilibiliDownloader.ts'
+import { BILIBILI_DOWNLOAD_STAGE_VALUES, BILIBILI_EXPORT_MODE_VALUES } from './bilibiliDownloader'
 import { z } from 'zod';
 
 // Screen Recorder Config Schema
