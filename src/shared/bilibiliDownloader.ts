@@ -1,10 +1,12 @@
 import type {
-  BilibiliDownloadItem,
   BilibiliDownloadStage,
+  BilibiliDownloaderSelection,
   BilibiliDownloaderState,
   BilibiliExportMode,
   BilibiliLinkKind,
   BilibiliLoginSession,
+  BilibiliParsedItem,
+  BilibiliParsedItemKind,
   BilibiliParsedLink,
   BilibiliStreamModeAvailability,
   BilibiliStreamOptionSummary
@@ -28,7 +30,11 @@ export const BILIBILI_DOWNLOAD_STAGE_VALUES = [
   'failed'
 ] as const
 
-type BilibiliDownloadItemInput = Partial<BilibiliDownloadItem> | null | undefined
+type BilibiliParsedItemInput = Partial<BilibiliParsedItem> | null | undefined
+type BilibiliParsedLinkInput = Partial<Omit<BilibiliParsedLink, 'items'>> & {
+  items?: BilibiliParsedItemInput[]
+}
+type BilibiliDownloaderSelectionInput = Partial<BilibiliDownloaderSelection> | null | undefined
 
 type StreamSummaryInput = {
   hasAudio: boolean
@@ -82,6 +88,114 @@ function parseBilibiliHost(rawInput: string) {
   }
 }
 
+function normalizeParsedItemKind(value: BilibiliParsedItemKind | null | undefined, fallback: BilibiliParsedItemKind) {
+  return value === 'page' || value === 'episode' || value === 'season' ? value : fallback
+}
+
+function buildParsedItemId(item: Pick<BilibiliParsedItem, 'kind'> & Partial<BilibiliParsedItem>) {
+  const explicitId = normalizeText(item.id)
+  if (explicitId) {
+    return explicitId
+  }
+
+  if (item.kind === 'page') {
+    return `page:${normalizePositiveInteger(item.page, 1)}`
+  }
+
+  if (item.kind === 'episode') {
+    return `episode:${normalizeText(item.epId)}`
+  }
+
+  return `season:${normalizeText(item.seasonId)}`
+}
+
+function buildParsedItemTitle(item: Pick<BilibiliParsedItem, 'kind'> & Partial<BilibiliParsedItem>) {
+  const explicitTitle = normalizeText(item.title)
+  if (explicitTitle) {
+    return explicitTitle
+  }
+
+  if (item.kind === 'page') {
+    return `P${normalizePositiveInteger(item.page, 1)}`
+  }
+
+  if (item.kind === 'episode') {
+    return `EP ${normalizeText(item.epId)}`
+  }
+
+  return `SS ${normalizeText(item.seasonId)}`
+}
+
+export function normalizeBilibiliParsedItem(
+  input: BilibiliParsedItemInput,
+  fallbackKind: BilibiliParsedItemKind = 'page'
+): BilibiliParsedItem {
+  const kind = normalizeParsedItemKind(input?.kind, fallbackKind)
+  const page = typeof input?.page === 'number' ? normalizePositiveInteger(input.page, 1) : undefined
+  const epId = normalizeText(input?.epId) || undefined
+  const seasonId = normalizeText(input?.seasonId) || undefined
+  const item: BilibiliParsedItem = {
+    id: buildParsedItemId({ ...input, kind }),
+    kind,
+    title: buildParsedItemTitle({ ...input, kind })
+  }
+
+  if (typeof page === 'number') {
+    item.page = page
+  }
+
+  if (epId) {
+    item.epId = epId
+  }
+
+  if (seasonId) {
+    item.seasonId = seasonId
+  }
+
+  return item
+}
+
+export function normalizeBilibiliParsedLink(input: BilibiliParsedLinkInput): BilibiliParsedLink {
+  const kind: BilibiliLinkKind = input?.kind ?? 'video'
+  const items = (input?.items ?? []).map((item) =>
+    normalizeBilibiliParsedItem(
+      item,
+      kind === 'video' ? 'page' : kind === 'episode' ? 'episode' : 'season'
+    )
+  )
+  const selectedItemId = normalizeText(input?.selectedItemId) || items[0]?.id || null
+  const parsedLink: BilibiliParsedLink = {
+    kind,
+    title: normalizeText(input?.title) || null,
+    coverUrl: normalizeText(input?.coverUrl) || null,
+    items,
+    selectedItemId
+  }
+
+  const bvid = normalizeText(input?.bvid)
+  const epId = normalizeText(input?.epId)
+  const seasonId = normalizeText(input?.seasonId)
+  const page = typeof input?.page === 'number' ? normalizePositiveInteger(input.page, 1) : undefined
+
+  if (bvid) {
+    parsedLink.bvid = bvid
+  }
+
+  if (epId) {
+    parsedLink.epId = epId
+  }
+
+  if (seasonId) {
+    parsedLink.seasonId = seasonId
+  }
+
+  if (typeof page === 'number') {
+    parsedLink.page = page
+  }
+
+  return parsedLink
+}
+
 export function parseBilibiliLink(input: string): BilibiliParsedLink | null {
   const url = parseBilibiliHost(input)
 
@@ -93,29 +207,50 @@ export function parseBilibiliLink(input: string): BilibiliParsedLink | null {
 
   if (videoMatch?.[1]) {
     const page = normalizePositiveInteger(url.searchParams.get('p'), 1)
-    return {
+    return normalizeBilibiliParsedLink({
       kind: 'video',
       bvid: videoMatch[1],
-      page
-    }
+      page,
+      items: [
+        {
+          kind: 'page',
+          page,
+          title: `P${page}`
+        }
+      ]
+    })
   }
 
   const episodeMatch = url.pathname.match(BILIBILI_BANGUMI_EP_REGEX)
 
   if (episodeMatch?.[1]) {
-    return {
+    return normalizeBilibiliParsedLink({
       kind: 'episode',
-      epId: episodeMatch[1]
-    }
+      epId: episodeMatch[1],
+      items: [
+        {
+          kind: 'episode',
+          epId: episodeMatch[1],
+          title: `EP ${episodeMatch[1]}`
+        }
+      ]
+    })
   }
 
   const seasonMatch = url.pathname.match(BILIBILI_BANGUMI_SS_REGEX)
 
   if (seasonMatch?.[1]) {
-    return {
+    return normalizeBilibiliParsedLink({
       kind: 'season',
-      seasonId: seasonMatch[1]
-    }
+      seasonId: seasonMatch[1],
+      items: [
+        {
+          kind: 'season',
+          seasonId: seasonMatch[1],
+          title: `SS ${seasonMatch[1]}`
+        }
+      ]
+    })
   }
 
   return null
@@ -127,25 +262,18 @@ function normalizeStage(stage: BilibiliDownloadStage | null | undefined): Bilibi
     : 'idle'
 }
 
-function normalizeExportMode(exportMode: BilibiliExportMode | null | undefined): BilibiliExportMode {
+function normalizeExportMode(exportMode: BilibiliExportMode | null | undefined): BilibiliExportMode | null {
   return BILIBILI_EXPORT_MODE_VALUES.includes(exportMode as BilibiliExportMode)
     ? (exportMode as BilibiliExportMode)
-    : 'video-only'
+    : null
 }
 
-export function normalizeBilibiliDownloadItem(input: BilibiliDownloadItemInput): BilibiliDownloadItem {
-  const kind: BilibiliLinkKind = input?.kind ?? 'video'
-  const page = normalizePositiveInteger(input?.page, 1)
-  const id = normalizeText(input?.id)
-  const title = normalizeText(input?.title) || '未命名'
-
+export function normalizeBilibiliDownloaderSelection(
+  input: BilibiliDownloaderSelectionInput
+): BilibiliDownloaderSelection {
   return {
-    id: id || `${kind}:${page}`,
-    title,
-    kind,
-    page,
-    exportMode: normalizeExportMode(input?.exportMode),
-    stage: normalizeStage(input?.stage)
+    selectedItemId: normalizeText(input?.selectedItemId) || null,
+    exportMode: normalizeExportMode(input?.exportMode)
   }
 }
 
@@ -180,8 +308,11 @@ export function createDefaultBilibiliDownloaderState(): BilibiliDownloaderState 
   return {
     loginSession,
     parsedLink: null,
+    selection: {
+      selectedItemId: null,
+      exportMode: null
+    },
     streamOptionSummary: null,
-    downloadItem: null,
     taskStage: 'idle',
     error: null
   }

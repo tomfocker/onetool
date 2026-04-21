@@ -1,4 +1,4 @@
-import { BILIBILI_EXPORT_MODE_VALUES } from './bilibiliDownloader.ts'
+import { BILIBILI_DOWNLOAD_STAGE_VALUES, BILIBILI_EXPORT_MODE_VALUES } from './bilibiliDownloader.ts'
 import { z } from 'zod';
 
 // Screen Recorder Config Schema
@@ -111,6 +111,59 @@ export const FloatBallResizeSchema = z.object({
     height: z.number().positive()
 });
 
+// Bilibili Downloader Shared Schemas
+export const BilibiliParsedItemSchema = z.object({
+    id: z.string().min(1),
+    kind: z.enum(['page', 'episode', 'season']),
+    title: z.string().min(1),
+    page: z.number().int().positive().optional(),
+    epId: z.string().min(1).optional(),
+    seasonId: z.string().min(1).optional()
+});
+
+export const BilibiliParsedLinkSchema = z.object({
+    kind: z.enum(['video', 'episode', 'season']),
+    bvid: z.string().min(1).optional(),
+    epId: z.string().min(1).optional(),
+    seasonId: z.string().min(1).optional(),
+    page: z.number().int().positive().optional(),
+    title: z.string().nullable(),
+    coverUrl: z.string().nullable(),
+    items: z.array(BilibiliParsedItemSchema),
+    selectedItemId: z.string().min(1).nullable()
+});
+
+export const BilibiliDownloaderSelectionSchema = z.object({
+    selectedItemId: z.string().min(1).nullable(),
+    exportMode: z.enum(BILIBILI_EXPORT_MODE_VALUES).nullable()
+});
+
+export const BilibiliDownloaderStateSchema = z.object({
+    loginSession: z.object({
+        isLoggedIn: z.boolean(),
+        nickname: z.string().nullable(),
+        avatarUrl: z.string().nullable(),
+        expiresAt: z.string().nullable()
+    }),
+    parsedLink: BilibiliParsedLinkSchema.nullable(),
+    selection: BilibiliDownloaderSelectionSchema,
+    streamOptionSummary: z.object({
+        hasAudio: z.boolean(),
+        hasVideo: z.boolean(),
+        mergeMp4: z.object({
+            available: z.boolean(),
+            disabledReason: z.string().nullable()
+        }),
+        exportModes: z.record(z.enum(BILIBILI_EXPORT_MODE_VALUES), z.object({
+            available: z.boolean(),
+            disabledReason: z.string().nullable()
+        })),
+        availableExportModes: z.array(z.enum(BILIBILI_EXPORT_MODE_VALUES))
+    }).nullable(),
+    taskStage: z.enum(BILIBILI_DOWNLOAD_STAGE_VALUES),
+    error: z.string().nullable()
+});
+
 // Bilibili Downloader Schemas
 export const BilibiliParseLinkRequestSchema = z.object({
     link: z.string().min(1)
@@ -120,8 +173,12 @@ export const BilibiliDownloadRequestSchema = z.object({
     link: z.string().min(1),
     exportMode: z.enum(BILIBILI_EXPORT_MODE_VALUES),
     outputDirectory: z.string().min(1).optional(),
-    selectedItemId: z.string().min(1).optional()
+    selectedItemId: z.string().min(1)
 });
 
+export type BilibiliParsedItem = z.infer<typeof BilibiliParsedItemSchema>;
+export type BilibiliParsedLink = z.infer<typeof BilibiliParsedLinkSchema>;
+export type BilibiliDownloaderSelection = z.infer<typeof BilibiliDownloaderSelectionSchema>;
+export type BilibiliDownloaderState = z.infer<typeof BilibiliDownloaderStateSchema>;
 export type BilibiliParseLinkRequest = z.infer<typeof BilibiliParseLinkRequestSchema>;
 export type BilibiliDownloadRequest = z.infer<typeof BilibiliDownloadRequestSchema>;

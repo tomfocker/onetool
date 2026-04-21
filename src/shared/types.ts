@@ -281,6 +281,8 @@ export interface AppNotification {
 
 export type BilibiliLinkKind = 'video' | 'episode' | 'season'
 
+export type BilibiliParsedItemKind = 'page' | 'episode' | 'season'
+
 export const BILIBILI_EXPORT_MODE_VALUES = [
   'video-only',
   'audio-only',
@@ -309,6 +311,19 @@ export interface BilibiliParsedLink {
   epId?: string
   seasonId?: string
   page?: number
+  title: string | null
+  coverUrl: string | null
+  items: BilibiliParsedItem[]
+  selectedItemId: string | null
+}
+
+export interface BilibiliParsedItem {
+  id: string
+  kind: BilibiliParsedItemKind
+  title: string
+  page?: number
+  epId?: string
+  seasonId?: string
 }
 
 export interface BilibiliLoginSession {
@@ -331,20 +346,16 @@ export interface BilibiliStreamOptionSummary {
   availableExportModes: BilibiliExportMode[]
 }
 
-export interface BilibiliDownloadItem {
-  id: string
-  title: string
-  kind: BilibiliLinkKind
-  page: number
-  exportMode: BilibiliExportMode
-  stage: BilibiliDownloadStage
+export interface BilibiliDownloaderSelection {
+  selectedItemId: string | null
+  exportMode: BilibiliExportMode | null
 }
 
 export interface BilibiliDownloaderState {
   loginSession: BilibiliLoginSession
   parsedLink: BilibiliParsedLink | null
+  selection: BilibiliDownloaderSelection
   streamOptionSummary: BilibiliStreamOptionSummary | null
-  downloadItem: BilibiliDownloadItem | null
   taskStage: BilibiliDownloadStage
   error: string | null
 }
