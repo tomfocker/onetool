@@ -4,7 +4,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const header = document.querySelector('.site-header')
   const heroScroll = document.querySelector('.hero-scroll')
   const heroFlight = document.querySelector('.hero-flight')
-  const scenariosSection = document.querySelector('#scenarios')
   const toolsSection = document.querySelector('#tools')
   const revealItems = document.querySelectorAll('.reveal')
   const flightCards = {
@@ -17,15 +16,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const flightTargets = {
     capture: document.querySelector('[data-flight-target="capture"]'),
     organize: document.querySelector('[data-flight-target="organize"]'),
-    utility: document.querySelector('[data-flight-target="utility"]'),
-    matrix: document.querySelector('[data-flight-target="matrix"]')
+    utility: document.querySelector('[data-flight-target="utility"]')
   }
   const dockTargets = {
     capture: document.querySelector('[data-flight-dock="capture"]'),
-    clipboard: document.querySelector('[data-flight-dock="clipboard"]'),
     organize: document.querySelector('[data-flight-dock="organize"]'),
-    utility: document.querySelector('[data-flight-dock="utility"]'),
-    matrix: document.querySelector('[data-flight-dock="matrix"]')
+    utility: document.querySelector('[data-flight-dock="utility"]')
   }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let frameRequested = false
@@ -79,7 +75,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncMotionAnchors = () => {
     motionAnchors.clear()
 
-    ;[scenariosSection, toolsSection, ...Object.values(flightTargets)].forEach((element) => {
+    ;[toolsSection, ...Object.values(flightTargets)].forEach((element) => {
       if (!element) {
         return
       }
@@ -179,22 +175,27 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const progress = getHeroProgress()
-    const travelLead = getViewportProgress(scenariosSection, 0.86, 0.28)
-    const travelFollow = getViewportProgress(toolsSection, 1.02, 0.22)
+    const heroTargets = {
+      capture: flightTargets.capture,
+      clipboard: flightTargets.organize,
+      organize: flightTargets.organize,
+      utility: flightTargets.utility,
+      matrix: flightTargets.capture
+    }
     const state = getHeroMotionState(
       {
         progress,
         breakoutProgress: clamp(progress / 0.3, 0, 1),
-        travelProgress: clamp((travelLead * 0.22) + (travelFollow * 0.78), 0, 1),
-        morphProgress: getViewportProgress(toolsSection, 0.68, 0.18),
-        dockProgress: getViewportProgress(toolsSection, 0.42, 0.02),
-        settleProgress: getViewportProgress(toolsSection, 0.88, 0.1),
+        travelProgress: getViewportProgress(toolsSection, 1.1, 0.34),
+        morphProgress: getViewportProgress(toolsSection, 0.74, 0.2),
+        dockProgress: getViewportProgress(toolsSection, 0.46, 0.08),
+        settleProgress: getViewportProgress(toolsSection, 0.92, 0.14),
         highlight: {
-          capture: easeOutCubic(getViewportProgress(flightTargets.capture, 0.94, 0.48)),
-          clipboard: easeOutCubic(getViewportProgress(flightTargets.clipboard, 0.82, 0.22)),
-          organize: easeOutCubic(getViewportProgress(flightTargets.organize, 0.88, 0.4)),
-          utility: easeOutCubic(getViewportProgress(flightTargets.utility, 0.84, 0.3)),
-          matrix: easeOutCubic(getViewportProgress(flightTargets.matrix, 0.72, 0.18))
+          capture: easeOutCubic(getViewportProgress(heroTargets.capture, 0.94, 0.48)),
+          clipboard: easeOutCubic(getViewportProgress(heroTargets.clipboard, 0.82, 0.22)),
+          organize: easeOutCubic(getViewportProgress(heroTargets.organize, 0.88, 0.4)),
+          utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.84, 0.3)),
+          matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.72, 0.18))
         }
       },
       prefersReducedMotion
