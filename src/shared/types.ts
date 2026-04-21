@@ -314,7 +314,7 @@ export interface BilibiliParsedLink {
   title: string | null
   coverUrl: string | null
   items: BilibiliParsedItem[]
-  selectedItemId: string | null
+  selectedItemId: string
 }
 
 export interface BilibiliParsedItem {
