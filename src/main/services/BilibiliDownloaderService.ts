@@ -49,7 +49,8 @@ type BilibiliAuthSession = {
 
 type PersistedSessionRecord = {
   loginSession: BilibiliLoginSession
-  auth: BilibiliAuthSession
+  auth: BilibiliAuthSession | null
+  source: 'current' | 'legacy'
 }
 
 function cloneState(state: BilibiliDownloaderState): BilibiliDownloaderState {
@@ -67,6 +68,15 @@ function createLoggedOutSession(): BilibiliLoginSession {
     nickname: null,
     avatarUrl: null,
     expiresAt: null
+  }
+}
+
+function createReauthenticationRequiredSession(session: BilibiliLoginSession): BilibiliLoginSession {
+  return {
+    isLoggedIn: false,
+    nickname: session.nickname,
+    avatarUrl: session.avatarUrl,
+    expiresAt: session.expiresAt
   }
 }
 
@@ -163,13 +173,22 @@ function normalizePersistedSessionRecord(value: unknown): PersistedSessionRecord
   }
 
   const record = value as Record<string, unknown>
+  if (isValidLoginSession(record) && record.isLoggedIn) {
+    return {
+      loginSession: record,
+      auth: null,
+      source: 'legacy'
+    }
+  }
+
   if (!isValidLoginSession(record.loginSession) || !record.loginSession.isLoggedIn || !isValidAuthSession(record.auth)) {
     return null
   }
 
   return {
     loginSession: record.loginSession,
-    auth: record.auth
+    auth: record.auth,
+    source: 'current'
   }
 }
 
@@ -258,7 +277,7 @@ export class BilibiliDownloaderService {
       }
 
       const persisted = normalizePersistedSessionRecord(parsed)
-      if (!persisted || !persisted.auth) {
+      if (!persisted) {
         this.clearPersistedSession()
         this.authSession = null
         this.updateState({
@@ -281,6 +300,20 @@ export class BilibiliDownloaderService {
         return {
           success: false,
           error: 'Stored Bilibili session expired'
+        }
+      }
+
+      if (!persisted.auth) {
+        this.authSession = null
+        const migratedState = createReauthenticationRequiredSession(persisted.loginSession)
+        this.updateState({
+          loginSession: migratedState,
+          error: 'Stored Bilibili session requires re-authentication'
+        })
+        return {
+          success: false,
+          error: 'Stored Bilibili session requires re-authentication',
+          data: migratedState
         }
       }
 

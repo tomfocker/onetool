@@ -476,6 +476,36 @@ test('loadSession clears expired persisted login sessions', () => {
   })
 })
 
+test('loadSession migrates legacy persisted login metadata into a reauthentication-required state', () => {
+  const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
+  const legacyPayload = {
+    isLoggedIn: true,
+    nickname: 'Legacy User',
+    avatarUrl: 'https://i0.hdslb.com/legacy-avatar.jpg',
+    expiresAt: '2099-01-01T00:00:00.000Z'
+  }
+  const fsMock = createFsMock({
+    [sessionPath]: JSON.stringify(legacyPayload)
+  })
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    fsModule: fsMock
+  })
+  const service = new BilibiliDownloaderService({ fs: fsMock })
+
+  const result = service.loadSession()
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, 'Stored Bilibili session requires re-authentication')
+  assert.equal(service.getAuthSession(), null)
+  assert.equal(fsMock.files.has(sessionPath), true)
+  assert.deepEqual(toPlain(service.getState().loginSession), {
+    isLoggedIn: false,
+    nickname: 'Legacy User',
+    avatarUrl: 'https://i0.hdslb.com/legacy-avatar.jpg',
+    expiresAt: '2099-01-01T00:00:00.000Z'
+  })
+})
+
 test('loadSession treats malformed persisted payloads as invalid login state', () => {
   const sessionPath = 'C:\\Users\\Test\\AppData\\Roaming\\onetool\\bilibili-downloader-session.json'
   const fsMock = createFsMock({
