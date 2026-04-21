@@ -90,6 +90,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'DownloadOrganizerTool'
   },
   {
+    id: 'bilibili-downloader',
+    name: 'B站下载',
+    description: '登录 Bilibili、解析链接并导出音视频文件',
+    category: '媒体处理',
+    icon: 'Download',
+    componentPath: 'BilibiliDownloaderTool'
+  },
+  {
     id: 'screenshot-tool',
     name: '叠加截图',
     description: '支持聚焦叠加的高级截图工具',
@@ -120,6 +128,14 @@ export const tools: ToolDefinition[] = [
     category: '媒体处理',
     icon: 'Image',
     componentPath: 'ImageProcessorTool'
+  },
+  {
+    id: 'bilibili-downloader',
+    name: 'B站下载',
+    description: '扫码登录后下载当前账号可访问的 B 站视频或剧集条目',
+    category: '媒体处理',
+    icon: 'Download',
+    componentPath: 'BilibiliDownloaderTool'
   },
   {
     id: 'autoclicker',
