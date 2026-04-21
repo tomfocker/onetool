@@ -846,3 +846,198 @@ test('loadStreamOptions returns normalized qn options for a selected episode', a
   assert.deepEqual(toPlain(service.getState().streamOptionSummary), toPlain(result.data.summary))
   assert.equal(service.getState().parsedLink.selectedItemId, 'episode:ep1002')
 })
+
+test('parseLink canonicalizes season links into selectable episode metadata', async () => {
+  const fetchCalls = []
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService({
+    fetch: async (url) => {
+      fetchCalls.push(url)
+      return createFetchResponse({
+        code: 0,
+        result: {
+          season_title: 'Season Landing Page',
+          cover: 'https://i0.hdslb.com/season-cover.jpg',
+          episodes: [
+            {
+              id: 2001,
+              cid: 9101,
+              title: '1',
+              long_title: 'Arrival'
+            },
+            {
+              id: 2002,
+              cid: 9102,
+              title: '2',
+              long_title: 'Decision'
+            }
+          ]
+        }
+      })
+    }
+  })
+
+  const result = await service.parseLink({
+    url: 'https://www.bilibili.com/bangumi/play/ss5555'
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlain(result.data), {
+    kind: 'episode',
+    epId: 'ep2001',
+    title: 'Season Landing Page',
+    coverUrl: 'https://i0.hdslb.com/season-cover.jpg',
+    items: [
+      {
+        id: 'episode:ep2001',
+        kind: 'episode',
+        title: '1 Arrival',
+        epId: 'ep2001'
+      },
+      {
+        id: 'episode:ep2002',
+        kind: 'episode',
+        title: '2 Decision',
+        epId: 'ep2002'
+      }
+    ],
+    selectedItemId: 'episode:ep2001'
+  })
+  assert.deepEqual(fetchCalls, [
+    'https://api.bilibili.com/pgc/view/web/season?season_id=5555'
+  ])
+  assert.deepEqual(toPlain(service.getState().parsedLink), toPlain(result.data))
+})
+
+test('loadStreamOptions loads a selected episode after parsing a season link', async () => {
+  const fetchCalls = []
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule()
+  const service = new BilibiliDownloaderService({
+    fetch: async (url) => {
+      fetchCalls.push(url)
+
+      if (String(url).includes('/pgc/view/web/season')) {
+        return createFetchResponse({
+          code: 0,
+          result: {
+            season_title: 'Season Landing Page',
+            cover: 'https://i0.hdslb.com/season-cover.jpg',
+            episodes: [
+              {
+                id: 2001,
+                cid: 9101,
+                title: '1',
+                long_title: 'Arrival'
+              },
+              {
+                id: 2002,
+                cid: 9102,
+                title: '2',
+                long_title: 'Decision'
+              }
+            ]
+          }
+        })
+      }
+
+      return createFetchResponse({
+        code: 0,
+        result: {
+          accept_quality: [80, 64],
+          accept_description: ['1080P', '720P'],
+          support_formats: [
+            {
+              quality: 80,
+              new_description: '1080P'
+            },
+            {
+              quality: 64,
+              new_description: '720P'
+            }
+          ],
+          dash: {
+            video: [
+              {
+                id: 80,
+                baseUrl: 'https://example.com/ep2002-video-1080.m4s'
+              }
+            ],
+            audio: [
+              {
+                id: 30280,
+                baseUrl: 'https://example.com/ep2002-audio.m4s'
+              }
+            ]
+          }
+        }
+      })
+    }
+  })
+
+  await service.parseLink({
+    url: 'https://www.bilibili.com/bangumi/play/ss5555'
+  })
+
+  const result = await service.loadStreamOptions({
+    kind: 'episode',
+    itemId: 'episode:ep2002'
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(toPlain(result.data), {
+    itemId: 'episode:ep2002',
+    qnOptions: [
+      {
+        qn: 80,
+        label: '1080P',
+        selected: true,
+        available: true
+      },
+      {
+        qn: 64,
+        label: '720P',
+        selected: false,
+        available: true
+      }
+    ],
+    summary: {
+      hasAudio: true,
+      hasVideo: true,
+      mergeMp4: {
+        available: true,
+        disabledReason: null
+      },
+      exportModes: {
+        'video-only': {
+          available: true,
+          disabledReason: null
+        },
+        'audio-only': {
+          available: true,
+          disabledReason: null
+        },
+        'split-streams': {
+          available: true,
+          disabledReason: null
+        },
+        'merge-mp4': {
+          available: true,
+          disabledReason: null
+        }
+      },
+      availableExportModes: [
+        'video-only',
+        'audio-only',
+        'split-streams',
+        'merge-mp4'
+      ]
+    }
+  })
+  assert.deepEqual(fetchCalls, [
+    'https://api.bilibili.com/pgc/view/web/season?season_id=5555',
+    'https://api.bilibili.com/pgc/player/web/playurl?ep_id=2002&cid=9102&fnval=4048&qn=120&fourk=1'
+  ])
+  assert.equal(service.getState().parsedLink.kind, 'episode')
+  assert.equal(service.getState().parsedLink.selectedItemId, 'episode:ep2002')
+  assert.deepEqual(toPlain(service.getState().streamOptionSummary), toPlain(result.data.summary))
+})

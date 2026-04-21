@@ -781,23 +781,24 @@ export class BilibiliDownloaderService {
     const payload = await this.fetchJson(url.toString())
     const data = payload?.result ?? payload?.data ?? payload
     const episodes = Array.isArray(data?.episodes) ? data.episodes : []
+    const episodeItems = episodes.length > 0
+      ? episodes.map((episode: any) => {
+          const epId = `ep${episode?.id}`
+          const item = {
+            kind: 'episode' as const,
+            epId,
+            title: buildItemTitle(episode?.title, episode?.long_title, `EP ${epId}`)
+          }
+          this.itemPlaybackTargets.set(`episode:${epId}`, {
+            cid: normalizePositiveNumber(episode?.cid),
+            epId
+          })
+          return item
+        })
+      : []
 
     if (parsedInput.kind === 'episode') {
-      const items = episodes.length > 0
-        ? episodes.map((episode: any) => {
-            const epId = `ep${episode?.id}`
-            const item = {
-              kind: 'episode' as const,
-              epId,
-              title: buildItemTitle(episode?.title, episode?.long_title, `EP ${epId}`)
-            }
-            this.itemPlaybackTargets.set(`episode:${epId}`, {
-              cid: normalizePositiveNumber(episode?.cid),
-              epId
-            })
-            return item
-          })
-        : parsedInput.items
+      const items = episodeItems.length > 0 ? episodeItems : parsedInput.items
 
       const selectedItemId = items.some((item) => item.epId === parsedInput.epId)
         ? `episode:${parsedInput.epId}`
@@ -810,6 +811,18 @@ export class BilibiliDownloaderService {
         coverUrl: normalizeText(data?.cover),
         items,
         selectedItemId
+      })
+    }
+
+    if (episodeItems.length > 0) {
+      const defaultEpisode = episodeItems[0]
+      return normalizeBilibiliParsedLink({
+        kind: 'episode',
+        epId: defaultEpisode.epId,
+        title: normalizeText(data?.season_title) ?? normalizeText(data?.title),
+        coverUrl: normalizeText(data?.cover),
+        items: episodeItems,
+        selectedItemId: defaultEpisode.id
       })
     }
 
