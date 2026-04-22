@@ -1,6 +1,6 @@
 {
   "name": "onetool",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "高颜值本地小工具箱",
   "main": "./out/main/index.js",
   "author": "八骏马",
@@ -84,6 +84,7 @@
     "productName": "onetool",
     "copyright": "Copyright © 2025 八骏马",
     "asar": true,
+    "afterPack": "scripts/afterPack.cjs",
     "artifactName": "${productName}-${version}-${os}-${arch}.${ext}",
     "files": [
       "out/**/*",
@@ -115,6 +116,10 @@
     "win": {
       "target": "nsis",
       "icon": "resources/icon.png",
+      "electronLanguages": [
+        "zh-CN",
+        "en-US"
+      ],
       "extraResources": [
         {
           "from": "resources/space-scan/ntfs-fast-scan.exe",

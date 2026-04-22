@@ -120,7 +120,6 @@ test('createToolRouteModuleMap keeps screenshot and recorder tools routable in t
     './tools/ColorPickerTool.tsx': () => 'color-picker',
     './tools/ImageProcessorTool.tsx': () => 'image-processor',
     './tools/AutoClickerTool.tsx': () => 'autoclicker',
-    './tools/CapsWriterTool.tsx': () => 'capswriter',
     './tools/ScreenOverlayTranslatorTool.tsx': () => 'translator',
     './tools/QRCodeTool.tsx': () => 'qrcode-tool',
     './tools/ScreenSaverTool.tsx': () => 'flip-clock',
@@ -188,4 +187,10 @@ test('tools registry exposes the taskbar appearance tool through the main shell 
   assert.equal(typeof map['taskbar-appearance'], 'function')
   assert.equal(typeof map.settings, 'function')
   assert.equal(warnings.length, 0)
+})
+
+test('tools registry no longer exposes the external CapsWriter entrypoint', () => {
+  const capswriterTool = actualTools.find((tool) => tool.id === 'capswriter')
+
+  assert.equal(capswriterTool, undefined)
 })

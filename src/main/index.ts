@@ -8,7 +8,6 @@ import path from 'path'
 import { settingsService } from './services/SettingsService'
 import { doctorService } from './services/DoctorService'
 import { autoClickerService } from './services/AutoClickerService'
-import { capsWriterService } from './services/CapsWriterService'
 import { clipboardService } from './services/ClipboardService'
 import { hotkeyService } from './services/HotkeyService'
 import { colorPickerService } from './services/ColorPickerService'
@@ -27,7 +26,6 @@ import { createBeforeQuitAndInstallHook } from './utils/updateInstallFlow'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
-import { registerCapsWriterIpc } from './ipc/capsWriterIpc'
 import { registerClipboardIpc } from './ipc/clipboardIpc'
 import { registerColorPickerIpc } from './ipc/colorPickerIpc'
 import { registerHotkeyIpc } from './ipc/hotkeyIpc'
@@ -175,7 +173,6 @@ app.whenReady().then(() => {
 
   // Register all IPC Handlers
   registerAutoClickerIpc()
-  registerCapsWriterIpc()
   registerClipboardIpc()
   registerColorPickerIpc()
   registerHotkeyIpc()
@@ -278,7 +275,6 @@ app.on('will-quit', () => {
 
 app.on('before-quit', () => {
   windowManagerService.setIsQuitting(true)
-  capsWriterService.stopAll()
   autoClickerService.stop()
   screenRecorderService.stop()
   processRegistry.killAll()

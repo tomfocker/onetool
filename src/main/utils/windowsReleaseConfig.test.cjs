@@ -26,3 +26,17 @@ test('Windows packaging does not copy a second ffmpeg binary into extraResources
 
   assert.equal(extraResourceSources.includes('node_modules/ffmpeg-static/ffmpeg.exe'), false)
 })
+
+test('Windows packaging keeps only the release locales we ship', () => {
+  const packageJsonPath = path.join(__dirname, '../../../package.json')
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+
+  assert.deepEqual(packageJson.build?.win?.electronLanguages, ['zh-CN', 'en-US'])
+})
+
+test('Windows packaging prunes non-Windows global key listener binaries after pack', () => {
+  const packageJsonPath = path.join(__dirname, '../../../package.json')
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+
+  assert.equal(packageJson.build?.afterPack, 'scripts/afterPack.cjs')
+})

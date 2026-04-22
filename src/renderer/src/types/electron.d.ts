@@ -130,15 +130,6 @@ declare global {
         set: <K extends keyof GlobalStore>(key: K, value: GlobalStore[K]) => Promise<IpcResponse>
         onChanged: (callback: (newStore: GlobalStore) => void) => () => void
       }
-      capswriter: {
-        startServer: () => Promise<IpcResponse>
-        startClient: () => Promise<IpcResponse>
-        stopServer: () => Promise<IpcResponse>
-        stopClient: () => Promise<IpcResponse>
-        getStatus: () => Promise<IpcResponse<{ serverRunning: boolean; clientRunning: boolean }>>
-        startAll: () => Promise<IpcResponse<{ serverSuccess: boolean; clientSuccess: boolean; serverError?: string; clientError?: string }>>
-        stopAll: () => Promise<IpcResponse>
-      }
       quickInstaller: {
         installSoftware: (softwareList: { id: string; name: string; source: string }[]) => Promise<IpcResponse>
         onInstallLog: (callback: (data: { type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'; message: string }) => void) => () => void

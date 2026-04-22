@@ -5,8 +5,6 @@ import { TitleBar } from '@/components/TitleBar'
 import { Dashboard } from '@/components/Dashboard'
 import { ScreenOverlay } from '@/components/ScreenOverlay'
 import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
-import { RecorderSelectionOverlay } from '@/tools/ScreenRecorderTool'
-import { ScreenshotSelectionOverlay } from '@/tools/SuperScreenshotTool'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
@@ -23,6 +21,20 @@ const componentModules = import.meta.glob([
 const toolModules = import.meta.glob([
   './tools/*.tsx'
 ])
+
+const RecorderSelectionOverlay = React.lazy(async () => {
+  const module = await import('@/tools/ScreenRecorderTool')
+  return { default: module.RecorderSelectionOverlay }
+})
+
+const ScreenshotSelectionOverlay = React.lazy(async () => {
+  const module = await import('@/tools/SuperScreenshotTool')
+  return { default: module.ScreenshotSelectionOverlay }
+})
+
+function OverlayFallback(): React.JSX.Element {
+  return <div className='fixed inset-0 bg-black/40' />
+}
 
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
@@ -75,8 +87,20 @@ function AppContent(): React.JSX.Element {
 
   if (isScreenOverlay) return <ScreenOverlay />
   if (isColorPickerOverlay) return <ColorPickerOverlay />
-  if (isRecorderSelection) return <RecorderSelectionOverlay />
-  if (isScreenshotSelection) return <ScreenshotSelectionOverlay />
+  if (isRecorderSelection) {
+    return (
+      <Suspense fallback={<OverlayFallback />}>
+        <RecorderSelectionOverlay />
+      </Suspense>
+    )
+  }
+  if (isScreenshotSelection) {
+    return (
+      <Suspense fallback={<OverlayFallback />}>
+        <ScreenshotSelectionOverlay />
+      </Suspense>
+    )
+  }
 
   const ActiveComponent = currentPage === 'dashboard' ? Dashboard : ToolComponentsMap[currentPage];
 

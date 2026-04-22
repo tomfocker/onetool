@@ -77,16 +77,6 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     }
   }
 
-  const capswriterAPI = {
-    startServer: () => ipcRenderer.invoke('capswriter-start-server'),
-    startClient: () => ipcRenderer.invoke('capswriter-start-client'),
-    stopServer: () => ipcRenderer.invoke('capswriter-stop-server'),
-    stopClient: () => ipcRenderer.invoke('capswriter-stop-client'),
-    getStatus: () => ipcRenderer.invoke('capswriter-get-status'),
-    startAll: () => ipcRenderer.invoke('capswriter-start-all'),
-    stopAll: () => ipcRenderer.invoke('capswriter-stop-all')
-  }
-
   const quickInstallerAPI = {
     installSoftware: (softwareList: { id: string; name: string; source: string }[]) => {
       return ipcRenderer.invoke('quick-installer-install', softwareList)
@@ -435,7 +425,6 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     updates: updatesAPI,
     webUtils: webUtilsAPI,
     rename: renameAPI,
-    capswriter: capswriterAPI,
     quickInstaller: quickInstallerAPI,
     autoClicker: autoClickerAPI,
     autoStart: autoStartAPI,

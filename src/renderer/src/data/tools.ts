@@ -146,14 +146,6 @@ export const tools: ToolDefinition[] = [
     componentPath: 'AutoClickerTool'
   },
   {
-    id: 'capswriter',
-    name: '语音输入',
-    description: '高效离线语音转文字方案',
-    category: '实用工具',
-    icon: 'Mic',
-    componentPath: 'CapsWriterTool'
-  },
-  {
     id: 'web-activator',
     name: '网页激活',
     description: '全局唤醒浏览器特定标签页',

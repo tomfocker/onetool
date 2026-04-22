@@ -122,6 +122,7 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   const bridge = createElectronBridge(mocks.deps)
 
   assert.equal('ipcRenderer' in bridge, false)
+  assert.equal('capswriter' in bridge, false)
   assert.equal(typeof bridge.app.onOpenTool, 'function')
   assert.equal(typeof bridge.app.onNotification, 'function')
   assert.equal(typeof bridge.doctor.runAudit, 'function')

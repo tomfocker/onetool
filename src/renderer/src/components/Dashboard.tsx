@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react'
 import {
-  Package, Terminal, Mic, MousePointer, Sparkles, Clock, RefreshCw,
+  Package, Terminal, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
   Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop
@@ -22,14 +22,13 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, Mic, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop
+  Package, Terminal, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop
 }
 
 const toolGradientMap: Record<string, string> = {
   'quick-installer': 'from-blue-500 to-indigo-500',
   'rename-tool': 'from-violet-500 to-purple-600',
   'autoclicker': 'from-amber-500 to-orange-600',
-  'capswriter': 'from-rose-500 to-pink-600',
   'image-processor': 'from-emerald-500 to-teal-600',
   'web-activator': 'from-indigo-500 to-blue-600',
   'flip-clock': 'from-slate-500 to-gray-600',

@@ -50,16 +50,6 @@ export const toolComponents: ToolComponent[] = [
     installed: true
   },
   {
-    id: 'capswriter',
-    name: 'CapsWriter 语音',
-    description: '离线语音转文字工具，支持语音输入和语音命令',
-    category: '效率工具',
-    size: 5,
-    version: '1.0.0',
-    icon: 'Mic',
-    installed: true
-  },
-  {
     id: 'image-processor',
     name: '图片处理',
     description: '批量图片格式转换、压缩、调整大小',
