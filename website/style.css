@@ -244,7 +244,7 @@ select {
 
 .hero-scroll {
   position: relative;
-  height: 236dvh;
+  height: 124dvh;
   z-index: 6;
 }
 
@@ -536,11 +536,10 @@ select {
 .hero-flight-card {
   --target-x: 0px;
   --target-y: 0px;
-  --dock-x-base: 0px;
-  --dock-y-base: 0px;
-  --dock-scale: 1;
   --break-x: 0px;
   --break-y: 0px;
+  --cluster-x: 0px;
+  --cluster-y: 0px;
   --break-rotate: 0deg;
   --travel-factor: 1;
   --travel-scale: 0.42;
@@ -583,6 +582,8 @@ select {
   transform-style: preserve-3d;
   width: min(11.9vw, 166px);
   aspect-ratio: 5 / 4;
+  --receiver-slot-x: 76px;
+  --receiver-slot-y: 20px;
 }
 
 .hero-flight-card::before {
@@ -625,28 +626,20 @@ select {
   --card-tilt-y: -2deg;
   transform:
     translate3d(
-      calc(
-        (var(--break-x) * var(--flight-breakout-soft)) +
-        (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
-        (var(--dock-x-base) * var(--flight-dock-soft))
-      ),
-      calc(
-        (var(--break-y) * var(--flight-breakout-soft)) +
-        (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
-        ((var(--dock-y-base) + (var(--card-highlight) * -18px)) * var(--flight-dock-soft))
-      ),
+      calc((var(--break-x) * var(--flight-breakout-soft)) + (10px * var(--hero-progress))),
+      calc((var(--break-y) * var(--flight-breakout-soft)) + (18px * var(--hero-progress))),
       0
     )
     scale(
       calc(
-        (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
-        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft)))
+        (1 - (0.1 * var(--flight-breakout-soft))) *
+        (1 - (0.08 * var(--flight-settle-soft)))
       )
     )
     rotate(calc(var(--break-rotate) * var(--flight-breakout-soft) * (1 - var(--flight-morph-soft))))
     rotateX(calc(var(--card-tilt-x) * var(--flight-breakout-soft)))
     rotateY(calc(var(--card-tilt-y) * var(--flight-breakout-soft)));
-  opacity: calc(1 - (0.96 * var(--flight-dock-soft)));
+  opacity: calc(1 - (0.34 * var(--flight-travel-soft)) - (0.4 * var(--flight-settle-soft)));
 }
 
 .hero-flight-card-capture-stack,
@@ -657,34 +650,36 @@ select {
 .hero-flight-card-web-qr,
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
-  --receiver-dock-x: 0px;
-  --receiver-dock-y: 0px;
-  --receiver-dock-scale: 1;
-  --receiver-dock-rotate: 0deg;
+  --dock-y-base: 0px;
+  --receiver-slot-x: 0px;
+  --receiver-slot-y: 0px;
+  --receiver-slot-scale: 1;
+  --receiver-slot-rotate: 0deg;
   transform:
     translate3d(
       calc(
         (var(--break-x) * var(--flight-breakout-soft)) +
+        (var(--cluster-x) * var(--flight-cluster-soft)) +
         (var(--target-x) * var(--travel-factor) * var(--flight-travel-soft)) +
-        ((var(--dock-x-base) + var(--receiver-dock-x)) * var(--flight-dock-soft))
+        (var(--receiver-slot-x) * var(--flight-dock-soft))
       ),
       calc(
         (var(--break-y) * var(--flight-breakout-soft)) +
+        (var(--cluster-y) * var(--flight-cluster-soft)) +
         (var(--target-y) * 0.78 * var(--flight-travel-soft)) +
-        ((var(--dock-y-base) + (var(--card-highlight) * -22px) + var(--receiver-dock-y)) * var(--flight-dock-soft))
+        (((var(--card-highlight) * -22px) + var(--receiver-slot-y)) * var(--flight-dock-soft))
       ),
       0
     )
     scale(
       calc(
         (1 - (var(--travel-scale) * var(--flight-travel-soft))) *
-        (1 + ((var(--dock-scale) - 1) * var(--flight-dock-soft))) *
-        var(--receiver-dock-scale)
+        var(--receiver-slot-scale)
       )
     )
     rotate(
       calc(
-        ((var(--break-rotate) * (1 - var(--flight-morph-soft))) + var(--receiver-dock-rotate))
+        ((var(--break-rotate) * (1 - var(--flight-morph-soft))) + var(--receiver-slot-rotate))
       )
     );
   opacity: calc(1 - (0.94 * var(--flight-dock-soft)));
@@ -694,9 +689,8 @@ select {
 .hero-flight-card-capture-record {
   --card-highlight: var(--capture-highlight);
   --break-rotate: 7deg;
-  --receiver-dock-x: 20px;
-  --receiver-dock-y: -22px;
-  --receiver-dock-rotate: 2deg;
+  --receiver-slot-x: 54px;
+  --receiver-slot-y: 14px;
 }
 
 .hero-flight-card-capture-stack {
@@ -705,6 +699,12 @@ select {
   background-image: url('hero-shot-capture-stack-v2.png');
   --break-x: 46px;
   --break-y: -62px;
+  --cluster-x: -184px;
+  --cluster-y: 110px;
+  --receiver-slot-x: -48px;
+  --receiver-slot-y: -20px;
+  --receiver-slot-scale: 0.96;
+  --receiver-slot-rotate: 2deg;
 }
 
 .hero-flight-card-capture-record {
@@ -713,15 +713,20 @@ select {
   background-image: url('hero-shot-capture-record-v2.png');
   --break-x: 18px;
   --break-y: -14px;
+  --cluster-x: -154px;
+  --cluster-y: 176px;
+  --receiver-slot-x: 54px;
+  --receiver-slot-y: 14px;
+  --receiver-slot-scale: 0.94;
+  --receiver-slot-rotate: 2deg;
 }
 
 .hero-flight-card-text-rename,
 .hero-flight-card-text-clipboard {
   --card-highlight: var(--text-highlight);
   --break-rotate: -9deg;
-  --receiver-dock-x: -18px;
-  --receiver-dock-y: -18px;
-  --receiver-dock-rotate: -2deg;
+  --receiver-slot-x: 50px;
+  --receiver-slot-y: 14px;
 }
 
 .hero-flight-card-text-rename {
@@ -730,64 +735,98 @@ select {
   background-image: url('hero-shot-text-rename-v2.png');
   --break-x: -58px;
   --break-y: -34px;
+  --cluster-x: -54px;
+  --cluster-y: 122px;
+  --receiver-slot-x: -42px;
+  --receiver-slot-y: -18px;
+  --receiver-slot-scale: 0.95;
+  --receiver-slot-rotate: -2deg;
 }
 
 .hero-flight-card-text-clipboard {
-  bottom: 6%;
-  left: -7%;
+  bottom: 1%;
+  left: 1%;
   background-image: url('hero-shot-text-clipboard-v2.png');
   --break-x: -42px;
   --break-y: 32px;
+  --cluster-x: -12px;
+  --cluster-y: 202px;
+  --receiver-slot-x: 50px;
+  --receiver-slot-y: 14px;
+  --receiver-slot-scale: 0.94;
+  --receiver-slot-rotate: -2deg;
 }
 
 .hero-flight-card-web-activate,
 .hero-flight-card-web-qr {
   --card-highlight: var(--web-highlight);
   --break-rotate: 8deg;
-  --receiver-dock-x: 18px;
-  --receiver-dock-y: 20px;
-  --receiver-dock-rotate: 1deg;
+  --receiver-slot-x: 52px;
+  --receiver-slot-y: 14px;
 }
 
 .hero-flight-card-web-activate {
-  right: 24%;
-  bottom: 6%;
+  right: 12%;
+  bottom: 2%;
   background-image: url('hero-shot-web-activate-v2.png');
   --break-x: 38px;
   --break-y: 38px;
+  --cluster-x: 90px;
+  --cluster-y: 138px;
+  --receiver-slot-x: -46px;
+  --receiver-slot-y: -16px;
+  --receiver-slot-scale: 0.95;
+  --receiver-slot-rotate: 1deg;
 }
 
 .hero-flight-card-web-qr {
-  right: -2%;
-  bottom: 26%;
+  right: -12%;
+  bottom: 21%;
   background-image: url('hero-shot-web-qr-v2.png');
   --break-x: 30px;
   --break-y: 46px;
+  --cluster-x: 126px;
+  --cluster-y: 206px;
+  --receiver-slot-x: 52px;
+  --receiver-slot-y: 14px;
+  --receiver-slot-scale: 0.94;
+  --receiver-slot-rotate: 1deg;
 }
 
 .hero-flight-card-utility-float,
 .hero-flight-card-utility-clicker {
   --card-highlight: var(--utility-highlight);
   --break-rotate: -11deg;
-  --receiver-dock-x: -20px;
-  --receiver-dock-y: 18px;
-  --receiver-dock-rotate: -1deg;
+  --receiver-slot-x: 54px;
+  --receiver-slot-y: 16px;
 }
 
 .hero-flight-card-utility-float {
-  left: 12%;
-  bottom: -1%;
+  left: 34%;
+  bottom: -4%;
   background-image: url('hero-shot-utility-float-v2.png');
   --break-x: -38px;
   --break-y: 46px;
+  --cluster-x: 214px;
+  --cluster-y: 156px;
+  --receiver-slot-x: -44px;
+  --receiver-slot-y: -16px;
+  --receiver-slot-scale: 0.95;
+  --receiver-slot-rotate: -1deg;
 }
 
 .hero-flight-card-utility-clicker {
-  left: -6%;
-  bottom: 24%;
+  left: 0%;
+  bottom: 18%;
   background-image: url('hero-shot-utility-clicker-v2.png');
   --break-x: -24px;
   --break-y: 30px;
+  --cluster-x: 246px;
+  --cluster-y: 222px;
+  --receiver-slot-x: 54px;
+  --receiver-slot-y: 16px;
+  --receiver-slot-scale: 0.94;
+  --receiver-slot-rotate: -1deg;
 }
 
 .value-strip {
@@ -909,12 +948,14 @@ select {
   display: grid;
   gap: 18px;
   min-height: 360px;
+  isolation: isolate;
 }
 
 .tool-group ul {
   list-style: none;
   display: grid;
   gap: 10px;
+  position: relative;
 }
 
 .tool-group li {
@@ -967,31 +1008,69 @@ select {
 .tool-group[data-flight-target][data-flight-dock="text"],
 .tool-group[data-flight-target][data-flight-dock="web"],
 .tool-group[data-flight-target][data-flight-dock="utility"] {
-  --dock-lift: calc(var(--flight-highlight, 0) * -22px);
+  --receiver-halo: calc(var(--flight-highlight, 0) * 1);
+  --receiver-pulse: calc(var(--flight-highlight, 0) * 1);
+  --dock-lift: calc(var(--receiver-pulse) * -22px);
+  --group-shift: calc(var(--receiver-halo) * -8px);
+  --receiver-content-nudge: calc(var(--receiver-pulse) * -4px);
+  --receiver-tint: rgba(220, 232, 255, 0.7);
   transform:
     translate3d(0, calc(var(--dock-lift) + var(--group-shift, 0px)), 0)
-    scale(calc(1 + var(--flight-highlight, 0) * 0.025));
-  border-color: color-mix(in srgb, rgba(130, 164, 255, 0.42) 70%, rgba(209, 221, 255, 0.28));
+    scale(calc(1 + var(--receiver-pulse) * 0.025));
+  border-color: rgba(176, 198, 236, calc(0.38 + (var(--receiver-pulse) * 0.48)));
+  background:
+    radial-gradient(
+      circle at 50% 0%,
+      rgba(242, 247, 255, calc(0.28 + (var(--receiver-halo) * 0.32))),
+      rgba(242, 247, 255, 0) 38%
+    ),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(247, 250, 255, 0.8)),
+    var(--glass);
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.94),
-    0 28px 66px rgba(110, 134, 182, calc(0.06 + (var(--flight-highlight, 0) * 0.12))),
-    0 18px 36px rgba(101, 124, 166, calc(0.08 + (var(--flight-highlight, 0) * 0.1)));
+    0 30px 72px rgba(110, 134, 182, calc(0.08 + (var(--receiver-halo) * 0.15))),
+    0 20px 42px rgba(101, 124, 166, calc(0.08 + (var(--receiver-pulse) * 0.12))),
+    0 0 0 calc(var(--receiver-pulse) * 1px) rgba(215, 228, 255, calc(var(--receiver-pulse) * 0.6));
 }
 
-.tool-group[data-flight-target][data-flight-dock="capture"] {
+.tool-group[data-flight-target][data-flight-dock="capture"] > span,
+.tool-group[data-flight-target][data-flight-dock="text"] > span,
+.tool-group[data-flight-target][data-flight-dock="web"] > span,
+.tool-group[data-flight-target][data-flight-dock="utility"] > span,
+.tool-group[data-flight-target][data-flight-dock="capture"] > ul li:first-child,
+.tool-group[data-flight-target][data-flight-dock="text"] > ul li:first-child,
+.tool-group[data-flight-target][data-flight-dock="web"] > ul li:first-child,
+.tool-group[data-flight-target][data-flight-dock="utility"] > ul li:first-child {
+  transform: translateY(var(--receiver-content-nudge));
+  transition: transform 220ms var(--ease-out);
+}
+
+.tool-group[data-flight-dock="capture"] {
   --flight-highlight: var(--capture-highlight);
+  --receiver-halo: calc(var(--flight-highlight, 0) * 1);
+  --receiver-pulse: calc(var(--flight-highlight, 0) * 1);
+  --receiver-tint: rgba(215, 231, 255, 0.76);
 }
 
-.tool-group[data-flight-target][data-flight-dock="text"] {
+.tool-group[data-flight-dock="text"] {
   --flight-highlight: var(--text-highlight);
+  --receiver-halo: calc(var(--flight-highlight, 0) * 1);
+  --receiver-pulse: calc(var(--flight-highlight, 0) * 1);
+  --receiver-tint: rgba(222, 234, 255, 0.72);
 }
 
-.tool-group[data-flight-target][data-flight-dock="web"] {
+.tool-group[data-flight-dock="web"] {
   --flight-highlight: var(--web-highlight);
+  --receiver-halo: calc(var(--flight-highlight, 0) * 1);
+  --receiver-pulse: calc(var(--flight-highlight, 0) * 1);
+  --receiver-tint: rgba(218, 238, 255, 0.74);
 }
 
-.tool-group[data-flight-target][data-flight-dock="utility"] {
+.tool-group[data-flight-dock="utility"] {
   --flight-highlight: var(--utility-highlight);
+  --receiver-halo: calc(var(--flight-highlight, 0) * 1);
+  --receiver-pulse: calc(var(--flight-highlight, 0) * 1);
+  --receiver-tint: rgba(226, 236, 255, 0.7);
 }
 
 .tool-group[data-flight-target][data-flight-dock="capture"]::after,
@@ -1001,12 +1080,32 @@ select {
   content: '';
   position: absolute;
   inset: -18% -8% auto;
-  height: 120px;
+  height: 150px;
   border-radius: 999px;
-  background:
-    radial-gradient(circle, rgba(228, 238, 255, 0.92), rgba(228, 238, 255, 0) 68%);
-  filter: blur(18px);
-  opacity: calc((var(--flight-highlight, 0) * 0.86) + 0.14);
+  background: radial-gradient(circle, var(--receiver-tint), rgba(228, 238, 255, 0) 70%);
+  filter: blur(24px);
+  opacity: calc((var(--receiver-halo) * 0.92) + 0.06);
+  transform:
+    translateY(calc(-18px * var(--receiver-halo)))
+    scale(calc(0.82 + (var(--receiver-halo) * 0.24)));
+  pointer-events: none;
+}
+
+.tool-group[data-flight-target][data-flight-dock="capture"] ul::before,
+.tool-group[data-flight-target][data-flight-dock="text"] ul::before,
+.tool-group[data-flight-target][data-flight-dock="web"] ul::before,
+.tool-group[data-flight-target][data-flight-dock="utility"] ul::before {
+  content: '';
+  position: absolute;
+  inset: -22px -12px auto;
+  height: 92px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.94), rgba(228, 238, 255, 0) 72%);
+  opacity: calc(var(--receiver-pulse) * 0.9);
+  transform:
+    translateY(calc(-12px * var(--receiver-pulse)))
+    scale(calc(0.88 + (var(--receiver-pulse) * 0.18)));
+  filter: blur(12px);
   pointer-events: none;
 }
 

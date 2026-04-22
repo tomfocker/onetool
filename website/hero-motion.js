@@ -9,6 +9,7 @@
     globalScope.OneToolHeroMotion = api
   }
 })(typeof window !== 'undefined' ? window : globalThis, () => {
+  const receiverKeys = ['capture', 'text', 'web', 'utility']
   const clamp = (value, min, max) => Math.min(Math.max(value, min), max)
   const easeOutCubic = (value) => 1 - Math.pow(1 - value, 3)
   const easeInOutSine = (value) => -(Math.cos(Math.PI * value) - 1) / 2
@@ -26,6 +27,15 @@
     }
 
     return clamp((value - start) / (end - start), 0, 1)
+  }
+
+  const getReceiverStateMap = (source, fallbackFactory) => {
+    const safeSource = source && typeof source === 'object' ? source : {}
+
+    return receiverKeys.reduce((state, key) => {
+      state[key] = getSafeProgress(safeSource[key], fallbackFactory(key))
+      return state
+    }, {})
   }
 
   const getHeroMotionState = (progress, prefersReducedMotion = false) => {
@@ -52,6 +62,10 @@
         settleSoft: 0,
         dock: 0,
         dockSoft: 0,
+        boardTravel: 0,
+        boardDock: 0,
+        receiverProgress: getReceiverStateMap(null, () => 0),
+        receiverPulse: getReceiverStateMap(null, () => 0),
         highlight: {
           capture: 0,
           text: 0,
@@ -81,6 +95,30 @@
       highlight.utility,
       easeOutCubic(getPhase(safeProgress, 0.76, 0.97))
     )
+    const highlightState = {
+      capture: captureHighlight,
+      text: getSafeProgress(highlight.text, getSafeProgress(highlight.clipboard, organizeHighlight)),
+      web: getSafeProgress(highlight.web, getSafeProgress(highlight.organize, organizeHighlight)),
+      utility: utilityHighlight,
+      matrix: getSafeProgress(highlight.matrix, captureHighlight)
+    }
+    const receiverProgress = getReceiverStateMap(context.receiverProgress, (key) =>
+      clamp(
+        (highlightState[key] * 0.68) +
+          (easeInOutSine(travel) * 0.18) +
+          (easeOutCubic(dock) * 0.14),
+        0,
+        1
+      )
+    )
+    const receiverPulse = getReceiverStateMap(context.receiverPulse, (key) =>
+      clamp(
+        easeOutCubic(getPhase(receiverProgress[key], 0.72, 1)) *
+          (0.38 + (easeOutCubic(dock) * 0.62)),
+        0,
+        1
+      )
+    )
 
     return {
       progress: safeProgress,
@@ -96,22 +134,22 @@
       settleSoft: easeOutCubic(settle),
       dock,
       dockSoft: easeOutCubic(dock),
-      highlight: {
-        capture: captureHighlight,
-        text: getSafeProgress(highlight.text, getSafeProgress(highlight.clipboard, organizeHighlight)),
-        web: getSafeProgress(highlight.web, getSafeProgress(highlight.organize, organizeHighlight)),
-        utility: utilityHighlight,
-        matrix: getSafeProgress(highlight.matrix, captureHighlight)
-      }
+      boardTravel: 0,
+      boardDock: 0,
+      receiverProgress,
+      receiverPulse,
+      highlight: highlightState
     }
   }
 
   return {
+    receiverKeys,
     clamp,
     easeOutCubic,
     easeInOutSine,
     getSafeProgress,
     getPhase,
+    getReceiverStateMap,
     getHeroMotionState
   }
 })

@@ -228,3 +228,78 @@ test('reduced motion still zeros travel-adjacent takeover phases', () => {
   assert.equal(Object.hasOwn(state.highlight, 'clipboard'), false)
   assert.equal(Object.hasOwn(state.highlight, 'organize'), false)
 })
+
+test('matrix board stays out of docked receiver states', () => {
+  const state = getHeroMotionState(
+    {
+      progress: 0.92,
+      heroProgress: 0.92,
+      clusterProgress: 0.82,
+      travelProgress: 0.78,
+      morphProgress: 0.74,
+      dockProgress: 0.64,
+      settleProgress: 0.22
+    },
+    false
+  )
+
+  assert.equal(state.boardTravel, 0)
+  assert.deepEqual(Object.keys(state.receiverProgress ?? {}).sort(), ['capture', 'text', 'utility', 'web'])
+  assert.deepEqual(Object.keys(state.receiverPulse ?? {}).sort(), ['capture', 'text', 'utility', 'web'])
+})
+
+test('receiver progress can advance per column instead of collapsing to one center zone', () => {
+  const state = getHeroMotionState(
+    {
+      progress: 0.88,
+      heroProgress: 0.88,
+      clusterProgress: 0.76,
+      travelProgress: 0.72,
+      morphProgress: 0.66,
+      dockProgress: 0.48,
+      settleProgress: 0.12,
+      receiverProgress: {
+        capture: 0.64,
+        text: 0.52,
+        web: 0.33,
+        utility: 0.28
+      }
+    },
+    false
+  )
+
+  assert.deepEqual(state.receiverProgress, {
+    capture: 0.64,
+    text: 0.52,
+    web: 0.33,
+    utility: 0.28
+  })
+})
+
+test('receiver pulse stays column-scoped', () => {
+  const state = getHeroMotionState(
+    {
+      progress: 0.94,
+      heroProgress: 0.94,
+      clusterProgress: 0.84,
+      travelProgress: 0.8,
+      morphProgress: 0.74,
+      dockProgress: 0.68,
+      settleProgress: 0.34,
+      receiverPulse: {
+        capture: 1,
+        text: 0,
+        web: 0,
+        utility: 0
+      }
+    },
+    false
+  )
+
+  assert.deepEqual(state.receiverPulse, {
+    capture: 1,
+    text: 0,
+    web: 0,
+    utility: 0
+  })
+})

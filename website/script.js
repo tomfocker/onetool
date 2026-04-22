@@ -29,12 +29,47 @@ document.addEventListener('DOMContentLoaded', () => {
     web: document.querySelector('[data-flight-dock="web"]'),
     utility: document.querySelector('[data-flight-dock="utility"]')
   }
+  const receiverSlots = {
+    captureStack: {
+      target: { x: 0.28, y: 0.2 },
+      dock: { x: 0.24, y: 0.3 }
+    },
+    captureRecord: {
+      target: { x: 0.74, y: 0.2 },
+      dock: { x: 0.78, y: 0.28 }
+    },
+    textRename: {
+      target: { x: 0.28, y: 0.22 },
+      dock: { x: 0.26, y: 0.32 }
+    },
+    textClipboard: {
+      target: { x: 0.74, y: 0.22 },
+      dock: { x: 0.78, y: 0.34 }
+    },
+    webActivate: {
+      target: { x: 0.28, y: 0.22 },
+      dock: { x: 0.24, y: 0.32 }
+    },
+    webQr: {
+      target: { x: 0.74, y: 0.22 },
+      dock: { x: 0.78, y: 0.34 }
+    },
+    utilityFloat: {
+      target: { x: 0.28, y: 0.22 },
+      dock: { x: 0.24, y: 0.32 }
+    },
+    utilityClicker: {
+      target: { x: 0.74, y: 0.22 },
+      dock: { x: 0.78, y: 0.34 }
+    }
+  }
   const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
   let syncFrameRequested = false
   let motionFrameActive = false
 
   const clamp = motionApi?.clamp ?? ((value, min, max) => Math.min(Math.max(value, min), max))
   const easeOutCubic = motionApi?.easeOutCubic ?? ((value) => 1 - Math.pow(1 - value, 3))
+  const receiverKeys = motionApi?.receiverKeys ?? ['capture', 'text', 'web', 'utility']
   const getHeroMotionState =
     motionApi?.getHeroMotionState ??
     ((progressInput) => {
@@ -60,6 +95,16 @@ document.addEventListener('DOMContentLoaded', () => {
         dockSoft: context.dockSoft ?? 0,
         settle: context.settleProgress ?? 0,
         settleSoft: context.settleSoft ?? 0,
+        boardTravel: 0,
+        boardDock: 0,
+        receiverProgress: receiverKeys.reduce((state, key) => {
+          state[key] = context.receiverProgress?.[key] ?? 0
+          return state
+        }, {}),
+        receiverPulse: receiverKeys.reduce((state, key) => {
+          state[key] = context.receiverPulse?.[key] ?? 0
+          return state
+        }, {}),
         highlight: {
           capture: highlight.capture ?? 0,
           text: highlight.text ?? highlight.clipboard ?? 0,
@@ -83,7 +128,9 @@ document.addEventListener('DOMContentLoaded', () => {
     'dock',
     'dockSoft',
     'settle',
-    'settleSoft'
+    'settleSoft',
+    'boardTravel',
+    'boardDock'
   ]
 
   const createZeroMotionState = () => ({
@@ -100,6 +147,16 @@ document.addEventListener('DOMContentLoaded', () => {
     dockSoft: 0,
     settle: 0,
     settleSoft: 0,
+    boardTravel: 0,
+    boardDock: 0,
+    receiverProgress: receiverKeys.reduce((state, key) => {
+      state[key] = 0
+      return state
+    }, {}),
+    receiverPulse: receiverKeys.reduce((state, key) => {
+      state[key] = 0
+      return state
+    }, {}),
     highlight: {
       capture: 0,
       text: 0,
@@ -135,25 +192,6 @@ document.addEventListener('DOMContentLoaded', () => {
     utilityClicker: { x: 14, y: 12 },
     matrix: { x: -42, y: -14 }
   }
-  const dockBiases = {
-    capture: {
-      captureStack: { x: -18, y: -18 },
-      captureRecord: { x: 18, y: 8 },
-      matrix: { x: 0, y: 24 }
-    },
-    text: {
-      textRename: { x: -16, y: -10 },
-      textClipboard: { x: 16, y: 10 }
-    },
-    web: {
-      webActivate: { x: -16, y: -10 },
-      webQr: { x: 16, y: 10 }
-    },
-    utility: {
-      utilityFloat: { x: -16, y: -10 },
-      utilityClicker: { x: 16, y: 10 }
-    }
-  }
   const targetMap = {
     captureStack: 'capture',
     captureRecord: 'capture',
@@ -162,15 +200,21 @@ document.addEventListener('DOMContentLoaded', () => {
     webActivate: 'web',
     webQr: 'web',
     utilityFloat: 'utility',
-    utilityClicker: 'utility',
-    utility: 'utility',
-    matrix: 'capture'
+    utilityClicker: 'utility'
   }
 
   const syncMotionAnchors = () => {
     motionAnchors.clear()
 
     ;[toolsSection, ...Object.values(flightTargets)].forEach((element) => {
+      if (!element) {
+        return
+      }
+
+      motionAnchors.set(element, window.scrollY + element.getBoundingClientRect().top)
+    })
+
+    Object.values(dockTargets).forEach((element) => {
       if (!element) {
         return
       }
@@ -212,6 +256,15 @@ document.addEventListener('DOMContentLoaded', () => {
         return
       }
 
+      if (key === 'matrix') {
+        card.style.setProperty('--target-x', '0px')
+        card.style.setProperty('--target-y', '0px')
+        card.style.removeProperty('--dock-x-base')
+        card.style.removeProperty('--dock-y-base')
+        card.style.removeProperty('--dock-scale')
+        return
+      }
+
       const targetKey = targetMap[key]
       const target = flightTargets[targetKey]
 
@@ -222,27 +275,29 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       const targetRect = target.getBoundingClientRect()
-      const dockTarget = dockTargets[targetKey]
-      const dockRect = dockTarget?.getBoundingClientRect()
+      const dockTarget = dockTargets[targetKey] ?? target
+      const dockRect = dockTarget.getBoundingClientRect()
       const startX = card.offsetLeft + card.offsetWidth / 2
       const startY = card.offsetTop + card.offsetHeight / 2
-      const targetCenterX = window.scrollX + targetRect.left + targetRect.width / 2
-      const targetCenterY = window.scrollY + targetRect.top + targetRect.height / 2
-      const dockCenterX = window.scrollX + (dockRect ? dockRect.left + dockRect.width / 2 : targetRect.left + targetRect.width / 2)
-      const dockCenterY = window.scrollY + (dockRect ? dockRect.top + dockRect.height / 2 : targetRect.top + targetRect.height / 2)
+      const slot = receiverSlots[key] ?? {
+        target: { x: 0.5, y: 0.24 },
+        dock: { x: 0.5, y: 0.32 }
+      }
+      const targetCenterX = window.scrollX + targetRect.left + targetRect.width * slot.target.x
+      const targetCenterY = window.scrollY + targetRect.top + targetRect.height * slot.target.y
+      const dockCenterX = window.scrollX + dockRect.left + dockRect.width * slot.dock.x
+      const dockCenterY = window.scrollY + dockRect.top + dockRect.height * slot.dock.y
       const bias = flightBiases[key] ?? { x: 0, y: 0 }
-      const groupedDockBias = dockBiases[targetKey]?.[key] ?? { x: 0, y: 0 }
       const targetX = targetCenterX - flightLeft - startX + bias.x
       const targetY = targetCenterY - flightTop - startY + bias.y
-      const dockBaseX = dockCenterX + groupedDockBias.x - flightLeft - startX + bias.x
-      const dockBaseY = dockCenterY + groupedDockBias.y - flightTop - startY + bias.y
-      const dockScale = dockRect ? dockRect.width / card.offsetWidth : 1
+      const dockBaseX = dockCenterX - flightLeft - startX + bias.x
+      const dockBaseY = dockCenterY - flightTop - startY + bias.y
 
       card.style.setProperty('--target-x', `${targetX}px`)
       card.style.setProperty('--target-y', `${targetY}px`)
       card.style.setProperty('--dock-x-base', `${dockBaseX}px`)
       card.style.setProperty('--dock-y-base', `${dockBaseY}px`)
-      card.style.setProperty('--dock-scale', dockScale.toFixed(4))
+      card.style.removeProperty('--dock-scale')
     })
   }
 
@@ -265,6 +320,27 @@ document.addEventListener('DOMContentLoaded', () => {
     root.style.setProperty('--web-highlight', state.highlight.web.toFixed(4))
     root.style.setProperty('--utility-highlight', state.highlight.utility.toFixed(4))
     root.style.setProperty('--matrix-highlight', state.highlight.matrix.toFixed(4))
+    root.style.setProperty('--board-travel', state.boardTravel.toFixed(4))
+    root.style.setProperty('--board-dock', state.boardDock.toFixed(4))
+
+    receiverKeys.forEach((key) => {
+      const receiverProgress = state.receiverProgress[key].toFixed(4)
+      const receiverPulse = state.receiverPulse[key].toFixed(4)
+      root.style.setProperty(`--receiver-progress-${key}`, receiverProgress)
+      root.style.setProperty(`--receiver-pulse-${key}`, receiverPulse)
+
+      const dockTarget = dockTargets[key]
+      if (!dockTarget) {
+        return
+      }
+
+      dockTarget.style.setProperty('--receiver-halo', receiverProgress)
+      dockTarget.style.setProperty('--receiver-pulse', receiverPulse)
+      dockTarget.style.setProperty(
+        '--flight-highlight',
+        Math.max(state.highlight[key], state.receiverProgress[key]).toFixed(4)
+      )
+    })
   }
 
   const smoothMotionState = (current, target, factor) => {
@@ -283,6 +359,19 @@ document.addEventListener('DOMContentLoaded', () => {
       next.highlight[key] = smoothValue(current.highlight[key], target.highlight[key], factor)
     })
 
+    receiverKeys.forEach((key) => {
+      next.receiverProgress[key] = smoothValue(
+        current.receiverProgress[key],
+        target.receiverProgress[key],
+        factor
+      )
+      next.receiverPulse[key] = smoothValue(
+        current.receiverPulse[key],
+        target.receiverPulse[key],
+        factor
+      )
+    })
+
     return next
   }
 
@@ -299,6 +388,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    for (const key of receiverKeys) {
+      if (Math.abs(current.receiverProgress[key] - target.receiverProgress[key]) > epsilon) {
+        return false
+      }
+
+      if (Math.abs(current.receiverPulse[key] - target.receiverPulse[key]) > epsilon) {
+        return false
+      }
+    }
+
     return true
   }
 
@@ -309,6 +408,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isMotionSettled(renderedMotionState, targetMotionState)) {
       renderedMotionState = {
         ...targetMotionState,
+        receiverProgress: {
+          ...targetMotionState.receiverProgress
+        },
+        receiverPulse: {
+          ...targetMotionState.receiverPulse
+        },
         highlight: {
           ...targetMotionState.highlight
         }
@@ -359,24 +464,40 @@ document.addEventListener('DOMContentLoaded', () => {
       text: flightTargets.text,
       web: flightTargets.web,
       utility: flightTargets.utility,
-      matrix: flightTargets.capture
+      matrix: toolsSection
+    }
+    const receiverProgress = {
+      capture: easeOutCubic(getViewportProgress(dockTargets.capture, 1.02, 0.38)),
+      text: easeOutCubic(getViewportProgress(dockTargets.text, 1, 0.36)),
+      web: easeOutCubic(getViewportProgress(dockTargets.web, 0.98, 0.34)),
+      utility: easeOutCubic(getViewportProgress(dockTargets.utility, 0.96, 0.32))
+    }
+    const receiverPulse = {
+      capture: easeOutCubic(getViewportProgress(dockTargets.capture, 0.48, 0.14)),
+      text: easeOutCubic(getViewportProgress(dockTargets.text, 0.46, 0.12)),
+      web: easeOutCubic(getViewportProgress(dockTargets.web, 0.44, 0.1)),
+      utility: easeOutCubic(getViewportProgress(dockTargets.utility, 0.42, 0.08))
     }
     const state = getHeroMotionState(
       {
         progress,
         breakoutProgress: clamp(progress / 0.3, 0, 1),
-        clusterProgress: getViewportProgress(toolsSection, 1.18, 0.42),
-        travelProgress: getViewportProgress(toolsSection, 1.28, 0.48),
-        morphProgress: getViewportProgress(toolsSection, 0.88, 0.26),
+        clusterProgress: getViewportProgress(toolsSection, 1.04, 0.36),
+        travelProgress: getViewportProgress(toolsSection, 0.96, 0.32),
+        morphProgress: getViewportProgress(toolsSection, 0.82, 0.24),
         // Keep the dock window late so the shorter tools page stays readable before takeover.
-        dockProgress: getViewportProgress(toolsSection, 0.52, 0.1),
-        settleProgress: getViewportProgress(toolsSection, 1, 0.18),
+        dockProgress: getViewportProgress(toolsSection, 0.42, 0.1),
+        settleProgress: getViewportProgress(toolsSection, 0.9, 0.16),
+        boardTravel: 0,
+        boardDock: 0,
+        receiverProgress,
+        receiverPulse,
         highlight: {
-          capture: easeOutCubic(getViewportProgress(heroTargets.capture, 1.04, 0.56)),
-          text: easeOutCubic(getViewportProgress(heroTargets.text, 0.94, 0.34)),
-          web: easeOutCubic(getViewportProgress(heroTargets.web, 0.98, 0.48)),
-          utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.96, 0.4)),
-          matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.84, 0.28))
+          capture: easeOutCubic(getViewportProgress(heroTargets.capture, 0.96, 0.46)),
+          text: easeOutCubic(getViewportProgress(heroTargets.text, 0.9, 0.3)),
+          web: easeOutCubic(getViewportProgress(heroTargets.web, 0.94, 0.4)),
+          utility: easeOutCubic(getViewportProgress(heroTargets.utility, 0.92, 0.34)),
+          matrix: easeOutCubic(getViewportProgress(heroTargets.matrix, 0.84, 0.26))
         }
       },
       prefersReducedMotion
@@ -387,6 +508,12 @@ document.addEventListener('DOMContentLoaded', () => {
     if (prefersReducedMotion) {
       renderedMotionState = {
         ...state,
+        receiverProgress: {
+          ...state.receiverProgress
+        },
+        receiverPulse: {
+          ...state.receiverPulse
+        },
         highlight: {
           ...state.highlight
         }

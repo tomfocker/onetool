@@ -8,6 +8,9 @@ const style = fs.readFileSync(path.join(__dirname, 'style.css'), 'utf8')
 const html = fs.readFileSync(path.join(__dirname, 'index.html'), 'utf8')
 
 const getAttrValues = (source, attr) => [...source.matchAll(new RegExp(`${attr}="([^"]+)"`, 'g'))].map((match) => match[1])
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const getRuleBlock = (source, selector) => source.match(new RegExp(`${escapeRegex(selector)}\\s*\\{[\\s\\S]*?\\n\\}`, 'm'))?.[0] ?? ''
+const getCustomProperty = (rule, propertyName) => rule.match(new RegExp(`${propertyName}\\s*:\\s*([^;]+);`))?.[1]?.trim() ?? null
 
 const expectAttrValues = (source, attr, expected) => {
   assert.deepStrictEqual(getAttrValues(source, attr), expected)
@@ -57,6 +60,7 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(script, /\butilityFloat:\s*document\.querySelector\('\.hero-flight-card-utility-float'\)/)
   assert.match(script, /\butilityClicker:\s*document\.querySelector\('\.hero-flight-card-utility-clicker'\)/)
   assert.match(script, /\bmatrix:\s*document\.querySelector\('\.hero-flight-card-main'\)/)
+  assert.match(script, /const receiverSlots = \{/)
 
   assert.match(script, /\bcapture:\s*document\.querySelector\('\[data-flight-target="capture"\]'\)/)
   assert.match(script, /\btext:\s*document\.querySelector\('\[data-flight-target="text"\]'\)/)
@@ -82,12 +86,12 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(script, /webQr:\s*'web'/)
   assert.match(script, /utilityFloat:\s*'utility'/)
   assert.match(script, /utilityClicker:\s*'utility'/)
-  assert.match(script, /matrix:\s*'capture'/)
+  assert.doesNotMatch(script, /matrix:\s*'capture'/)
   assert.match(script, /const flightRect = heroFlight\.getBoundingClientRect\(\)/)
   assert.match(script, /const flightLeft = window\.scrollX \+ flightRect\.left/)
   assert.match(script, /card\.style\.setProperty\('--dock-x-base',/)
   assert.match(script, /card\.style\.setProperty\('--dock-y-base',/)
-  assert.match(script, /card\.style\.setProperty\('--dock-scale', dockScale\.toFixed\(4\)\)/)
+  assert.match(script, /card\.style\.removeProperty\('--dock-scale'\)/)
 
   assert.doesNotMatch(script, /document\.querySelector\('#scenarios'\)/)
   assert.doesNotMatch(script, /document\.querySelector\('#system'\)/)
@@ -96,21 +100,30 @@ test('hero cards map to tool groups and scroll timing comes only from toolsSecti
   assert.match(script, /targetMotionState = state/)
   assert.match(script, /renderMotionState\(renderedMotionState\)/)
   assert.match(script, /window\.requestAnimationFrame\(runMotionFrame\)/)
-  assert.match(script, /clusterProgress:\s*getViewportProgress\(toolsSection, 1\.18, 0\.42\)/)
-  assert.match(script, /travelProgress:\s*getViewportProgress\(toolsSection, 1\.28, 0\.48\)/)
-  assert.match(script, /morphProgress:\s*getViewportProgress\(toolsSection, 0\.88, 0\.26\)/)
-  assert.match(script, /dockProgress:\s*getViewportProgress\(toolsSection, 0\.52, 0\.1\)/)
-  assert.match(script, /settleProgress:\s*getViewportProgress\(toolsSection, 1, 0\.18\)/)
+  assert.match(script, /clusterProgress:\s*getViewportProgress\(toolsSection, 1\.04, 0\.36\)/)
+  assert.match(script, /travelProgress:\s*getViewportProgress\(toolsSection, 0\.96, 0\.32\)/)
+  assert.match(script, /morphProgress:\s*getViewportProgress\(toolsSection, 0\.82, 0\.24\)/)
+  assert.match(script, /dockProgress:\s*getViewportProgress\(toolsSection, 0\.42, 0\.1\)/)
+  assert.match(script, /settleProgress:\s*getViewportProgress\(toolsSection, 0\.9, 0\.16\)/)
   assert.match(script, /capture:\s*flightTargets\.capture/)
   assert.match(script, /text:\s*flightTargets\.text/)
   assert.match(script, /web:\s*flightTargets\.web/)
   assert.match(script, /utility:\s*flightTargets\.utility/)
-  assert.match(script, /matrix:\s*flightTargets\.capture/)
-  assert.match(script, /capture:\s*easeOutCubic\(getViewportProgress\(heroTargets\.capture, 1\.04, 0\.56\)\)/)
-  assert.match(script, /text:\s*easeOutCubic\(getViewportProgress\(heroTargets\.text, 0\.94, 0\.34\)\)/)
-  assert.match(script, /web:\s*easeOutCubic\(getViewportProgress\(heroTargets\.web, 0\.98, 0\.48\)\)/)
-  assert.match(script, /utility:\s*easeOutCubic\(getViewportProgress\(heroTargets\.utility, 0\.96, 0\.4\)\)/)
-  assert.match(script, /matrix:\s*easeOutCubic\(getViewportProgress\(heroTargets\.matrix, 0\.84, 0\.28\)\)/)
+  assert.match(script, /matrix:\s*toolsSection/)
+  assert.match(script, /const receiverProgress = \{/)
+  assert.match(script, /const receiverPulse = \{/)
+  assert.match(script, /capture:\s*easeOutCubic\(getViewportProgress\(heroTargets\.capture, 0\.96, 0\.46\)\)/)
+  assert.match(script, /text:\s*easeOutCubic\(getViewportProgress\(heroTargets\.text, 0\.9, 0\.3\)\)/)
+  assert.match(script, /web:\s*easeOutCubic\(getViewportProgress\(heroTargets\.web, 0\.94, 0\.4\)\)/)
+  assert.match(script, /utility:\s*easeOutCubic\(getViewportProgress\(heroTargets\.utility, 0\.92, 0\.34\)\)/)
+  assert.match(script, /matrix:\s*easeOutCubic\(getViewportProgress\(heroTargets\.matrix, 0\.84, 0\.26\)\)/)
+  assert.match(script, /capture:\s*easeOutCubic\(getViewportProgress\(dockTargets\.capture, 1\.02, 0\.38\)\)/)
+  assert.match(script, /text:\s*easeOutCubic\(getViewportProgress\(dockTargets\.text, 1,\s*0\.36\)\)/)
+  assert.match(script, /web:\s*easeOutCubic\(getViewportProgress\(dockTargets\.web, 0\.98, 0\.34\)\)/)
+  assert.match(script, /utility:\s*easeOutCubic\(getViewportProgress\(dockTargets\.utility, 0\.96, 0\.32\)\)/)
+  assert.match(script, /capture:\s*easeOutCubic\(getViewportProgress\(dockTargets\.capture, 0\.48, 0\.14\)\)/)
+  assert.match(script, /boardTravel:\s*0/)
+  assert.match(script, /boardDock:\s*0/)
   assert.doesNotMatch(script, /travelLead/)
   assert.doesNotMatch(script, /travelFollow/)
 
@@ -135,20 +148,12 @@ test('local hero motion fallback accepts object context and returns the full sta
   assert.match(script, /matrix:\s*highlight\.matrix \?\? 0/)
 })
 
-test('hero sticky keeps the dock handoff style contract', () => {
-  const heroStickyRule = style.match(/\.hero-sticky\s*\{[\s\S]*?\n\}/)
+test('hero board no longer declares receiver dock variables', () => {
+  const mainRule = style.match(/\.hero-flight-card-main\s*\{[\s\S]*?\n\}/)?.[0] ?? ''
 
-  assert.ok(heroStickyRule, 'expected .hero-sticky rule in style.css')
-  assert.match(style, /--dock-x/)
-  assert.match(style, /--dock-y/)
-  assert.match(style, /--dock-scale/)
-  assert.match(style, /--text-highlight/)
-  assert.match(style, /--web-highlight/)
-  assert.doesNotMatch(style, /--clipboard-highlight/)
-  assert.doesNotMatch(style, /--organize-highlight/)
-  assert.match(heroStickyRule[0], /overflow:\s*visible/)
-  assert.match(style, /var\(--flight-dock-soft\)/)
-  assert.match(style, /\.hero-flight-card\[data-flight-card\]/)
+  assert.ok(mainRule, 'expected .hero-flight-card-main rule in style.css')
+  assert.doesNotMatch(mainRule, /--receiver-[a-z-]+:/)
+  assert.doesNotMatch(mainRule, /--dock-(?:x-base|y-base|scale):/)
 })
 
 test('hero flight uses the new eight-card ring and grouped receiver offsets', () => {
@@ -156,21 +161,54 @@ test('hero flight uses the new eight-card ring and grouped receiver offsets', ()
   assert.match(style, /--break-rotate:\s*-2\.5deg/)
   assert.match(style, /--card-tilt-y:\s*-2deg/)
   assert.match(style, /rotate\(calc\(var\(--break-rotate\) \* var\(--flight-breakout-soft\) \* \(1 - var\(--flight-morph-soft\)\)\)\)/)
-  assert.match(style, /\.hero-flight-card-capture-stack\s*\{/)
-  assert.match(style, /\.hero-flight-card-capture-record\s*\{/)
-  assert.match(style, /\.hero-flight-card-text-rename\s*\{/)
-  assert.match(style, /\.hero-flight-card-text-clipboard\s*\{/)
-  assert.match(style, /\.hero-flight-card-web-activate\s*\{/)
-  assert.match(style, /\.hero-flight-card-web-qr\s*\{/)
-  assert.match(style, /\.hero-flight-card-utility-float\s*\{/)
-  assert.match(style, /\.hero-flight-card-utility-clicker\s*\{/)
   assert.match(style, /\.tool-matrix-grid-four\s*\{/)
   assert.match(style, /contain:\s*layout style/)
   assert.match(style, /--dock-y-base/)
   assert.match(style, /--card-highlight:\s*var\(--capture-highlight\)/)
   assert.match(style, /grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/)
-  assert.match(style, /\.hero-flight-card-(capture|text|web|utility)-[a-z-]+\s*\{[\s\S]*--receiver-dock-x:/)
-  assert.match(style, /\.hero-flight-card-(capture|text|web|utility)-[a-z-]+\s*\{[\s\S]*--receiver-dock-y:/)
+  for (const [firstCard, secondCard] of [
+    ['capture-stack', 'capture-record'],
+    ['text-rename', 'text-clipboard'],
+    ['web-activate', 'web-qr'],
+    ['utility-float', 'utility-clicker'],
+  ]) {
+    const firstRule = getRuleBlock(style, `.hero-flight-card-${firstCard}`)
+    const secondRule = getRuleBlock(style, `.hero-flight-card-${secondCard}`)
+
+    assert.ok(firstRule, `expected rule for ${firstCard}`)
+    assert.ok(secondRule, `expected rule for ${secondCard}`)
+    assert.match(firstRule, /--receiver-slot-x:/)
+    assert.match(firstRule, /--receiver-slot-y:/)
+    assert.match(secondRule, /--receiver-slot-x:/)
+    assert.match(secondRule, /--receiver-slot-y:/)
+    assert.notEqual(getCustomProperty(firstRule, '--receiver-slot-x'), getCustomProperty(secondRule, '--receiver-slot-x'))
+    assert.notEqual(getCustomProperty(firstRule, '--receiver-slot-y'), getCustomProperty(secondRule, '--receiver-slot-y'))
+    assert.doesNotMatch(firstRule, /--receiver-dock-(?:x|y):/)
+    assert.doesNotMatch(secondRule, /--receiver-dock-(?:x|y):/)
+  }
+})
+
+test('tool groups define independent receive halos and pulses', () => {
+  const captureRule = getRuleBlock(style, '.tool-group[data-flight-dock="capture"]')
+  const textRule = getRuleBlock(style, '.tool-group[data-flight-dock="text"]')
+  const webRule = getRuleBlock(style, '.tool-group[data-flight-dock="web"]')
+  const utilityRule = getRuleBlock(style, '.tool-group[data-flight-dock="utility"]')
+
+  assert.ok(captureRule, 'expected capture tool-group rule')
+  assert.ok(textRule, 'expected text tool-group rule')
+  assert.ok(webRule, 'expected web tool-group rule')
+  assert.ok(utilityRule, 'expected utility tool-group rule')
+
+  for (const rule of [captureRule, textRule, webRule, utilityRule]) {
+    assert.match(rule, /--receiver-halo:/)
+    assert.match(rule, /--receiver-pulse:/)
+    assert.doesNotMatch(rule, /--receiver-center-(?:x|y):/)
+  }
+})
+
+test('small cards declare split dock offsets instead of one shared center target', () => {
+  assert.doesNotMatch(style, /--receiver-center-(?:x|y):/)
+  assert.doesNotMatch(style, /--receiver-center-target:/)
   assert.match(style, /@media \(max-width:\s*1180px\)\s*\{[\s\S]*\.tool-matrix-grid-four\s*\{[\s\S]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/)
 })
 
