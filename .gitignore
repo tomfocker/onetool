@@ -17,3 +17,10 @@ release_new
 *~
 native/ntfs-fast-scan/target/
 resources/space-scan/ntfs-fast-scan.exe
+website/website-preview*.png
+1772026314428.png
+resources/model-download/python/Doc/
+resources/model-download/python/NEWS.txt
+resources/model-download/python/**/__pycache__/
+resources/model-download/python/**/test/
+resources/model-download/python/**/tests/
