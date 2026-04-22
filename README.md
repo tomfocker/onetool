@@ -90,6 +90,8 @@ npm run build:linux
 npm run release:win
 ```
 
+如果在本机执行这条命令，请先确认当前 Windows 已开启“开发者模式”或使用具备创建符号链接权限的终端会话；`electron-builder` 依赖的 `winCodeSign` 解压阶段否则会在本地失败。没有这项权限时，优先使用仓库内置的 GitHub Actions `Release` 工作流产出正式安装包。
+
 仓库同时提供：
 
 - `CI` 工作流：持续验证测试和构建

@@ -15,6 +15,12 @@
 npm run release:win
 ```
 
+本地打包前提：
+
+- 当前 Windows 会话需要具备创建符号链接的权限
+- 最常见的做法是开启“开发者模式”，或使用管理员终端执行
+- 如果本机不具备这项权限，`electron-builder` 在解压 `winCodeSign` 缓存时会失败，此时应改走 GitHub Actions 的 `Release` 工作流
+
 输出目录：
 
 - `release_new/`

@@ -17,3 +17,12 @@ test('Windows installer and portable artifacts use distinct names', () => {
   )
   assert.notEqual(packageJson.build?.nsis?.artifactName, packageJson.build?.portable?.artifactName)
 })
+
+test('Windows packaging does not copy a second ffmpeg binary into extraResources', () => {
+  const packageJsonPath = path.join(__dirname, '../../../package.json')
+  const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'))
+
+  const extraResourceSources = (packageJson.build?.extraResources ?? []).map((entry) => entry.from)
+
+  assert.equal(extraResourceSources.includes('node_modules/ffmpeg-static/ffmpeg.exe'), false)
+})
