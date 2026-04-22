@@ -195,12 +195,12 @@ export class ScreenshotService {
 
       const url = is.dev && process.env['ELECTRON_RENDERER_URL']
         ? `${process.env['ELECTRON_RENDERER_URL']}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
-        : join(__dirname, '../../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
+        : join(__dirname, '../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
 
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         win.loadURL(url)
       } else {
-        win.loadURL(`file://${join(__dirname, '../../renderer/index.html')}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`)
+        win.loadURL(`file://${join(__dirname, '../renderer/index.html')}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`)
       }
 
       win.on('closed', () => {

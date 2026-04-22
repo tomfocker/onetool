@@ -93,6 +93,13 @@ function toEvenCaptureDimension(value: number) {
   return floored % 2 === 0 ? floored : floored - 1
 }
 
+function toUnpackedAsarPath(candidatePath: string) {
+  return candidatePath
+    .replace(`${path.sep}app.asar${path.sep}`, `${path.sep}app.asar.unpacked${path.sep}`)
+    .replace('/app.asar/', '/app.asar.unpacked/')
+    .replace('\\app.asar\\', '\\app.asar.unpacked\\')
+}
+
 function toPhysicalCaptureBounds(bounds: RecorderBounds) {
   if (typeof screen.dipToScreenRect === 'function') {
     const rect = screen.dipToScreenRect(null, bounds)
@@ -193,16 +200,20 @@ export class ScreenRecorderService {
   getFfmpegPath(): string {
     const isDev = !app.isPackaged
     let selectedPath = ''
+    const staticFfmpegPath = typeof ffmpegStatic === 'string' ? ffmpegStatic : ''
+    const unpackedStaticFfmpegPath = staticFfmpegPath ? toUnpackedAsarPath(staticFfmpegPath) : ''
 
     if (isDev) {
-      selectedPath = ffmpegStatic as string
+      selectedPath = staticFfmpegPath
     } else {
       const possiblePaths = [
+        path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
         path.join(process.resourcesPath, 'ffmpeg.exe'),
         path.join(process.resourcesPath, 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
         path.join(path.dirname(app.getPath('exe')), 'resources', 'ffmpeg.exe'),
         path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
-        ffmpegStatic as string
+        unpackedStaticFfmpegPath,
+        staticFfmpegPath
       ]
 
       for (const testPath of possiblePaths) {
@@ -213,7 +224,7 @@ export class ScreenRecorderService {
       }
     }
 
-    if (!selectedPath) selectedPath = ffmpegStatic as string
+    if (!selectedPath) selectedPath = isDev ? staticFfmpegPath : unpackedStaticFfmpegPath || staticFfmpegPath
 
     try {
       execSync(`"${selectedPath}" -version`, { stdio: 'ignore', timeout: 2000 })

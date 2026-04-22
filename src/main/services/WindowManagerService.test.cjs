@@ -24,6 +24,8 @@ function loadWindowManagerServiceModule(overrides = {}) {
   class BrowserWindowMock {
     constructor(options) {
       this.options = options
+      this.loadedFiles = []
+      this.loadedUrls = []
       this._bounds = {
         x: options.x ?? 0,
         y: options.y ?? 0,
@@ -45,8 +47,12 @@ function loadWindowManagerServiceModule(overrides = {}) {
 
     setAlwaysOnTop() {}
     setVisibleOnAllWorkspaces() {}
-    loadURL() {}
-    loadFile() {}
+    loadURL(url) {
+      this.loadedUrls.push(url)
+    }
+    loadFile(filePath, options) {
+      this.loadedFiles.push({ filePath, options })
+    }
     setPosition(x, y) {
       this.setBounds({ x, y })
     }
@@ -177,6 +183,20 @@ test('createFloatBallWindow creates a focusable float ball window for native dra
   assert.equal(browserWindowInstances[0].options.height, 96)
   assert.equal(browserWindowInstances[0].options.x, 1822)
   assert.equal(browserWindowInstances[0].options.y, 84)
+})
+
+test('createFloatBallWindow loads the packaged renderer entry from out/renderer', () => {
+  const { WindowManagerService, browserWindowInstances } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.createFloatBallWindow()
+
+  assert.equal(browserWindowInstances[0].loadedFiles.length, 1)
+  assert.equal(
+    browserWindowInstances[0].loadedFiles[0].filePath,
+    path.join(__dirname, '../renderer/index.html')
+  )
+  assert.equal(browserWindowInstances[0].loadedFiles[0].options.hash, '/float-ball')
 })
 
 test('createFloatBallWindow aligns the compact ball to the display edge near the main window top band', () => {

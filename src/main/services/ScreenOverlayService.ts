@@ -91,7 +91,7 @@ export class ScreenOverlayService {
         if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
           win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/screen-overlay`)
         } else {
-          win.loadFile(join(__dirname, '../../renderer/index.html'), { hash: '/screen-overlay' })
+          win.loadFile(join(__dirname, '../renderer/index.html'), { hash: '/screen-overlay' })
         }
 
         win.once('ready-to-show', () => win.show())

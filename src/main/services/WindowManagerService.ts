@@ -639,7 +639,7 @@ export class WindowManagerService {
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.floatBallWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/float-ball`)
     } else {
-      this.floatBallWindow.loadFile(join(__dirname, '../../renderer/index.html'), {
+      this.floatBallWindow.loadFile(join(__dirname, '../renderer/index.html'), {
         hash: '/float-ball'
       })
     }

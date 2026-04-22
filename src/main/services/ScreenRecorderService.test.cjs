@@ -725,3 +725,43 @@ test('start regenerates a fresh auto-generated output path before launching ffmp
   assert.equal(recorder.session.outputPath, rotatedAutoPath)
   assert.equal(spawnedArgs.at(-1), rotatedAutoPath)
 })
+
+test('getFfmpegPath prefers the unpacked ffmpeg binary in packaged builds', () => {
+  const { ScreenRecorderService } = loadScreenRecorderServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getPath: (name) => (name === 'exe' ? 'D:/code/onetool/release_rc_unsigned/win-unpacked/onetool.exe' : 'C:/tmp')
+      }
+    },
+    childProcessModule: {
+      spawn() {
+        throw new Error('spawn should not run in this unit test')
+      },
+      execSync() {
+        return ''
+      }
+    }
+  })
+
+  const originalExistsSync = fs.existsSync
+  const originalResourcesPath = process.resourcesPath
+  fs.existsSync = (candidatePath) => (
+    String(candidatePath).replace(/\\/g, '/')
+    === 'C:/tmp/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg.exe'
+  )
+  process.resourcesPath = 'C:/tmp'
+
+  try {
+    const recorder = new ScreenRecorderService()
+    const result = recorder.getFfmpegPath()
+
+    assert.equal(
+      result.replace(/\\/g, '/'),
+      'C:/tmp/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg.exe'
+    )
+  } finally {
+    fs.existsSync = originalExistsSync
+    process.resourcesPath = originalResourcesPath
+  }
+})

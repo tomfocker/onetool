@@ -159,7 +159,7 @@ export class ColorPickerService {
             if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
               win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
             } else {
-              win.loadFile(join(__dirname, '../../renderer/index.html'), { hash: route })
+              win.loadFile(join(__dirname, '../renderer/index.html'), { hash: route })
             }
 
             win.once('ready-to-show', () => {
