@@ -65,6 +65,146 @@ function loadLlmServiceModule(overrides = {}) {
       }
     }
 
+    if (specifier === './llmAdapters/ScreenshotInsightAdapter') {
+      return {
+        ScreenshotInsightAdapter: overrides.ScreenshotInsightAdapter || class ScreenshotInsightAdapter {
+          buildTranslationCompletion(ocrLines) {
+            return {
+              systemPrompt: [
+                '你是一个专业的屏幕翻译专家。',
+                '输入是带 [index] 标号的 OCR 行文本。',
+                '如果原文是中文则翻成英文，否则翻成中文。',
+                '保持与输入相同的行数和顺序。',
+                '只返回 JSON：{"lines":[{"index":0,"translatedText":"..." }]}。'
+              ].join('\n'),
+              userPrompt: ocrLines.map((line) => `[${line.index}] ${line.text}`).join('\n')
+            }
+          }
+
+          mapTranslationResults(ocrLines, payload, fallbackText) {
+            const translatedLines = Array.isArray(payload.lines) ? payload.lines : []
+            return ocrLines.map((line) => {
+              const matched = translatedLines.find((item) => item?.index === line.index)
+              return {
+                ...line,
+                translatedText: typeof matched?.translatedText === 'string' && matched.translatedText.trim()
+                  ? matched.translatedText.trim()
+                  : fallbackText
+              }
+            })
+          }
+        }
+      }
+    }
+
+    if (specifier === './llmAdapters/RenameSuggestionAdapter') {
+      return {
+        RenameSuggestionAdapter: overrides.RenameSuggestionAdapter || class RenameSuggestionAdapter {
+          buildCompletion(input) {
+            return {
+              systemPrompt: [
+                '你是文件批量重命名助手。',
+                '根据用户目标，为每个文件生成清晰、一致、可落地的新文件名。',
+                '不要返回路径，只返回文件名。',
+                '只返回 JSON：{"summary":"","namingPattern":"","warnings":[],"suggestions":[{"index":0,"newName":"","reason":""}]}'
+              ].join('\n'),
+              userPrompt: [
+                `用户要求：${input.instructions}`,
+                '[文件列表]',
+                ...input.files.map((file, index) => `${index}. ${file.name} (${file.size} B)`)
+              ].join('\n')
+            }
+          }
+
+          mapSuggestionResult(input, payload) {
+            const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : []
+            return {
+              summary: payload.summary || '已生成一组建议命名',
+              namingPattern: payload.namingPattern || '统一命名',
+              warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+              suggestions: input.files.map((file, index) => {
+                const matched = suggestions.find((item) => item?.index === index)
+                const extension = path.extname(file.name)
+                const suggestedName = matched?.newName || file.name
+                const newName = path.extname(suggestedName) || !extension
+                  ? suggestedName
+                  : `${suggestedName}${extension}`
+                return {
+                  index,
+                  oldName: file.name,
+                  newName,
+                  reason: typeof matched?.reason === 'string' ? matched.reason.trim() : null
+                }
+              })
+            }
+          }
+        }
+      }
+    }
+
+    if (specifier === './llmAdapters/SystemDiagnosisAdapter') {
+      return {
+        SystemDiagnosisAdapter: overrides.SystemDiagnosisAdapter || class SystemDiagnosisAdapter {
+          buildCompletion(input) {
+            const doctorLines = Object.entries(input.doctorReport ?? {})
+              .map(([key, value]) => `${key}: ${value.ok ? 'OK' : 'FAIL'}`)
+              .join('\n')
+            return {
+              systemPrompt: [
+                '你是 Windows 工具箱的硬件与环境诊断助手。',
+                '只根据给定快照和依赖自检结果给建议，不要编造不存在的信息。',
+                '优先输出可执行建议，避免泛泛而谈。',
+                '只返回 JSON：{"summary":"","bullets":[],"warnings":[],"actions":[]}'
+              ].join('\n'),
+              userPrompt: [
+                `设备型号: ${input.config.deviceModel}`,
+                doctorLines ? `[依赖自检]\n${doctorLines}` : ''
+              ].filter(Boolean).join('\n')
+            }
+          }
+
+          mapInsightResult(payload) {
+            return {
+              summary: payload.summary || '当前设备整体状态可用',
+              bullets: Array.isArray(payload.bullets) ? payload.bullets : [],
+              warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+              actions: Array.isArray(payload.actions) ? payload.actions : []
+            }
+          }
+        }
+      }
+    }
+
+    if (specifier === './llmAdapters/SpaceCleanupAdapter') {
+      return {
+        SpaceCleanupAdapter: overrides.SpaceCleanupAdapter || class SpaceCleanupAdapter {
+          buildCompletion(input) {
+            return {
+              systemPrompt: [
+                '你是磁盘空间清理助手。',
+                '目标是给出低风险、可执行的清理建议。',
+                '默认先建议可回收、可迁移、可归档的内容，不要建议直接删除系统文件。',
+                '只返回 JSON：{"summary":"","bullets":[],"warnings":[],"actions":[]}'
+              ].join('\n'),
+              userPrompt: [
+                `扫描根目录：${input.rootPath}`,
+                `总占用：${input.summary.totalBytes} B`
+              ].join('\n')
+            }
+          }
+
+          mapInsightResult(payload) {
+            return {
+              summary: payload.summary || '已生成当前目录的清理建议',
+              bullets: Array.isArray(payload.bullets) ? payload.bullets : [],
+              warnings: Array.isArray(payload.warnings) ? payload.warnings : [],
+              actions: Array.isArray(payload.actions) ? payload.actions : []
+            }
+          }
+        }
+      }
+    }
+
     if (specifier === '../../shared/types' || specifier === '../../shared/llm') {
       return {}
     }
@@ -223,6 +363,70 @@ test('suggestRename normalizes llm suggestions back onto the input file extensio
   assert.equal(result.success, true)
   assert.equal(result.data.summary, '按项目和顺序重命名')
   assert.deepEqual(result.data.suggestions.map((item) => item.newName), ['project-001.txt', 'project-002.md'])
+})
+
+test('suggestSpaceCleanup delegates prompt construction to the space cleanup adapter', async () => {
+  const adapterCalls = []
+  const { LlmService } = loadLlmServiceModule({
+    SpaceCleanupAdapter: class SpaceCleanupAdapter {
+      buildCompletion(input) {
+        adapterCalls.push(input)
+        return {
+          systemPrompt: 'space-system',
+          userPrompt: 'space-user'
+        }
+      }
+
+      mapInsightResult(payload) {
+        return {
+          summary: payload.summary || 'space-summary',
+          bullets: [],
+          warnings: [],
+          actions: []
+        }
+      }
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body)
+      assert.deepEqual(body.messages, [
+        { role: 'system', content: 'space-system' },
+        { role: 'user', content: 'space-user' }
+      ])
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({ summary: '已生成建议' })
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const service = new LlmService()
+  const input = {
+    rootPath: 'D:/downloads',
+    summary: {
+      totalBytes: 2048,
+      scannedFiles: 8,
+      scannedDirectories: 3,
+      skippedEntries: 1
+    },
+    largestFiles: []
+  }
+
+  const result = await service.suggestSpaceCleanup(input)
+
+  assert.equal(result.success, true)
+  assert.equal(adapterCalls.length, 1)
+  assert.deepEqual(adapterCalls[0], input)
+  assert.equal(result.data.summary, '已生成建议')
 })
 
 function normalize(value) {
