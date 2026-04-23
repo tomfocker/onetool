@@ -1,64 +1,95 @@
-# onetool - 高颜值本地小工具箱
+# onetool
 
-一个基于 Electron + React + Tailwind CSS + shadcn/ui 构建的现代化本地工具箱应用，包含 15+ 实用工具。
+Windows 本地高频小工具箱。
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
+`v0.1.0` 已发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
 
-## ✨ 特性
+![Version](https://img.shields.io/badge/version-v0.1.0-2563eb.svg)
+![Platform](https://img.shields.io/badge/platform-Windows-0f172a.svg)
+![License](https://img.shields.io/badge/license-MIT-16a34a.svg)
 
-- 🎨 **现代化界面** - 深色主题，玻璃质感设计
-- 🚀 **15+ 实用工具** - 涵盖系统、文件、多媒体、网络、效率等多个类别
-- 💻 **跨平台支持** - Windows、macOS、Linux
-- 🔒 **本地运行** - 所有工具本地执行，保护隐私
-- ⚡ **高性能** - 基于 Electron + Vite，快速响应
+[下载最新版本](https://github.com/tomfocker/onetool/releases/latest) | [查看发行版](https://github.com/tomfocker/onetool/releases) | [Windows 发布说明](./docs/distribution/windows-release.md)
 
-## 🛠️ 技术栈
+![主界面预览](./website/hero-shot-main.png)
 
-- **Electron** - 桌面应用框架
-- **React 18** - UI 库
-- **TypeScript** - 类型安全
-- **Vite** - 构建工具
-- **Tailwind CSS** - 样式框架
-- **shadcn/ui** - UI 组件库
-- **Lucide React** - 图标库
+## 这是什么
 
-## 📦 工具列表
+`onetool` 是一个面向日常 Windows 桌面使用的本地工具箱，把装机、文件处理、录屏截图、网页操作、系统检测这类常用能力收在一个统一界面里。
 
-### 系统工具
-- ⚡ **极速装机** - 一键安装常用软件，支持 winget 静默批量安装
-- 🔍 **配置检测** - 检测电脑硬件配置信息，一键生成配置报告
-- 💽 **空间清理** - 扫描目录或磁盘占用，支持图形视图和 Windows NTFS 极速扫描
+它更强调：
 
-### 文件处理
-- 📝 **批量重命名** - 批量重命名文件，支持序号、替换、前后缀等模式
-- 📦 **文件暂存悬浮球** - 高颜值文件暂存工具，支持拖入拖出文件
+- 本地执行，尽量少依赖外部服务
+- 高频功能集中，不用在多个小工具之间来回切换
+- 以桌面真实使用体验为优先，而不是做一组零散 demo
 
-### 多媒体
-- 🖼️ **图片处理** - 批量图片格式转换、压缩、调整大小
-- 🎨 **取色器** - 屏幕取色工具，支持多种颜色格式
-- 🎬 **屏幕录制** - 录制屏幕操作，支持 MP4、GIF、WebM 多种格式
+## 代表功能
 
-### 网络工具
-- 🌐 **网页激活器** - 自动激活网页元素，支持自定义规则
-- 📡 **网络雷达** - 实时监测网络延迟与速度，支持常用网站延迟测试和上下行速度测试
+### 文件暂存悬浮球
 
-### 效率工具
-- 🖱️ **鼠标连点器** - 自动鼠标点击，支持自定义间隔和按键
-- 📋 **剪贴板管理** - 管理剪贴板历史记录，支持文本和图片，置顶收藏
-- 📱 **二维码生成** - 生成自定义二维码，支持添加 Logo 和样式调整
-- 🕐 **翻页时钟** - 全屏翻页时钟屏保，适合桌面展示
-- 🌍 **沉浸式截屏翻译** - 全屏透明遮罩框选，OCR 识别加翻译，玻璃质感设计
+适合临时收纳、跨窗口拖放和桌面整理。
 
-## 🚀 快速开始
+![文件暂存悬浮球](./website/hero-shot-utility-float-v2.png)
 
-### 安装依赖
+### 屏幕录制与截屏工作流
+
+支持录屏、区域选择、截图相关能力，适合演示、反馈和内容制作。
+
+![录屏与截屏](./website/hero-shot-capture-record-v2.png)
+
+### 网页激活与自动化辅助
+
+把重复网页操作收进一个工具入口，减少重复点击和切换。
+
+![网页激活](./website/hero-shot-web-activate-v2.png)
+
+## 核心能力
+
+- 装机与环境准备：常用软件安装、开发环境管理、系统配置检测
+- 文件与桌面效率：批量重命名、下载整理、文件暂存悬浮球、剪贴板管理
+- 多媒体与捕获：屏幕录制、截图、取色、图片处理、二维码生成
+- 网络与系统辅助：网页激活、网络雷达、空间清理、WSL 管理、屏幕翻译
+
+## 下载与安装
+
+当前发布页提供两种 Windows 包：
+
+- 安装版：`onetool-0.1.0-win-x64-setup.exe`
+- 便携版：`onetool-0.1.0-win-x64-portable.exe`
+
+选择建议：
+
+- 长期使用，优先安装版
+- 临时试用、随身携带或不想安装，使用便携版
+
+当前 `v0.1.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
+
+更新行为：
+
+- Windows 安装版支持后续通过 GitHub Releases 检查更新
+- Windows 便携版不启用自动更新
+
+## 当前版本定位
+
+`v0.1.0` 是首个公开 Windows 版本，当前发布重点是：
+
+- 跑通完整 Windows 发布链路
+- 提供安装版和便携版
+- 保持应用内更新与 GitHub Release 对齐
+
+暂不承诺：
+
+- 多平台正式发布一致性
+- 签名证书与 SmartScreen 信誉积累
+
+## 本地开发
+
+安装依赖：
 
 ```bash
 npm install
 ```
 
-### 开发模式
+启动开发模式：
 
 ```bash
 npm run dev
@@ -70,20 +101,13 @@ npm run dev
 npm run build:ntfs-fast-scan
 ```
 
-### 构建应用
+本地构建：
 
 ```bash
-# Windows
-npm run build:win
-
-# macOS
-npm run build:mac
-
-# Linux
-npm run build:linux
+npm run build
 ```
 
-### Windows 正式发布
+Windows 正式打包：
 
 ```bash
 npm run release:win
@@ -91,52 +115,26 @@ npm run release:win
 
 如果在本机执行这条命令，请先确认当前 Windows 已开启“开发者模式”或使用具备创建符号链接权限的终端会话；`electron-builder` 依赖的 `winCodeSign` 解压阶段否则会在本地失败。没有这项权限时，优先使用仓库内置的 GitHub Actions `Release` 工作流产出正式安装包。
 
-仓库同时提供：
+更多说明见 [docs/distribution/windows-release.md](./docs/distribution/windows-release.md)。
 
-- `CI` 工作流：持续验证测试和构建
-- `Release` 工作流：手动触发 Windows 发布打包，或在推送 `v*` 标签时创建草稿 Release
+## 仓库结构
 
-Windows 发布链路说明见 [docs/distribution/windows-release.md](docs/distribution/windows-release.md)。
-
-### 空间清理 NTFS 极速扫描
-
-- 仅支持 `Windows` 本地 `NTFS` 根盘，例如 `C:\`、`D:\`
-- 普通目录、网络盘、`exFAT`/`FAT32`/`ReFS` 等文件系统不会启用极速模式
-- 不满足条件或原生扫描失败时，会自动回退到普通扫描并显示原因
-- 开发环境下需要先运行 `npm run build:ntfs-fast-scan`，主进程才会从仓库内的 `resources/space-scan` 加载原生扫描器
-
-## 📂 项目结构
-
-```
-tool/
-├── src/
-│   ├── main/           # Electron 主进程
-│   ├── preload/        # 预加载脚本
-│   └── renderer/       # 渲染进程
-│       └── src/
-│           ├── components/  # React 组件
-│           │   ├── ui/      # shadcn/ui 组件
-│           │   ├── Sidebar.tsx
-│           │   ├── Header.tsx
-│           │   └── Dashboard.tsx
-│           ├── tools/       # 工具组件
-│           ├── data/        # 数据定义
-│           ├── lib/         # 工具函数
-│           ├── App.tsx
-│           ├── main.tsx
-│           └── index.css
-├── package.json
-├── tsconfig.json
-├── tailwind.config.js
-└── electron.vite.config.ts
+```text
+src/
+  main/        Electron 主进程
+  preload/     预加载桥接
+  renderer/    前端界面与工具页面
+resources/     应用资源与随包依赖
+website/       官网与 README 预览素材
+docs/          发布与分发文档
 ```
 
-## 👤 作者
+## 作者
 
 **八骏马**
 
 - Bilibili: [https://space.bilibili.com/35149135](https://space.bilibili.com/35149135)
 
-## 📄 许可证
+## 许可证
 
 MIT License
