@@ -53,7 +53,7 @@ async function bootstrap() {
 
   if (bootstrapRoute === 'recorder-selection') {
     applyTransparentWindowBackground()
-    const module = await import('./tools/ScreenRecorderTool')
+    const module = await import('./components/RecorderSelectionOverlay')
     root.render(
       <React.StrictMode>
         <module.RecorderSelectionOverlay />
@@ -64,7 +64,7 @@ async function bootstrap() {
 
   if (bootstrapRoute === 'screenshot-selection') {
     applyTransparentWindowBackground()
-    const module = await import('./tools/SuperScreenshotTool')
+    const module = await import('./components/ScreenshotSelectionOverlay')
     root.render(
       <React.StrictMode>
         <module.ScreenshotSelectionOverlay />
