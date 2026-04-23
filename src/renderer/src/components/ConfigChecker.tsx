@@ -257,6 +257,13 @@ export const ConfigChecker: React.FC = () => {
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiInsight, setAiInsight] = useState<{
+    summary: string
+    bullets: string[]
+    warnings: string[]
+    actions: string[]
+  } | null>(null)
 
   const fetchConfig = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
@@ -398,6 +405,32 @@ export const ConfigChecker: React.FC = () => {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  const handleAiDiagnosis = async () => {
+    if (!config) {
+      setError('请先完成一次硬件审计')
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      const doctorResult = await window.electron.doctor.runAudit()
+      const result = await window.electron.llm.analyzeSystem({
+        config,
+        doctorReport: doctorResult.success ? doctorResult.data ?? null : null
+      })
+
+      if (!result.success || !result.data) {
+        setError(result.error || 'AI 诊断失败')
+        return
+      }
+
+      setAiInsight(result.data)
+      setError(null)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   const quickConclusion = buildQuickConclusion(config)
   const normalizedDeviceModel = formatHardwareLabel(config?.deviceModel) || config?.deviceModel || '未识别具体型号'
 
@@ -443,6 +476,15 @@ export const ConfigChecker: React.FC = () => {
               {copied ? <Check size={14} className="mr-2" /> : <Copy size={14} className="mr-2" />}
               {copied ? '已复制' : '导出报告'}
             </Button>
+            <Button
+              onClick={() => { void handleAiDiagnosis() }}
+              disabled={loading || !config || aiLoading}
+              variant="outline"
+              className="h-10 rounded-full px-5 text-xs font-black"
+            >
+              {aiLoading ? <Loader2 size={14} className="mr-2 animate-spin" /> : <Sparkles size={14} className="mr-2" />}
+              {aiLoading ? 'AI 分析中...' : 'AI 诊断建议'}
+            </Button>
           </div>
           {error && <p className="text-[11px] text-red-400 font-medium">{error}</p>}
         </div>
@@ -481,6 +523,48 @@ export const ConfigChecker: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {aiInsight ? (
+        <Card className="glass-card border-none overflow-hidden">
+          <CardContent className="space-y-4 p-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white">
+                <Sparkles size={18} />
+              </div>
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] text-muted-foreground opacity-60">AI 系统诊断</p>
+                <h3 className="text-xl font-black tracking-tight">{aiInsight.summary}</h3>
+              </div>
+            </div>
+            {aiInsight.bullets.length > 0 ? (
+              <div className="grid gap-2 md:grid-cols-2">
+                {aiInsight.bullets.map((line) => (
+                  <div key={line} className="rounded-2xl border border-white/10 bg-white/40 px-4 py-3 text-sm font-medium dark:bg-white/5">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {aiInsight.actions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-bold">建议动作</p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {aiInsight.actions.map((line) => (
+                    <li key={line}>• {line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {aiInsight.warnings.length > 0 ? (
+              <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                {aiInsight.warnings.map((line) => (
+                  <div key={line}>• {line}</div>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* 硬件卡片严格对齐布局 */}
       <div className="space-y-4">

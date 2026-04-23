@@ -45,6 +45,7 @@ import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
+import { registerLlmIpc } from './ipc/llmIpc'
 import { registerTaskbarAppearanceIpc, restoreTaskbarAppearanceOnStartup } from './ipc/taskbarAppearanceIpc'
 import { registerUpdateIpc } from './ipc/updateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
@@ -179,6 +180,7 @@ app.whenReady().then(() => {
   registerLocalProxyIpc()
   registerNetworkIpc()
   registerTranslateIpc()
+  registerLlmIpc()
   registerTaskbarAppearanceIpc()
   registerRenameIpc()
   registerQuickInstallerIpc()

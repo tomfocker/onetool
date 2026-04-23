@@ -29,6 +29,18 @@ import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } f
 import type { ModelDownloadRequest, ModelDownloadState } from '../../../shared/modelDownload'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../../../shared/spaceCleanup'
+import type {
+  LlmConfigStatus,
+  LlmConnectionStatus,
+  LlmInsight,
+  LlmRenameInputFile,
+  LlmRenameSuggestion,
+  ScreenOverlayLineResult,
+  ScreenOverlayMode,
+  ScreenOverlaySessionStartPayload,
+  LlmSpaceCleanupSuggestionRequest,
+  LlmSystemAnalysisRequest
+} from '../../../shared/llm'
 
 declare global {
   interface Window {
@@ -124,6 +136,13 @@ declare global {
         update: (updates: Partial<AppSettings>) => Promise<IpcResponse>
         onChanged: (callback: (newSettings: AppSettings) => void) => () => void
       }
+      llm: {
+        getConfigStatus: () => Promise<IpcResponse<LlmConfigStatus>>
+        testConnection: () => Promise<IpcResponse<LlmConnectionStatus>>
+        analyzeSystem: (input: LlmSystemAnalysisRequest) => Promise<IpcResponse<LlmInsight>>
+        suggestRename: (input: { instructions: string; files: LlmRenameInputFile[] }) => Promise<IpcResponse<LlmRenameSuggestion>>
+        suggestSpaceCleanup: (input: LlmSpaceCleanupSuggestionRequest) => Promise<IpcResponse<LlmInsight>>
+      }
       store: {
         getAll: () => Promise<IpcResponse<GlobalStore>>
         get: (key: keyof GlobalStore) => Promise<IpcResponse<any>>
@@ -173,10 +192,11 @@ declare global {
         getPathForFile: (file: File) => string
       }
       screenOverlay: {
-        start: () => Promise<IpcResponse<{ screenDataUrl?: string }>>
+        start: (mode?: ScreenOverlayMode) => Promise<IpcResponse<{ screenDataUrl?: string }>>
         close: () => Promise<IpcResponse>
         notifyReady: () => void
         onScreenshot: (callback: (dataUrl: string) => void) => () => void
+        onSessionStart: (callback: (payload: ScreenOverlaySessionStartPayload) => void) => () => void
       }
       screenshot: {
         getSettings: () => Promise<IpcResponse<{ savePath: string; autoSave: boolean }>>
@@ -263,11 +283,7 @@ declare global {
         onVisibilityChanged: (callback: (visible: boolean) => void) => () => void
       }
       translate: {
-        translateImage: (base64Image: string) => Promise<IpcResponse<Array<{
-          index: number
-          text: string
-          translatedText: string
-        }>>>
+        translateImage: (base64Image: string, mode?: ScreenOverlayMode) => Promise<IpcResponse<ScreenOverlayLineResult[]>>
       }
       wsl: {
         getOverview: () => Promise<IpcResponse<WslOverview>>

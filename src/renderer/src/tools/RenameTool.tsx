@@ -25,7 +25,8 @@ import {
   RefreshCw,
   Shuffle,
   ListTree,
-  HelpCircle
+  HelpCircle,
+  Sparkles
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -58,12 +59,22 @@ export const RenameTool: React.FC = () => {
     handleRename,
     savePreset,
     applyPreset,
-    deletePreset
+    deletePreset,
+    applySuggestedNames,
+    setMessage,
+    setMessageType
   } = useRename()
 
   const [showPresetManager, setShowPresetManager] = useState(false)
   const [newPresetName, setNewPresetName] = useState('')
   const [isDragging, setIsDragging] = useState(false)
+  const [aiInstructions, setAiInstructions] = useState('按主题整理并保留原扩展名')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [aiSuggestion, setAiSuggestion] = useState<{
+    summary: string
+    namingPattern: string
+    warnings: string[]
+  } | null>(null)
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -121,6 +132,49 @@ export const RenameTool: React.FC = () => {
       )}
     </Button>
   )
+
+  const handleAiSuggestion = async () => {
+    if (files.length === 0) {
+      setMessage('请先添加文件')
+      setMessageType('error')
+      return
+    }
+
+    if (!aiInstructions.trim()) {
+      setMessage('请先描述你的命名目标')
+      setMessageType('error')
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      const result = await window.electron.llm.suggestRename({
+        instructions: aiInstructions,
+        files: files.map((file) => ({
+          name: file.name,
+          path: file.path,
+          size: file.size
+        }))
+      })
+
+      if (!result.success || !result.data) {
+        setMessage(result.error || 'AI 命名建议生成失败')
+        setMessageType('error')
+        return
+      }
+
+      applySuggestedNames(result.data.suggestions)
+      setAiSuggestion({
+        summary: result.data.summary,
+        namingPattern: result.data.namingPattern,
+        warnings: result.data.warnings
+      })
+      setMessage('已应用 AI 建议命名，可继续手动微调')
+      setMessageType('success')
+    } finally {
+      setAiLoading(false)
+    }
+  }
 
   return (
     <div className='max-w-5xl mx-auto space-y-8 pb-20'>
@@ -210,6 +264,44 @@ export const RenameTool: React.FC = () => {
               </div>
 
               <div className='space-y-4'>
+                <div className="rounded-2xl border border-cyan-200/60 bg-cyan-500/5 p-4 dark:border-cyan-900/60">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-bold text-cyan-700 dark:text-cyan-300">
+                    <Sparkles className="h-4 w-4" />
+                    AI 命名建议
+                  </div>
+                  <div className="space-y-3">
+                    <Input
+                      value={aiInstructions}
+                      onChange={(e) => setAiInstructions(e.target.value)}
+                      placeholder="例如：按项目和日期统一命名，保留原扩展名"
+                      className="rounded-xl bg-white/70 dark:bg-zinc-900/40"
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAiSuggestion}
+                      disabled={aiLoading || files.length === 0}
+                      className="rounded-xl"
+                    >
+                      <Sparkles className={`mr-2 h-4 w-4 ${aiLoading ? 'animate-pulse' : ''}`} />
+                      {aiLoading ? 'AI 正在生成建议...' : '生成 AI 命名建议'}
+                    </Button>
+                    {aiSuggestion ? (
+                      <div className="space-y-2 rounded-xl border border-white/20 bg-white/50 p-3 text-xs dark:bg-white/5">
+                        <p className="font-semibold text-foreground">{aiSuggestion.summary}</p>
+                        <p className="text-muted-foreground">建议模式：{aiSuggestion.namingPattern}</p>
+                        {aiSuggestion.warnings.length > 0 ? (
+                          <ul className="space-y-1 text-amber-600 dark:text-amber-300">
+                            {aiSuggestion.warnings.map((warning) => (
+                              <li key={warning}>• {warning}</li>
+                            ))}
+                          </ul>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
                 {rules.length === 0 ? (
                   <div className='text-center py-12 bg-muted/20 rounded-[2rem] border-2 border-dashed border-muted-foreground/10'>
                     <div className="w-12 h-12 bg-muted/50 rounded-2xl flex items-center justify-center mx-auto mb-3 opacity-50">

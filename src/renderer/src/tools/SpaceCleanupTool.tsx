@@ -8,6 +8,7 @@ import {
   HardDrive,
   PieChart,
   RefreshCw,
+  Sparkles,
   StopCircle
 } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -239,6 +240,13 @@ export default function SpaceCleanupTool() {
   } = useSpaceCleanup()
   const [expandedPaths, setExpandedPaths] = React.useState<string[]>([])
   const [treeMenu, setTreeMenu] = React.useState<TreeContextMenuState | null>(null)
+  const [aiLoading, setAiLoading] = React.useState(false)
+  const [aiInsight, setAiInsight] = React.useState<{
+    summary: string
+    bullets: string[]
+    warnings: string[]
+    actions: string[]
+  } | null>(null)
 
   React.useEffect(() => {
     setExpandedPaths(getInitialExpandedSpaceCleanupPaths(viewModel.tree))
@@ -309,6 +317,36 @@ export default function SpaceCleanupTool() {
     setTreeMenu(null)
   }
 
+  const handleAiCleanupSuggestion = async () => {
+    if (!session.rootPath) {
+      showNotification({ type: 'error', message: '请先完成一次空间扫描' })
+      return
+    }
+
+    setAiLoading(true)
+    try {
+      const result = await window.electron.llm.suggestSpaceCleanup({
+        rootPath: session.rootPath,
+        summary: session.summary,
+        largestFiles: session.largestFiles.slice(0, 10).map((item) => ({
+          path: item.path,
+          name: item.name,
+          sizeBytes: item.sizeBytes,
+          extension: item.extension || undefined
+        }))
+      })
+
+      if (!result.success || !result.data) {
+        showNotification({ type: 'error', message: result.error || 'AI 清理建议生成失败' })
+        return
+      }
+
+      setAiInsight(result.data)
+    } finally {
+      setAiLoading(false)
+    }
+  }
+
   const distributionSubtitle = viewModel.distributionRoot
     ? `${viewModel.distributionSegments.length} 个主要分段`
     : '等待扫描结果'
@@ -340,6 +378,14 @@ export default function SpaceCleanupTool() {
                 <StopCircle className="mr-2 h-4 w-4" />
                 取消扫描
               </Button>
+              <Button
+                variant="outline"
+                onClick={() => void handleAiCleanupSuggestion()}
+                disabled={session.status === 'idle' || aiLoading}
+              >
+                <Sparkles className={`mr-2 h-4 w-4 ${aiLoading ? 'animate-pulse' : ''}`} />
+                {aiLoading ? 'AI 分析中...' : 'AI 清理建议'}
+              </Button>
             </div>
           </div>
 
@@ -367,6 +413,46 @@ export default function SpaceCleanupTool() {
           </div>
         </CardContent>
       </Card>
+
+      {aiInsight ? (
+        <Card className="border-0 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              AI 清理建议
+            </CardTitle>
+            <CardDescription>{aiInsight.summary}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {aiInsight.bullets.length > 0 ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {aiInsight.bullets.map((line) => (
+                  <div key={line} className="rounded-2xl border border-zinc-200 px-4 py-3 text-sm dark:border-zinc-800">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            {aiInsight.actions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-sm font-semibold">推荐动作</p>
+                <ul className="space-y-2 text-sm text-muted-foreground">
+                  {aiInsight.actions.map((line) => (
+                    <li key={line}>• {line}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {aiInsight.warnings.length > 0 ? (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                {aiInsight.warnings.map((line) => (
+                  <div key={line}>• {line}</div>
+                ))}
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(260px,300px)_minmax(0,1fr)]">
         <Card className="min-w-0 border-0 shadow-sm">

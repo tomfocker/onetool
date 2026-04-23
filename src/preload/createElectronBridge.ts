@@ -14,6 +14,18 @@ import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDo
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
 import type { TaskbarAppearancePreset } from '../shared/taskbarAppearance'
 import type {
+  LlmConfigStatus,
+  LlmConnectionStatus,
+  LlmInsight,
+  LlmRenameInputFile,
+  LlmRenameSuggestion,
+  ScreenOverlayLineResult,
+  ScreenOverlayMode,
+  ScreenOverlaySessionStartPayload,
+  LlmSpaceCleanupSuggestionRequest,
+  LlmSystemAnalysisRequest
+} from '../shared/llm'
+import type {
   BilibiliDownloaderState,
   BilibiliExportMode,
   BilibiliLinkKind,
@@ -119,6 +131,20 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onChanged: (callback: (newStore: any) => void) => onChannel('store-changed', callback)
   }
 
+  const llmAPI = {
+    getConfigStatus: () => ipcRenderer.invoke('llm-get-config-status') as Promise<IpcResponse<LlmConfigStatus>>,
+    testConnection: () => ipcRenderer.invoke('llm-test-connection') as Promise<IpcResponse<LlmConnectionStatus>>,
+    analyzeSystem: (input: LlmSystemAnalysisRequest) => {
+      return ipcRenderer.invoke('llm-analyze-system', input) as Promise<IpcResponse<LlmInsight>>
+    },
+    suggestRename: (input: { instructions: string; files: LlmRenameInputFile[] }) => {
+      return ipcRenderer.invoke('llm-suggest-rename', input) as Promise<IpcResponse<LlmRenameSuggestion>>
+    },
+    suggestSpaceCleanup: (input: LlmSpaceCleanupSuggestionRequest) => {
+      return ipcRenderer.invoke('llm-suggest-space-cleanup', input) as Promise<IpcResponse<LlmInsight>>
+    }
+  }
+
   const systemConfigAPI = {
     getSystemConfig: () => ipcRenderer.invoke('get-system-config'),
     getRealtimeStats: () => ipcRenderer.invoke('get-realtime-stats'),
@@ -216,10 +242,13 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const screenOverlayAPI = {
-    start: () => ipcRenderer.invoke('screen-overlay-start'),
+    start: (mode: ScreenOverlayMode = 'translate') => ipcRenderer.invoke('screen-overlay-start', mode),
     close: () => ipcRenderer.invoke('screen-overlay-close'),
     notifyReady: () => ipcRenderer.send('screen-overlay:ready'),
-    onScreenshot: (callback: (dataUrl: string) => void) => onChannel('screen-overlay:screenshot', callback)
+    onScreenshot: (callback: (dataUrl: string) => void) => onChannel('screen-overlay:screenshot', callback),
+    onSessionStart: (callback: (payload: ScreenOverlaySessionStartPayload) => void) => {
+      return onChannel('screen-overlay:session-start', callback)
+    }
   }
 
   const screenshotAPI = {
@@ -280,7 +309,9 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const translateAPI = {
-    translateImage: (base64Image: string) => ipcRenderer.invoke('translate:image', base64Image)
+    translateImage: (base64Image: string, mode: ScreenOverlayMode = 'translate') => {
+      return ipcRenderer.invoke('translate:image', base64Image, mode) as Promise<IpcResponse<ScreenOverlayLineResult[]>>
+    }
   }
 
   const taskbarAppearanceAPI = {
@@ -428,6 +459,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     quickInstaller: quickInstallerAPI,
     autoClicker: autoClickerAPI,
     autoStart: autoStartAPI,
+    llm: llmAPI,
     settings: settingsAPI,
     store: storeAPI,
     systemConfig: systemConfigAPI,

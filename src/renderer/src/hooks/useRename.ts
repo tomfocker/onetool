@@ -304,6 +304,16 @@ export function useRename() {
     setStoreValue('renamePresets', presets.filter(p => p.id !== presetId))
   }
 
+  const applySuggestedNames = (suggestions: Array<{ index: number; newName: string }>) => {
+    const suggestionMap = new Map(suggestions.map((item) => [item.index, item.newName]))
+    setFiles((prev) => prev.map((file, index) => ({
+      ...file,
+      newName: suggestionMap.get(index) || file.newName || file.name,
+      success: undefined,
+      error: undefined
+    })))
+  }
+
   return {
     files,
     rules,
@@ -325,6 +335,7 @@ export function useRename() {
     savePreset,
     applyPreset,
     deletePreset,
+    applySuggestedNames,
     setMessage,
     setMessageType
   }

@@ -1,10 +1,7 @@
 import React, { useState, useLayoutEffect, Suspense, useMemo, useCallback } from 'react'
 import { Sidebar } from '@/components/Sidebar'
-import { Header } from '@/components/Header'
 import { TitleBar } from '@/components/TitleBar'
 import { Dashboard } from '@/components/Dashboard'
-import { ScreenOverlay } from '@/components/ScreenOverlay'
-import { ColorPickerOverlay } from '@/components/ColorPickerOverlay'
 import { AppUpdatePrompt } from '@/components/AppUpdatePrompt'
 import { tools } from '@/data/tools'
 import { ToolErrorBoundary } from '@/components/ui/tool-error-boundary'
@@ -22,28 +19,10 @@ const toolModules = import.meta.glob([
   './tools/*.tsx'
 ])
 
-const RecorderSelectionOverlay = React.lazy(async () => {
-  const module = await import('@/tools/ScreenRecorderTool')
-  return { default: module.RecorderSelectionOverlay }
-})
-
-const ScreenshotSelectionOverlay = React.lazy(async () => {
-  const module = await import('@/tools/SuperScreenshotTool')
-  return { default: module.ScreenshotSelectionOverlay }
-})
-
-function OverlayFallback(): React.JSX.Element {
-  return <div className='fixed inset-0 bg-black/40' />
-}
-
 function AppContent(): React.JSX.Element {
   const [currentPage, setCurrentPage] = useState<string>('dashboard')
   const [searchQuery, setSearchQuery] = useState('')
   const [retryKey, setRetryKey] = useState(0)
-  const [isScreenOverlay, setIsScreenOverlay] = useState(false)
-  const [isColorPickerOverlay, setIsColorPickerOverlay] = useState(false)
-  const [isRecorderSelection, setIsRecorderSelection] = useState(false)
-  const [isScreenshotSelection, setIsScreenshotSelection] = useState(false)
 
   const handleToolReset = useCallback(() => {
     setRetryKey(prev => prev + 1)
@@ -62,16 +41,6 @@ function AppContent(): React.JSX.Element {
   }, [])
 
   useLayoutEffect(() => {
-    const handleHashChange = () => {
-      const hash = window.location.hash
-      setIsScreenOverlay(hash.startsWith('#/screen-overlay'))
-      setIsColorPickerOverlay(hash.startsWith('#/color-picker-overlay'))
-      setIsRecorderSelection(hash.startsWith('#/recorder-selection'))
-      setIsScreenshotSelection(hash.startsWith('#/screenshot-selection'))
-    }
-    handleHashChange()
-    window.addEventListener('hashchange', handleHashChange)
-
     // 注册全局系统进程唤出特定工具界面的 IPC 监听
     const unsubOpenTool = window.electron.app.onOpenTool((toolId: string) => {
       setCurrentPage(toolId)
@@ -80,27 +49,9 @@ function AppContent(): React.JSX.Element {
     })
 
     return () => {
-      window.removeEventListener('hashchange', handleHashChange)
       unsubOpenTool()
     }
   }, [])
-
-  if (isScreenOverlay) return <ScreenOverlay />
-  if (isColorPickerOverlay) return <ColorPickerOverlay />
-  if (isRecorderSelection) {
-    return (
-      <Suspense fallback={<OverlayFallback />}>
-        <RecorderSelectionOverlay />
-      </Suspense>
-    )
-  }
-  if (isScreenshotSelection) {
-    return (
-      <Suspense fallback={<OverlayFallback />}>
-        <ScreenshotSelectionOverlay />
-      </Suspense>
-    )
-  }
 
   const ActiveComponent = currentPage === 'dashboard' ? Dashboard : ToolComponentsMap[currentPage];
 

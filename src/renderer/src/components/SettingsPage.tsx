@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Rocket, Info, Github, Heart, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2, Languages } from 'lucide-react'
+import { Rocket, Info, Github, Heart, Activity, ShieldCheck, CheckCircle2, XCircle, Minimize2, Languages, Sparkles, PlugZap } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,8 @@ export const SettingsPage: React.FC = () => {
   const [doctorReport, setDoctorReport] = useState<any>(null)
   const [isChecking, setIsChecking] = useState(false)
   const [autoCheckUpdateMessage, setAutoCheckUpdateMessage] = useState<string | null>(null)
+  const [llmStatusMessage, setLlmStatusMessage] = useState<string | null>(null)
+  const [isTestingLlm, setIsTestingLlm] = useState(false)
   const { updateState, pendingAction, checkForUpdates } = useAppUpdate()
 
   const runDoctor = async () => {
@@ -91,6 +93,20 @@ export const SettingsPage: React.FC = () => {
     await checkForUpdates()
   }
 
+  const handleTestLlmConnection = async () => {
+    setIsTestingLlm(true)
+    try {
+      const result = await window.electron.llm.testConnection()
+      if (result.success && result.data) {
+        setLlmStatusMessage(`连接成功：${result.data.provider} / ${result.data.model}`)
+      } else {
+        setLlmStatusMessage(result.error || '连接失败，请检查 Base URL、模型名和 API Key')
+      }
+    } finally {
+      setIsTestingLlm(false)
+    }
+  }
+
   if (isLoading || !settings) {
     return <div className="p-8 text-center text-muted-foreground">加载设置中...</div>
   }
@@ -122,6 +138,67 @@ export const SettingsPage: React.FC = () => {
             checked={settings.minimizeToTray}
             onCheckedChange={handleMinimizeToTrayChange}
           />
+        </CardContent>
+      </Card>
+
+      <Card className="border-none shadow-xl bg-white/50 dark:bg-zinc-900/50 backdrop-blur-md rounded-3xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg font-bold">
+            <Sparkles className="h-5 w-5 text-cyan-500" />
+            AI 与 LLM
+          </CardTitle>
+          <CardDescription>全局 OpenAI 兼容接口配置。截图翻译、重命名建议、系统诊断和空间清理建议都会复用这里的配置。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Base URL</label>
+              <Input
+                value={settings.translateApiUrl}
+                onChange={(e) => updateSettings({ translateApiUrl: e.target.value })}
+                placeholder="https://api.openai.com/v1"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Model</label>
+              <Input
+                value={settings.translateModel}
+                onChange={(e) => updateSettings({ translateModel: e.target.value })}
+                placeholder="gpt-4o-mini"
+                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <label className="ml-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">API Key</label>
+            <Input
+              type="password"
+              value={settings.translateApiKey}
+              onChange={(e) => updateSettings({ translateApiKey: e.target.value })}
+              placeholder="sk-..."
+              className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
+            />
+          </div>
+          <div className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-muted/25 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">使用 OpenAI 兼容接口进行全局 AI 增强</p>
+              <p className="text-xs text-muted-foreground">
+                支持 OpenAI、OpenRouter、硅基流动、one-api 等兼容 `chat/completions` 的接口。
+              </p>
+              {llmStatusMessage ? <p className="text-xs text-cyan-600 dark:text-cyan-300">{llmStatusMessage}</p> : null}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleTestLlmConnection}
+              disabled={isTestingLlm}
+              className="rounded-xl"
+            >
+              <PlugZap className="mr-2 h-4 w-4" />
+              {isTestingLlm ? '连接测试中...' : '测试连接'}
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

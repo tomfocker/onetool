@@ -1,23 +1,18 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Camera, Languages, Settings2 } from 'lucide-react'
-import { useSettings } from '../hooks/useSettings'
+import { Camera, Languages, Sparkles } from 'lucide-react'
+import type { ScreenOverlayMode } from '../../../shared/llm'
 
 export const ScreenOverlayTranslatorTool: React.FC = () => {
-  const { settings, updateSettings, isLoading } = useSettings()
+  const [mode, setMode] = React.useState<ScreenOverlayMode>('translate')
 
   const handleStartTranslation = async () => {
     try {
-      await window.electron?.screenOverlay?.start?.()
+      await window.electron?.screenOverlay?.start?.(mode)
     } catch (error) {
       console.error('Failed to start screen overlay:', error)
     }
-  }
-
-  if (isLoading || !settings) {
-    return <div className="p-4 text-center text-muted-foreground">加载配置中...</div>
   }
 
   return (
@@ -49,23 +44,58 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
           <div className='h-px bg-white/20 dark:bg-white/10' />
 
           <div className='space-y-3'>
+            <div className='bg-white/40 dark:bg-white/5 rounded-xl p-4 space-y-3'>
+              <div>
+                <h4 className='font-medium text-sm'>识别模式</h4>
+                <p className='text-muted-foreground text-sm mt-1'>
+                  不启用翻译时只提取图片内文字；开启开关后才调用全局 LLM 输出译文。
+                </p>
+              </div>
+              <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
+                <button
+                  type='button'
+                  onClick={() => setMode('ocr')}
+                  className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                    mode === 'ocr'
+                      ? 'border-blue-500 bg-blue-500/10 shadow-sm'
+                      : 'border-white/20 bg-white/40 hover:bg-white/60 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'
+                  }`}
+                >
+                  <div className='text-sm font-semibold'>仅提取文字</div>
+                  <div className='text-xs text-muted-foreground mt-1'>只跑本地 OCR，不需要 AI 配置。</div>
+                </button>
+                <button
+                  type='button'
+                  onClick={() => setMode('translate')}
+                  className={`rounded-xl border px-4 py-3 text-left transition-all ${
+                    mode === 'translate'
+                      ? 'border-purple-500 bg-purple-500/10 shadow-sm'
+                      : 'border-white/20 bg-white/40 hover:bg-white/60 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10'
+                  }`}
+                >
+                  <div className='text-sm font-semibold'>OCR + 翻译</div>
+                  <div className='text-xs text-muted-foreground mt-1'>先提取文字，再调用全局 LLM 做翻译。</div>
+                </button>
+              </div>
+            </div>
+
             <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
               <div className='bg-white/40 dark:bg-white/5 rounded-xl p-4'>
                 <h4 className='font-medium text-sm mb-2'>功能特点</h4>
                 <ul className='text-muted-foreground text-sm space-y-1'>
                   <li>• 全屏透明遮罩</li>
                   <li>• 拖拽框选区域</li>
-                  <li>• 原地翻译结果</li>
-                  <li>• 玻璃质感设计</li>
+                  <li>• 结果贴回原位置</li>
+                  <li>• OCR / 翻译双模式</li>
                 </ul>
               </div>
               <div className='bg-white/40 dark:bg-white/5 rounded-xl p-4'>
                 <h4 className='font-medium text-sm mb-2'>使用说明</h4>
                 <ul className='text-muted-foreground text-sm space-y-1'>
-                  <li>• 框选要翻译的文本区域</li>
-                  <li>• 自动识别和翻译文字</li>
-                  <li>• 点击卡片外部或ESC关闭</li>
-                  <li>• 支持OCR识别与翻译</li>
+                  <li>• 先选择模式再启动遮罩</li>
+                  <li>• 框选要提取或翻译的文本区域</li>
+                  <li>• 结果将贴回原文附近位置</li>
+                  <li>• 点击关闭按钮或按 ESC 退出</li>
                 </ul>
               </div>
             </div>
@@ -76,43 +106,20 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
       <Card className="border-none shadow-soft bg-white/40 dark:bg-white/5 backdrop-blur-md rounded-2xl">
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base font-bold">
-            <Settings2 className="w-4 h-4 text-blue-500" />
-            性能更强、更实惠的文本大模型 (推荐 DeepSeek)
+            <Sparkles className="w-4 h-4 text-blue-500" />
+            {mode === 'translate' ? '全局 AI 配置已接入' : 'OCR-only 模式可直接使用'}
           </CardTitle>
           <CardDescription className="text-xs">
-            由于已集成<b>本地 OCR</b>，您现在可以使用任何纯文本模型（如 <code>deepseek-chat</code>），费用降低 95% 且速度飞快。
+            {mode === 'translate'
+              ? '翻译模式会复用偏好设置里的全局 LLM 配置。由于已集成本地 OCR，推荐使用任意文本模型即可完成翻译。'
+              : '仅提取文字模式不会调用 LLM，直接用本地 OCR 提取图片中的文本内容。'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">API URL</label>
-              <Input
-                value={settings.translateApiUrl}
-                onChange={(e) => updateSettings({ translateApiUrl: e.target.value })}
-                placeholder="https://api.openai.com/v1"
-                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">模型名称</label>
-              <Input
-                value={settings.translateModel}
-                onChange={(e) => updateSettings({ translateModel: e.target.value })}
-                placeholder="gpt-4o"
-                className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
-              />
-            </div>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-[10px] font-bold text-muted-foreground tracking-wider ml-1 uppercase">API Key</label>
-            <Input
-              type="password"
-              value={settings.translateApiKey}
-              onChange={(e) => updateSettings({ translateApiKey: e.target.value })}
-              placeholder="sk-..."
-              className="rounded-xl border-white/20 bg-white/40 font-mono text-xs"
-            />
+          <div className="rounded-xl border border-white/10 bg-white/30 px-4 py-3 text-sm text-muted-foreground dark:bg-white/5">
+            {mode === 'translate'
+              ? <>请前往 <span className="font-semibold text-foreground">全局设置 → AI 与 LLM</span> 填写 Base URL、模型和 API Key。</>
+              : <>当前模式不依赖 AI 配置；如果你只想提取图片里的字，现在就可以直接启动。</>}
           </div>
         </CardContent>
       </Card>
@@ -123,7 +130,7 @@ export const ScreenOverlayTranslatorTool: React.FC = () => {
           className='flex-1 bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white shadow-lg hover:shadow-xl transition-all duration-300 rounded-xl py-6'
         >
           <Camera className='mr-2 h-5 w-5' />
-          启动截屏翻译
+          {mode === 'translate' ? '启动截屏翻译' : '启动文字提取'}
         </Button>
       </div>
     </div>

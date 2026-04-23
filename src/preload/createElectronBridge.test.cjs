@@ -126,6 +126,8 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.app.onOpenTool, 'function')
   assert.equal(typeof bridge.app.onNotification, 'function')
   assert.equal(typeof bridge.doctor.runAudit, 'function')
+  assert.equal(typeof bridge.llm.getConfigStatus, 'function')
+  assert.equal(typeof bridge.llm.testConnection, 'function')
   assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
   assert.equal(typeof bridge.taskbarAppearance.applyPreset, 'function')
   assert.equal(typeof bridge.taskbarAppearance.restoreDefault, 'function')
@@ -250,6 +252,26 @@ test('createElectronBridge subscriptions route through explicit channels and uns
   assert.equal(mocks.removed[2][0], 'recorder-selection-result')
 })
 
+test('createElectronBridge exposes explicit screen overlay session subscriptions and unsubscribes cleanly', () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let sessionMode = null
+  const unsubscribe = bridge.screenOverlay.onSessionStart((payload) => {
+    sessionMode = payload.mode
+  })
+
+  mocks.listeners.get('screen-overlay:session-start')({}, { mode: 'ocr' })
+
+  assert.equal(sessionMode, 'ocr')
+
+  unsubscribe()
+
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'screen-overlay:session-start')
+})
+
 test('createElectronBridge maps explicit invoke helpers to the expected IPC channels', async () => {
   const { createElectronBridge } = loadCreateElectronBridgeModule()
   const mocks = createMocks()
@@ -269,6 +291,33 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.spaceCleanup.openPath('C:\\scan\\movie.mkv')
   await bridge.spaceCleanup.copyPath('C:\\scan\\movie.mkv')
   await bridge.spaceCleanup.deleteToTrash('C:\\scan\\movie.mkv')
+  await bridge.llm.getConfigStatus()
+  await bridge.llm.testConnection()
+  await bridge.llm.suggestRename({
+    instructions: '按项目重命名',
+    files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
+  })
+  await bridge.llm.analyzeSystem({
+    config: {
+      cpu: 'Intel',
+      deviceModel: 'Test',
+      motherboard: 'Board',
+      memory: '16 GB',
+      gpu: 'RTX',
+      monitor: 'Display',
+      disk: 'SSD',
+      os: 'Windows',
+      installTime: 1
+    },
+    doctorReport: null
+  })
+  await bridge.llm.suggestSpaceCleanup({
+    rootPath: 'D:/downloads',
+    summary: { totalBytes: 1024, scannedFiles: 3, scannedDirectories: 1, skippedEntries: 0 },
+    largestFiles: []
+  })
+  await bridge.screenOverlay.start('ocr')
+  await bridge.translate.translateImage('data:image/png;base64,abc', 'ocr')
   await bridge.screenRecorder.getDefaultPath('gif')
   await bridge.screenRecorder.selectOutput('gif')
   await bridge.screenRecorder.openSelection()
@@ -293,6 +342,33 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['space-cleanup-open-path', 'C:\\scan\\movie.mkv'],
     ['space-cleanup-copy-path', 'C:\\scan\\movie.mkv'],
     ['space-cleanup-delete-to-trash', 'C:\\scan\\movie.mkv'],
+    ['llm-get-config-status'],
+    ['llm-test-connection'],
+    ['llm-suggest-rename', {
+      instructions: '按项目重命名',
+      files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
+    }],
+    ['llm-analyze-system', {
+      config: {
+        cpu: 'Intel',
+        deviceModel: 'Test',
+        motherboard: 'Board',
+        memory: '16 GB',
+        gpu: 'RTX',
+        monitor: 'Display',
+        disk: 'SSD',
+        os: 'Windows',
+        installTime: 1
+      },
+      doctorReport: null
+    }],
+    ['llm-suggest-space-cleanup', {
+      rootPath: 'D:/downloads',
+      summary: { totalBytes: 1024, scannedFiles: 3, scannedDirectories: 1, skippedEntries: 0 },
+      largestFiles: []
+    }],
+    ['screen-overlay-start', 'ocr'],
+    ['translate:image', 'data:image/png;base64,abc', 'ocr'],
     ['screen-recorder-get-default-path', 'gif'],
     ['screen-recorder-select-output', 'gif'],
     ['recorder-selection-open'],

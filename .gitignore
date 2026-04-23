@@ -3,6 +3,7 @@ out
 dist
 release
 release_new
+release_preview
 release_rc*/
 .worktrees
 
@@ -25,3 +26,5 @@ resources/model-download/python/NEWS.txt
 resources/model-download/python/**/__pycache__/
 resources/model-download/python/**/test/
 resources/model-download/python/**/tests/
+eng.traineddata
+chi_sim.traineddata
