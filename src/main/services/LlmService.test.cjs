@@ -65,6 +65,39 @@ function loadLlmServiceModule(overrides = {}) {
       }
     }
 
+    if (specifier === './OpenAiCompatibleClient') {
+      return {
+        OpenAiCompatibleClient: class OpenAiCompatibleClient {
+          constructor(dependencies = {}) {
+            this.fetchImpl = dependencies.fetch || (async (...args) => {
+              fetchCalls.push(args)
+              return fetchImpl(...args)
+            })
+          }
+
+          async createJsonCompletion({ apiUrl, apiKey, model, systemPrompt, userPrompt }) {
+            const response = await this.fetchImpl(`${apiUrl.replace(/\/$/, '')}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiKey}`
+              },
+              body: JSON.stringify({
+                model,
+                response_format: { type: 'json_object' },
+                messages: [
+                  { role: 'system', content: systemPrompt },
+                  { role: 'user', content: userPrompt }
+                ]
+              })
+            })
+            const payload = await response.json()
+            return JSON.parse(payload.choices[0].message.content)
+          }
+        }
+      }
+    }
+
     if (specifier === './llmAdapters/ScreenshotInsightAdapter') {
       return {
         ScreenshotInsightAdapter: overrides.ScreenshotInsightAdapter || class ScreenshotInsightAdapter {

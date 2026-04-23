@@ -1,4 +1,3 @@
-import path from 'path'
 import type { IpcResponse } from '../../shared/types'
 import type {
   LlmConfigField,
@@ -7,7 +6,6 @@ import type {
   LlmInsight,
   LlmRenameInputFile,
   LlmRenameSuggestion,
-  LlmRenameSuggestionItem,
   ScreenOverlayLineResult,
   ScreenOverlayMode,
   LlmSpaceCleanupSuggestionRequest,
@@ -19,8 +17,8 @@ import { ScreenshotInsightAdapter } from './llmAdapters/ScreenshotInsightAdapter
 import { RenameSuggestionAdapter } from './llmAdapters/RenameSuggestionAdapter'
 import { SpaceCleanupAdapter } from './llmAdapters/SpaceCleanupAdapter'
 import { SystemDiagnosisAdapter } from './llmAdapters/SystemDiagnosisAdapter'
+import { OpenAiCompatibleClient } from './OpenAiCompatibleClient'
 
-type FetchLike = typeof fetch
 type SettingsLike = Pick<typeof settingsService, 'getSettings'>
 type OcrLike = Pick<typeof ocrService, 'recognize'>
 
@@ -36,24 +34,24 @@ type SharedLlmSettings = {
 }
 
 type LlmServiceDependencies = {
-  fetch?: FetchLike
+  fetch?: typeof fetch
   settingsService?: SettingsLike
   ocrService?: OcrLike
 }
 
 export class LlmService {
-  private readonly fetchImpl: FetchLike
   private readonly settings: SettingsLike
   private readonly ocr: OcrLike
+  private readonly client: OpenAiCompatibleClient
   private readonly screenshotInsightAdapter: ScreenshotInsightAdapter
   private readonly renameSuggestionAdapter: RenameSuggestionAdapter
   private readonly systemDiagnosisAdapter: SystemDiagnosisAdapter
   private readonly spaceCleanupAdapter: SpaceCleanupAdapter
 
   constructor(dependencies: LlmServiceDependencies = {}) {
-    this.fetchImpl = dependencies.fetch ?? fetch
     this.settings = dependencies.settingsService ?? settingsService
     this.ocr = dependencies.ocrService ?? ocrService
+    this.client = new OpenAiCompatibleClient({ fetch: dependencies.fetch })
     this.screenshotInsightAdapter = new ScreenshotInsightAdapter()
     this.renameSuggestionAdapter = new RenameSuggestionAdapter()
     this.systemDiagnosisAdapter = new SystemDiagnosisAdapter()
@@ -204,46 +202,13 @@ export class LlmService {
       throw new Error(`LLM 配置不完整：${missing.join(', ')}`)
     }
 
-    const response = await this.fetchImpl(`${config.apiUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`
-      },
-      body: JSON.stringify({
-        model: config.model,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ]
-      })
+    return this.client.createJsonCompletion<T>({
+      apiUrl: config.apiUrl,
+      apiKey: config.apiKey,
+      model: config.model,
+      systemPrompt,
+      userPrompt
     })
-
-    if (!response.ok) {
-      let errorMessage = `LLM 请求失败 (${response.status})`
-      try {
-        const errorPayload = await response.json() as { error?: { message?: string } }
-        errorMessage = errorPayload?.error?.message || errorMessage
-      } catch {
-        // ignore
-      }
-      throw new Error(errorMessage)
-    }
-
-    const payload = await response.json() as {
-      choices?: Array<{ message?: { content?: string } }>
-    }
-    const content = payload?.choices?.[0]?.message?.content
-    if (!content) {
-      throw new Error('LLM 返回内容为空')
-    }
-
-    try {
-      return JSON.parse(content) as T
-    } catch {
-      throw new Error(`LLM 返回的 JSON 解析失败: ${content.slice(0, 80)}`)
-    }
   }
 
   private toErrorMessage(error: unknown): string {
