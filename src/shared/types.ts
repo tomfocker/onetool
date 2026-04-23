@@ -261,6 +261,7 @@ export interface ToolUsageRecord {
  * 全局存储 Schema
  */
 export interface GlobalStore {
+  schemaVersion: number
   settings: AppSettings
   renamePresets: RenamePreset[]
   webActivatorConfigs: ActivatorConfig[]

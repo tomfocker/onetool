@@ -23,6 +23,7 @@ import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
 import { createBeforeQuitAndInstallHook } from './utils/updateInstallFlow'
+import { bindMainWindowServices, registerMainProcessIpc } from './bootstrap/runtimeBootstrap'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -81,20 +82,20 @@ function createWindow(): void {
     webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
   })
 
-  // Initialize Services with MainWindow
-  autoClickerService.setMainWindow(mainWindow)
-  clipboardService.setMainWindow(mainWindow)
-  hotkeyService.setMainWindow(mainWindow)
-  screenRecorderService.setMainWindow(mainWindow)
-  screenOverlayService.setMainWindow(mainWindow)
-  colorPickerService.setMainWindow(mainWindow)
-  webActivatorService.setMainWindow(mainWindow)
-  quickInstallerService.setMainWindow(mainWindow)
-  spaceCleanupService.setMainWindow(mainWindow)
-  downloadOrganizerService.setMainWindow(mainWindow)
-  // DevEnvironmentService receives the window via IPC registration refresh.
-  windowManagerService.setMainWindow(mainWindow)
-  screenshotService.setMainWindow(mainWindow)
+  bindMainWindowServices(mainWindow, {
+    autoClickerService,
+    clipboardService,
+    hotkeyService,
+    screenRecorderService,
+    screenOverlayService,
+    colorPickerService,
+    webActivatorService,
+    quickInstallerService,
+    spaceCleanupService,
+    downloadOrganizerService,
+    windowManagerService,
+    screenshotService
+  })
 
   mainWindow.on('ready-to-show', () => {
     mainWindow?.show()
@@ -172,35 +173,36 @@ app.whenReady().then(() => {
   settingsService.loadSettings()
   screenRecorderService.initFfmpeg()
 
-  // Register all IPC Handlers
-  registerAutoClickerIpc()
-  registerClipboardIpc()
-  registerColorPickerIpc()
-  registerHotkeyIpc()
-  registerLocalProxyIpc()
-  registerNetworkIpc()
-  registerTranslateIpc()
-  registerLlmIpc()
-  registerTaskbarAppearanceIpc()
-  registerRenameIpc()
-  registerQuickInstallerIpc()
-  registerScreenOverlayIpc()
-  registerScreenRecorderIpc(() => mainWindow)
-  registerScreenSaverIpc()
-  registerSettingsIpc(() => mainWindow)
-  registerStoreIpc(() => mainWindow)
-  registerDoctorIpc()
-  registerDevEnvironmentIpc(() => mainWindow)
-  registerSystemIpc(() => mainWindow)
-  registerScreenshotIpc()
-  registerFloatBallIpc()
-  registerUpdateIpc(() => mainWindow)
-  registerWebActivatorIpc()
-  registerWslIpc()
-  registerSpaceCleanupIpc(() => mainWindow)
-  registerDownloadOrganizerIpc(() => mainWindow)
-  registerModelDownloadIpc(() => mainWindow)
-  registerBilibiliDownloaderIpc(() => mainWindow)
+  registerMainProcessIpc(() => mainWindow, {
+    registerAutoClickerIpc,
+    registerClipboardIpc,
+    registerColorPickerIpc,
+    registerHotkeyIpc,
+    registerLocalProxyIpc,
+    registerNetworkIpc,
+    registerTranslateIpc,
+    registerLlmIpc,
+    registerTaskbarAppearanceIpc,
+    registerRenameIpc,
+    registerQuickInstallerIpc,
+    registerScreenOverlayIpc,
+    registerScreenRecorderIpc,
+    registerScreenSaverIpc,
+    registerSettingsIpc,
+    registerStoreIpc,
+    registerDoctorIpc,
+    registerDevEnvironmentIpc,
+    registerSystemIpc,
+    registerScreenshotIpc,
+    registerFloatBallIpc,
+    registerUpdateIpc,
+    registerWebActivatorIpc,
+    registerWslIpc,
+    registerSpaceCleanupIpc,
+    registerDownloadOrganizerIpc,
+    registerModelDownloadIpc,
+    registerBilibiliDownloaderIpc
+  })
 
   // Silent system health check
   setTimeout(async () => {

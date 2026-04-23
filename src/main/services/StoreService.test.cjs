@@ -140,3 +140,34 @@ test('StoreService reuses shared taskbar appearance defaults instead of duplicat
   assert.equal(service.get('settings').taskbarAppearanceIntensity, 91)
   assert.equal(service.get('settings').taskbarAppearanceTint, '#12345678')
 })
+
+test('StoreService stamps migrated stores with the current schema version', () => {
+  const { StoreService } = loadStoreServiceModule({
+    storedJson: JSON.stringify({
+      version: '0.0.9',
+      settings: {
+        screenshotHotkey: 'Ctrl+Shift+S'
+      }
+    })
+  })
+  const service = new StoreService()
+
+  assert.equal(service.getAll().schemaVersion, 1)
+  assert.equal(service.getAll().version, '0.0.9')
+  assert.equal(service.get('settings').screenshotHotkey, 'Ctrl+Shift+S')
+  assert.equal(service.get('settings').autoCheckForUpdates, true)
+})
+
+test('StoreService restores schema version when persisted metadata is missing', () => {
+  const { StoreService } = loadStoreServiceModule({
+    storedJson: JSON.stringify({
+      pinnedToolIds: ['clipboard', 'clipboard', 42],
+      windowsManagerFavorites: ['powershell']
+    })
+  })
+  const service = new StoreService()
+
+  assert.equal(service.getAll().schemaVersion, 1)
+  assert.deepEqual(Array.from(service.get('pinnedToolIds')), ['clipboard'])
+  assert.deepEqual(Array.from(service.get('windowsManagerFavorites')), ['powershell'])
+})
