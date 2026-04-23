@@ -248,15 +248,22 @@ export class ScreenRecorderService {
   }
 
   private createIndicatorWindow(bounds: RecorderBounds) {
-    if (this.indicatorWindow) return
-
     const { x, y, width } = bounds
-
-    this.indicatorWindow = new BrowserWindow({
+    const windowBounds = {
       width: 260,
       height: 48,
       x: Math.round(x + width / 2 - 130),
-      y: y + 10,
+      y: y + 10
+    }
+
+    if (this.indicatorWindow && !this.indicatorWindow.isDestroyed()) {
+      this.indicatorWindow.setBounds(windowBounds)
+      this.indicatorWindow.show?.()
+      return
+    }
+
+    this.indicatorWindow = new BrowserWindow({
+      ...windowBounds,
       type: 'toolbar',
       frame: false,
       transparent: true,
@@ -264,6 +271,7 @@ export class ScreenRecorderService {
       alwaysOnTop: true,
       resizable: false,
       skipTaskbar: true,
+      show: false,
       webPreferences: createIsolatedPreloadWebPreferences(path.join(__dirname, '../preload/index.js'))
     })
 
@@ -327,6 +335,7 @@ export class ScreenRecorderService {
     this.indicatorWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     this.indicatorWindow.setIgnoreMouseEvents(false)
     this.indicatorWindow.setContentProtection(true)
+    this.indicatorWindow.show?.()
   }
 
   getPreparedSelectionBounds(): RecorderBounds | null {
@@ -351,6 +360,7 @@ export class ScreenRecorderService {
       } else {
         this.borderWindow.setIgnoreMouseEvents(true, { forward: true })
       }
+      this.borderWindow.show?.()
       return
     }
 
@@ -363,6 +373,7 @@ export class ScreenRecorderService {
       alwaysOnTop: true,
       resizable: false,
       skipTaskbar: true,
+      show: false,
       webPreferences: createIsolatedPreloadWebPreferences(path.join(__dirname, '../preload/index.js'))
     })
 
@@ -484,6 +495,7 @@ export class ScreenRecorderService {
     }
     this.borderWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
     this.borderWindow.setContentProtection(true)
+    this.borderWindow.show?.()
   }
 
   private destroyBorderWindow() {
@@ -501,7 +513,14 @@ export class ScreenRecorderService {
   }
 
   hideSelectionPreview() {
-    this.destroyBorderWindow()
+    if (this.borderRefreshTimer) {
+      clearTimeout(this.borderRefreshTimer)
+      this.borderRefreshTimer = null
+    }
+
+    if (this.borderWindow && !this.borderWindow.isDestroyed()) {
+      this.borderWindow.hide?.()
+    }
   }
 
   private scheduleBorderPreview(bounds: RecorderBounds, interactive = true) {
@@ -518,9 +537,8 @@ export class ScreenRecorderService {
   private destroyIndicatorWindow() {
     if (this.indicatorWindow) {
       if (!this.indicatorWindow.isDestroyed()) {
-        this.indicatorWindow.close()
+        this.indicatorWindow.hide?.()
       }
-      this.indicatorWindow = null
     }
 
     this.hideSelectionPreview()

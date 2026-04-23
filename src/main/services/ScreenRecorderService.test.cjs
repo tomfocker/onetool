@@ -25,6 +25,7 @@ function loadScreenRecorderServiceModule(options = {}) {
       this.options = options
       this.loadedUrls = []
       this.closed = false
+      this.visible = Boolean(options.show)
       this.bounds = { ...options }
       this.ignoreMouseEventsCalls = []
       this.contentProtectionCalls = []
@@ -41,6 +42,8 @@ function loadScreenRecorderServiceModule(options = {}) {
     setBounds(bounds) {
       this.bounds = { ...this.bounds, ...bounds }
     }
+    show() { this.visible = true }
+    hide() { this.visible = false }
     setVisibleOnAllWorkspaces() {}
     setIgnoreMouseEvents(...args) {
       this.ignoreMouseEventsCalls.push(args)
@@ -203,6 +206,42 @@ test('indicator and border windows use isolated preload preferences', () => {
   assert.deepEqual(browserWindowInstances[1].contentProtectionCalls, [true])
 })
 
+test('destroyIndicatorWindow hides the existing indicator window for reuse', () => {
+  browserWindowInstances.length = 0
+  const recorder = new ScreenRecorderService()
+
+  recorder.createIndicatorWindow({ x: 10, y: 20, width: 300, height: 200 })
+  const indicatorWindow = browserWindowInstances[0]
+
+  recorder.destroyIndicatorWindow()
+
+  assert.equal(indicatorWindow.closed, false)
+  assert.equal(indicatorWindow.visible, false)
+  assert.equal(recorder.indicatorWindow, indicatorWindow)
+})
+
+test('createIndicatorWindow reuses a hidden indicator window on subsequent sessions', () => {
+  browserWindowInstances.length = 0
+  const recorder = new ScreenRecorderService()
+
+  recorder.createIndicatorWindow({ x: 10, y: 20, width: 300, height: 200 })
+  const indicatorWindow = browserWindowInstances[0]
+  recorder.destroyIndicatorWindow()
+
+  recorder.createIndicatorWindow({ x: 50, y: 80, width: 400, height: 220 })
+
+  assert.equal(browserWindowInstances.length, 1)
+  assert.equal(recorder.indicatorWindow, indicatorWindow)
+  assert.equal(indicatorWindow.visible, true)
+  assert.deepEqual(indicatorWindow.bounds, {
+    ...indicatorWindow.bounds,
+    width: 260,
+    height: 48,
+    x: 120,
+    y: 90
+  })
+})
+
 test('indicator HTML uses preload bridge instead of require electron', () => {
   browserWindowInstances.length = 0
   const recorder = new ScreenRecorderService()
@@ -291,7 +330,7 @@ test('prepareSelection keeps a persistent border preview without requiring an in
   assert.equal(recorder.session.status, 'ready-to-record')
 })
 
-test('hideSelectionPreview closes the existing prepared border preview window', async () => {
+test('hideSelectionPreview hides the existing prepared border preview window for reuse', async () => {
   const {
     ScreenRecorderService,
     browserWindowInstances: localBrowserWindowInstances
@@ -321,8 +360,54 @@ test('hideSelectionPreview closes the existing prepared border preview window', 
 
   recorder.hideSelectionPreview()
 
-  assert.equal(localBrowserWindowInstances[0].closed, true)
-  assert.equal(recorder.borderWindow, null)
+  assert.equal(localBrowserWindowInstances[0].closed, false)
+  assert.equal(localBrowserWindowInstances[0].visible, false)
+  assert.equal(recorder.borderWindow, localBrowserWindowInstances[0])
+})
+
+test('prepareSelection reuses a hidden prepared border preview window on subsequent selections', async () => {
+  const {
+    ScreenRecorderService,
+    browserWindowInstances: localBrowserWindowInstances
+  } = loadScreenRecorderServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: false,
+        getPath: () => 'C:/tmp'
+      },
+      dialog: {},
+      desktopCapturer: {},
+      screen: {
+        getPrimaryDisplay: () => ({ id: 1, scaleFactor: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }),
+        getAllDisplays: () => [{ id: 1, scaleFactor: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }],
+        getDisplayNearestPoint: () => ({ id: 1, scaleFactor: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } })
+      }
+    }
+  })
+
+  const recorder = new ScreenRecorderService()
+  await recorder.prepareSelection({ x: 10, y: 20, width: 300, height: 200 })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(localBrowserWindowInstances.length, 1)
+  const borderWindow = localBrowserWindowInstances[0]
+
+  recorder.hideSelectionPreview()
+  assert.equal(borderWindow.visible, false)
+
+  await recorder.prepareSelection({ x: 40, y: 60, width: 220, height: 140 })
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  assert.equal(localBrowserWindowInstances.length, 1)
+  assert.equal(recorder.borderWindow, borderWindow)
+  assert.equal(borderWindow.visible, true)
+  assert.deepEqual(borderWindow.bounds, {
+    ...borderWindow.bounds,
+    x: 36,
+    y: 56,
+    width: 228,
+    height: 148
+  })
 })
 
 test('prepareSelection updates the recorder session immediately before the border preview window is created', async () => {
