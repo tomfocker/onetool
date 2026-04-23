@@ -28,6 +28,10 @@ import type { UpdateState } from '../../../shared/appUpdate'
 import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
 import type { ModelDownloadRequest, ModelDownloadState } from '../../../shared/modelDownload'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
+import type {
+  RecorderSelectionSessionPayload,
+  ScreenshotSelectionSessionPayload
+} from '../../../shared/selectionSession'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../../../shared/spaceCleanup'
 import type {
   LlmConfigStatus,
@@ -211,6 +215,7 @@ declare global {
         closeSelection: (bounds: RecorderBounds | null) => Promise<IpcResponse>
         onTrigger: (callback: () => void) => () => void
         onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
+        onSelectionSession: (callback: (payload: ScreenshotSelectionSessionPayload) => void) => () => void
       }
       screenRecorder: {
         setHotkey: (hotkey: string) => Promise<IpcResponse>
@@ -248,6 +253,7 @@ declare global {
         onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => () => void
         onIndicatorTimeUpdated: (callback: (time: string) => void) => () => void
         onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
+        onSelectionSession: (callback: (payload: RecorderSelectionSessionPayload) => void) => () => void
       }
       screenSaver: {
         start: () => Promise<IpcResponse>

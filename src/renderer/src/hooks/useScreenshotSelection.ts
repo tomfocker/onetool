@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type { ScreenshotSelectionSessionPayload } from '../../../shared/selectionSession'
 
 export function useScreenshotSelection() {
   const [rect, setRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
@@ -8,28 +9,16 @@ export function useScreenshotSelection() {
   const startPos = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.hash.split('?')[1])
-    const restrictStr = params.get('restrict')
-    const dx = parseInt(params.get('dx') || '0')
-    const dy = parseInt(params.get('dy') || '0')
+    const unsubscribe = window.electron.screenshot.onSelectionSession((payload: ScreenshotSelectionSessionPayload) => {
+      setRect(null)
+      setIsDragging(false)
+      startPos.current = null
+      setRestrictBounds(payload.restrictBounds)
+      setIsEnhanced(payload.enhanced)
+    })
 
-    const enhancedStr = params.get('enhanced')
-    if (enhancedStr === 'true') {
-      setIsEnhanced(true)
-    }
-
-    if (restrictStr) {
-      try {
-        const bounds = JSON.parse(decodeURIComponent(restrictStr))
-        setRestrictBounds({
-          x: bounds.x - dx,
-          y: bounds.y - dy,
-          width: bounds.width,
-          height: bounds.height
-        })
-      } catch (e) {
-        console.error('Failed to parse restrict bounds', e)
-      }
+    return () => {
+      unsubscribe()
     }
   }, [])
 

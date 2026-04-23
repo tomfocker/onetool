@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import type { RecorderSelectionSessionPayload } from '../../../shared/selectionSession'
 
 type SelectionRect = { x: number; y: number; width: number; height: number }
 type PointerPosition = { x: number; y: number }
@@ -51,30 +52,20 @@ export function clampDraggedSelectionRect(
   }
 }
 
-export function deriveInitialRecorderSelectionRect(search: string): SelectionRect | null {
-  const query = search.startsWith('?') ? search.slice(1) : search
-  const params = new URLSearchParams(query)
-  const rawInitial = params.get('initial')
-  if (!rawInitial) {
+export function deriveInitialRecorderSelectionRect(initialBounds: RecorderSelectionSessionPayload['initialBounds']): SelectionRect | null {
+  if (!initialBounds) {
     return null
   }
 
-  try {
-    const parsed = JSON.parse(rawInitial)
-    if (!isFiniteBounds(parsed)) {
-      return null
-    }
-
-    const dx = Number(params.get('dx') ?? 0)
-    const dy = Number(params.get('dy') ?? 0)
-    return {
-      x: parsed.x - dx,
-      y: parsed.y - dy,
-      width: parsed.width,
-      height: parsed.height
-    }
-  } catch {
+  if (!isFiniteBounds(initialBounds)) {
     return null
+  }
+
+  return {
+    x: initialBounds.x,
+    y: initialBounds.y,
+    width: initialBounds.width,
+    height: initialBounds.height
   }
 }
 
@@ -88,7 +79,13 @@ export function useRecorderSelection() {
   useEffect(() => {
     const originalBg = document.body.style.backgroundColor
     document.body.style.backgroundColor = 'transparent'
-    setRect(deriveInitialRecorderSelectionRect(window.location.search))
+    const unsubscribe = window.electron.screenRecorder.onSelectionSession((payload: RecorderSelectionSessionPayload) => {
+      setRect(deriveInitialRecorderSelectionRect(payload.initialBounds))
+      setIsDragging(false)
+      interactionMode.current = null
+      dragOrigin.current = null
+      startPos.current = null
+    })
 
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -97,6 +94,7 @@ export function useRecorderSelection() {
     }
     window.addEventListener('keydown', handleEsc)
     return () => {
+      unsubscribe()
       window.removeEventListener('keydown', handleEsc)
       document.body.style.backgroundColor = originalBg
     }

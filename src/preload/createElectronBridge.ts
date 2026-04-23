@@ -12,6 +12,10 @@ import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
+import type {
+  RecorderSelectionSessionPayload,
+  ScreenshotSelectionSessionPayload
+} from '../shared/selectionSession'
 import type { TaskbarAppearancePreset } from '../shared/taskbarAppearance'
 import type {
   LlmConfigStatus,
@@ -213,6 +217,9 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onIndicatorTimeUpdated: (callback: (time: string) => void) => onChannel('update-time', callback),
     onSelectionResult: (callback: (bounds: { x: number; y: number; width: number; height: number } | null) => void) => {
       return onChannel('recorder-selection-result', callback)
+    },
+    onSelectionSession: (callback: (payload: RecorderSelectionSessionPayload) => void) => {
+      return onChannel('recorder-selection:session-start', callback)
     }
   }
 
@@ -268,7 +275,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       return ipcRenderer.invoke('screenshot-selection-close', bounds)
     },
     onTrigger: (callback: () => void) => onChannel('super-screenshot-trigger', callback),
-    onSelectionResult: (callback: (bounds: any) => void) => onChannel('screenshot-selection-result', callback)
+    onSelectionResult: (callback: (bounds: any) => void) => onChannel('screenshot-selection-result', callback),
+    onSelectionSession: (callback: (payload: ScreenshotSelectionSessionPayload) => void) => {
+      return onChannel('screenshot-selection:session-start', callback)
+    }
   }
 
   const colorPickerAPI = {

@@ -224,6 +224,8 @@ test('createElectronBridge subscriptions route through explicit channels and uns
   let openedTool = null
   let indicatorTime = null
   let selectionBounds = null
+  let screenshotSelectionSession = null
+  let recorderSelectionSession = null
   const unsubscribeOpenTool = bridge.app.onOpenTool((toolId) => {
     openedTool = toolId
   })
@@ -233,23 +235,37 @@ test('createElectronBridge subscriptions route through explicit channels and uns
   const unsubscribeSelection = bridge.screenRecorder.onSelectionResult((bounds) => {
     selectionBounds = bounds
   })
+  const unsubscribeScreenshotSelectionSession = bridge.screenshot.onSelectionSession((payload) => {
+    screenshotSelectionSession = payload
+  })
+  const unsubscribeRecorderSelectionSession = bridge.screenRecorder.onSelectionSession((payload) => {
+    recorderSelectionSession = payload
+  })
 
   mocks.listeners.get('open-tool')({}, 'clipboard')
   mocks.listeners.get('update-time')({}, '00:00:10')
   mocks.listeners.get('recorder-selection-result')({}, { x: 10, y: 20, width: 300, height: 200 })
+  mocks.listeners.get('screenshot-selection:session-start')({}, { restrictBounds: null, enhanced: true })
+  mocks.listeners.get('recorder-selection:session-start')({}, { initialBounds: { x: 10, y: 20, width: 300, height: 200 } })
 
   assert.equal(openedTool, 'clipboard')
   assert.equal(indicatorTime, '00:00:10')
   assert.deepEqual(selectionBounds, { x: 10, y: 20, width: 300, height: 200 })
+  assert.deepEqual(screenshotSelectionSession, { restrictBounds: null, enhanced: true })
+  assert.deepEqual(recorderSelectionSession, { initialBounds: { x: 10, y: 20, width: 300, height: 200 } })
 
   unsubscribeOpenTool()
   unsubscribeIndicator()
   unsubscribeSelection()
+  unsubscribeScreenshotSelectionSession()
+  unsubscribeRecorderSelectionSession()
 
-  assert.equal(mocks.removed.length, 3)
+  assert.equal(mocks.removed.length, 5)
   assert.equal(mocks.removed[0][0], 'open-tool')
   assert.equal(mocks.removed[1][0], 'update-time')
   assert.equal(mocks.removed[2][0], 'recorder-selection-result')
+  assert.equal(mocks.removed[3][0], 'screenshot-selection:session-start')
+  assert.equal(mocks.removed[4][0], 'recorder-selection:session-start')
 })
 
 test('createElectronBridge exposes explicit screen overlay session subscriptions and unsubscribes cleanly', () => {

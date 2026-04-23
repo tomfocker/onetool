@@ -6,6 +6,10 @@ import { is } from '@electron-toolkit/utils'
 import { IpcResponse } from '../../shared/types'
 import { settingsService } from './SettingsService'
 import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
+import type {
+  RecorderSelectionSessionPayload,
+  ScreenshotSelectionSessionPayload
+} from '../../shared/selectionSession'
 
 export class ScreenshotService {
   private selectionWindows: BrowserWindow[] = []
@@ -148,6 +152,9 @@ export class ScreenshotService {
     this.selectionResultsChannel = resultChannel
     const displays = screen.getAllDisplays()
     const nextSelectionWindows: BrowserWindow[] = []
+    const isRecorderSelection = resultChannel === 'recorder-selection-result'
+    const route = isRecorderSelection ? '#/recorder-selection' : '#/screenshot-selection'
+    const sessionChannel = isRecorderSelection ? 'recorder-selection:session-start' : 'screenshot-selection:session-start'
 
     for (const display of displays) {
       if (restrictBounds) {
@@ -161,6 +168,28 @@ export class ScreenshotService {
       }
 
       const { x, y, width, height } = display.bounds
+      const sessionPayload: ScreenshotSelectionSessionPayload | RecorderSelectionSessionPayload = isRecorderSelection
+        ? {
+          initialBounds: initialBounds
+            ? {
+              x: initialBounds.x - x,
+              y: initialBounds.y - y,
+              width: initialBounds.width,
+              height: initialBounds.height
+            }
+            : null
+        }
+        : {
+          restrictBounds: restrictBounds
+            ? {
+              x: restrictBounds.x - x,
+              y: restrictBounds.y - y,
+              width: restrictBounds.width,
+              height: restrictBounds.height
+            }
+            : null,
+          enhanced
+        }
       const existingWindow = this.selectionWindows.find((win) => {
         if (win.isDestroyed()) return false
         const bounds = win.getBounds?.()
@@ -169,6 +198,7 @@ export class ScreenshotService {
 
       if (existingWindow) {
         existingWindow.show?.()
+        existingWindow.webContents.send?.(sessionChannel, sessionPayload)
         nextSelectionWindows.push(existingWindow)
         continue
       }
@@ -196,22 +226,18 @@ export class ScreenshotService {
       win.setMenu(null)
       win.setMenuBarVisibility(false)
 
-      const route = resultChannel === 'recorder-selection-result' ? '#/recorder-selection' : '#/screenshot-selection'
-      const restrictQuery = restrictBounds ? `&restrict=${encodeURIComponent(JSON.stringify(restrictBounds))}` : ''
-      const initialQuery = initialBounds ? `&initial=${encodeURIComponent(JSON.stringify(initialBounds))}` : ''
-      const modeQuery = resultChannel === 'recorder-selection-result' ? '&mode=recorder' : ''
-      const enhancedQuery = enhanced ? `&enhanced=true` : ''
-      // 关键！传递显示器原始偏移，方便 renderer 修正坐标
-      const displayQuery = `&display=${display.id}&dx=${display.bounds.x}&dy=${display.bounds.y}`
+      win.webContents.once?.('did-finish-load', () => {
+        win.webContents.send?.(sessionChannel, sessionPayload)
+      })
 
       const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-        ? `${process.env['ELECTRON_RENDERER_URL']}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
-        : join(__dirname, '../renderer/index.html') + `${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`
+        ? `${process.env['ELECTRON_RENDERER_URL']}${route}`
+        : join(__dirname, '../renderer/index.html') + `${route}`
 
       if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         win.loadURL(url)
       } else {
-        win.loadURL(`file://${join(__dirname, '../renderer/index.html')}${route}?${displayQuery}${restrictQuery}${initialQuery}${modeQuery}${enhancedQuery}`)
+        win.loadURL(`file://${join(__dirname, '../renderer/index.html')}${route}`)
       }
 
       win.on('closed', () => {

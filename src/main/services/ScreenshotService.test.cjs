@@ -171,7 +171,16 @@ test('openSelectionWindow reuses hidden selection windows on subsequent sessions
       this.visible = false
       this.closed = false
       this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height }
-      this.webContents = { send() {} }
+      this.webContents = {
+        sent: [],
+        onceHandlers: new Map(),
+        send(channel, payload) {
+          this.sent.push([channel, payload])
+        },
+        once(event, handler) {
+          this.onceHandlers.set(event, handler)
+        }
+      }
       createdWindows.push(this)
     }
 
@@ -180,7 +189,12 @@ test('openSelectionWindow reuses hidden selection windows on subsequent sessions
     setVisibleOnAllWorkspaces() {}
     setMenu() {}
     setMenuBarVisibility() {}
-    loadURL() {}
+    loadURL() {
+      const handler = this.webContents.onceHandlers.get('did-finish-load')
+      if (handler) {
+        handler()
+      }
+    }
     on() {}
     isDestroyed() { return this.closed }
     getBounds() { return this.bounds }
@@ -242,10 +256,144 @@ test('openSelectionWindow reuses hidden selection windows on subsequent sessions
   service.openSelectionWindow()
   assert.equal(createdWindows.length, 1)
   assert.equal(createdWindows[0].visible, true)
+  assert.equal(
+    JSON.stringify(createdWindows[0].webContents.sent[0]),
+    JSON.stringify([
+      'screenshot-selection:session-start',
+      { restrictBounds: null, enhanced: false }
+    ])
+  )
 
   service.selectionWindows[0].hide()
   service.openSelectionWindow()
 
   assert.equal(createdWindows.length, 1)
   assert.equal(service.selectionWindows[0], createdWindows[0])
+  assert.equal(createdWindows[0].webContents.sent.length, 2)
+})
+
+test('openSelectionWindow sends recorder selection session payloads instead of URL query params', () => {
+  const filePath = path.join(__dirname, 'ScreenshotService.ts')
+  const source = fs.readFileSync(filePath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: filePath
+  }).outputText
+
+  const module = { exports: {} }
+  const createdWindows = []
+
+  class BrowserWindowMock {
+    constructor(options) {
+      this.options = options
+      this.visible = false
+      this.closed = false
+      this.bounds = { x: options.x, y: options.y, width: options.width, height: options.height }
+      this.loadedUrls = []
+      this.webContents = {
+        sent: [],
+        onceHandlers: new Map(),
+        send(channel, payload) {
+          this.sent.push([channel, payload])
+        },
+        once(event, handler) {
+          this.onceHandlers.set(event, handler)
+        }
+      }
+      createdWindows.push(this)
+    }
+
+    setIgnoreMouseEvents() {}
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    setMenu() {}
+    setMenuBarVisibility() {}
+    loadURL(url) {
+      this.loadedUrls.push(url)
+      const handler = this.webContents.onceHandlers.get('did-finish-load')
+      if (handler) {
+        handler()
+      }
+    }
+    on() {}
+    isDestroyed() { return this.closed }
+    getBounds() { return this.bounds }
+    show() { this.visible = true }
+    hide() { this.visible = false }
+    close() { this.closed = true }
+  }
+
+  const customRequire = (specifier) => {
+    if (specifier === 'electron') {
+      return {
+        app: { getPath: () => 'C:/tmp' },
+        BrowserWindow: BrowserWindowMock,
+        desktopCapturer: {},
+        screen: {
+          getAllDisplays: () => [{ id: 2, bounds: { x: 1920, y: 0, width: 2560, height: 1440 } }]
+        },
+        nativeImage: {},
+        dialog: {},
+        clipboard: {}
+      }
+    }
+
+    if (specifier === '@electron-toolkit/utils') {
+      return { is: { dev: false } }
+    }
+
+    if (specifier === './SettingsService') {
+      return { settingsService: { getSettings: () => ({}) } }
+    }
+
+    if (specifier === '../utils/windowSecurity') {
+      return { createIsolatedPreloadWebPreferences: () => ({}) }
+    }
+
+    if (specifier === '../../shared/types') {
+      return {}
+    }
+
+    return require(specifier)
+  }
+
+  vm.runInNewContext(transpiled, {
+    module,
+    exports: module.exports,
+    require: customRequire,
+    __dirname,
+    __filename: filePath,
+    console,
+    process,
+    Buffer,
+    setTimeout,
+    clearTimeout
+  }, { filename: filePath })
+
+  const { ScreenshotService } = module.exports
+  const service = new ScreenshotService()
+
+  service.openSelectionWindow(
+    { x: 2000, y: 80, width: 400, height: 300 },
+    'recorder-selection-result',
+    false,
+    { x: 2100, y: 120, width: 320, height: 220 }
+  )
+
+  assert.equal(createdWindows.length, 1)
+  assert.equal(createdWindows[0].loadedUrls[0].includes('initial='), false)
+  assert.equal(createdWindows[0].loadedUrls[0].includes('dx='), false)
+  assert.equal(
+    JSON.stringify(createdWindows[0].webContents.sent[0]),
+    JSON.stringify([
+      'recorder-selection:session-start',
+      {
+        initialBounds: { x: 180, y: 120, width: 320, height: 220 }
+      }
+    ])
+  )
 })
