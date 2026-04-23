@@ -23,6 +23,7 @@ const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings(
 export const GLOBAL_STORE_SCHEMA_VERSION = 1
 
 const DEFAULT_SETTINGS: GlobalStore['settings'] = {
+  schemaVersion: 1,
   recorderHotkey: 'Alt+Shift+R',
   screenshotHotkey: 'Alt+Shift+S',
   screenshotSavePath: '',

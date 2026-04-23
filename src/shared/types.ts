@@ -5,6 +5,7 @@ import type { TaskbarAppearancePreset } from './taskbarAppearance'
  * 应用全局设置
  */
 export interface AppSettings {
+  schemaVersion: number
   recorderHotkey: string
   screenshotHotkey: string
   floatBallHotkey: string

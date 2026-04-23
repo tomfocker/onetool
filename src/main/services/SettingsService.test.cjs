@@ -30,6 +30,42 @@ function loadTaskbarAppearanceModule() {
   return module.exports
 }
 
+function loadSettingsSchemaModule() {
+  const filePath = path.join(__dirname, '..', '..', 'shared', 'settingsSchema.ts')
+  const source = fs.readFileSync(filePath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: filePath
+  }).outputText
+
+  const module = { exports: {} }
+  const taskbarAppearanceModule = loadTaskbarAppearanceModule()
+  const customRequire = (specifier) => {
+    if (specifier === './taskbarAppearance') {
+      return taskbarAppearanceModule
+    }
+
+    return require(specifier)
+  }
+
+  vm.runInNewContext(transpiled, {
+    module,
+    exports: module.exports,
+    require: customRequire,
+    __dirname: path.dirname(filePath),
+    __filename: filePath,
+    console,
+    process,
+    Buffer
+  }, { filename: filePath })
+
+  return module.exports
+}
+
 function loadSettingsServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'SettingsService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -44,6 +80,7 @@ function loadSettingsServiceModule(overrides = {}) {
 
   const module = { exports: {} }
   const taskbarAppearanceModule = loadTaskbarAppearanceModule()
+  const settingsSchemaModule = loadSettingsSchemaModule()
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
       return overrides.electronModule || {
@@ -65,6 +102,10 @@ function loadSettingsServiceModule(overrides = {}) {
 
     if (specifier === '../../shared/taskbarAppearance') {
       return taskbarAppearanceModule
+    }
+
+    if (specifier === '../../shared/settingsSchema') {
+      return settingsSchemaModule
     }
 
     return require(specifier)
@@ -104,6 +145,40 @@ test('getSettings includes taskbar appearance defaults when no persisted file ex
   assert.equal(settings.taskbarAppearancePreset, 'blur')
   assert.equal(settings.taskbarAppearanceIntensity, 60)
   assert.equal(settings.taskbarAppearanceTint, '#FFFFFF33')
+  assert.equal(settings.schemaVersion, 1)
+})
+
+test('loadSettings migrates persisted settings onto the current schema version', () => {
+  const { SettingsService } = loadSettingsServiceModule({
+    fsModule: {
+      existsSync: () => true,
+      readFileSync: () =>
+        JSON.stringify({
+          recorderHotkey: 'Ctrl+Alt+R',
+          screenshotHotkey: 'Ctrl+Alt+S',
+          floatBallHotkey: 'Ctrl+Alt+F',
+          clipboardHotkey: 'Ctrl+Alt+C',
+          screenshotSavePath: 'D:/shots',
+          autoSaveScreenshot: true,
+          autoCheckForUpdates: false,
+          minimizeToTray: false,
+          translateApiUrl: 'https://example.com/v1',
+          translateApiKey: 'abc',
+          translateModel: 'gpt-test'
+        }),
+      promises: {
+        writeFile: async () => undefined
+      }
+    }
+  })
+
+  const service = new SettingsService()
+  const settings = service.getSettings()
+
+  assert.equal(settings.schemaVersion, 1)
+  assert.equal(settings.translateApiUrl, 'https://example.com/v1')
+  assert.equal(settings.taskbarAppearanceEnabled, false)
+  assert.equal(settings.taskbarAppearancePreset, 'blur')
 })
 
 test('updateSettings emits changed only after persistence succeeds', async () => {

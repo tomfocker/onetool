@@ -3,28 +3,10 @@ import fs from 'fs'
 import path from 'path'
 import { EventEmitter } from 'events'
 import type { AppSettings, IpcResponse } from '../../shared/types'
-import { createDefaultTaskbarAppearanceSettings } from '../../shared/taskbarAppearance'
-
-const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
+import { createDefaultAppSettings, migrateSettings } from '../../shared/settingsSchema'
 
 export class SettingsService extends EventEmitter {
-  private settings: AppSettings = {
-    recorderHotkey: 'Alt+Shift+R',
-    screenshotHotkey: 'Alt+Shift+S',
-    floatBallHotkey: 'Alt+Shift+F',
-    clipboardHotkey: 'Alt+Shift+C',
-    screenshotSavePath: '',
-    autoSaveScreenshot: false,
-    autoCheckForUpdates: true,
-    minimizeToTray: true,
-    translateApiUrl: 'https://api.openai.com/v1',
-    translateApiKey: '',
-    translateModel: 'gpt-4o',
-    taskbarAppearanceEnabled: defaultTaskbarAppearanceSettings.enabled,
-    taskbarAppearancePreset: defaultTaskbarAppearanceSettings.preset,
-    taskbarAppearanceIntensity: defaultTaskbarAppearanceSettings.intensity,
-    taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex
-  }
+  private settings: AppSettings = createDefaultAppSettings()
 
   constructor() {
     super()
@@ -48,7 +30,7 @@ export class SettingsService extends EventEmitter {
       const settingsPath = this.getSettingsPath()
       if (fs.existsSync(settingsPath)) {
         const data = fs.readFileSync(settingsPath, 'utf-8')
-        this.settings = { ...this.settings, ...JSON.parse(data) }
+        this.settings = migrateSettings(JSON.parse(data))
       }
     } catch (error) {
       console.error('SettingsService: Failed to load settings:', error)
