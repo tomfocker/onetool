@@ -148,6 +148,79 @@ test('start creates overlay windows immediately before screen capture resolves',
   assert.equal(readyHandlers.length, 0)
 })
 
+test('start does not wait for pending overlay precreation to resolve', async () => {
+  const getSourcesDeferred = deferred()
+  let warmupCalls = 0
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.webContents = {
+        id: 1,
+        send() {}
+      }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {}
+    show() {}
+  }
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]
+        }
+      },
+      desktopCapturer: {
+        getSources() {
+          return getSourcesDeferred.promise
+        }
+      },
+      ipcMain: {
+        on() {}
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          warmupCalls += 1
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  const prepareWindowsDeferred = deferred()
+  service.prepareWindows = () => prepareWindowsDeferred.promise
+
+  const startResult = await Promise.race([
+    service.start('translate'),
+    new Promise((resolve) => setTimeout(() => resolve('timeout'), 25))
+  ])
+
+  assert.notEqual(startResult, 'timeout')
+  assert.equal(warmupCalls, 1)
+
+  prepareWindowsDeferred.resolve()
+  getSourcesDeferred.resolve([])
+})
+
 test('ready windows receive captured screenshot after async capture completes', async () => {
   const getSourcesDeferred = deferred()
   const browserWindows = []
@@ -338,6 +411,117 @@ test('setMainWindow prepares hidden overlay windows and later reuses them across
   assert.deepEqual(JSON.parse(JSON.stringify(sentEvents.filter(([channel]) => channel === 'screen-overlay:session-start'))), [
     ['screen-overlay:session-start', { mode: 'translate' }],
     ['screen-overlay:session-start', { mode: 'ocr' }]
+  ])
+})
+
+test('restart reuses the previous screenshot cache before async recapture finishes', async () => {
+  const sentEvents = []
+  let ipcReadyHandler = null
+  const firstCaptureDeferred = deferred()
+  const secondCaptureDeferred = deferred()
+  let captureCallCount = 0
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.visible = false
+      this.webContents = {
+        id: 7,
+        send(channel, payload) {
+          sentEvents.push([channel, payload])
+        }
+      }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {
+      this.visible = false
+    }
+    show() {
+      this.visible = true
+    }
+  }
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]
+        }
+      },
+      desktopCapturer: {
+        getSources() {
+          captureCallCount += 1
+          return captureCallCount === 1 ? firstCaptureDeferred.promise : secondCaptureDeferred.promise
+        }
+      },
+      ipcMain: {
+        on(channel, handler) {
+          if (channel === 'screen-overlay:ready') ipcReadyHandler = handler
+        }
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  service.setMainWindow({})
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await service.start('translate')
+  ipcReadyHandler({ sender: { id: 7 } })
+  firstCaptureDeferred.resolve([
+    {
+      display_id: '1',
+      thumbnail: {
+        getSize() { return { width: 1920, height: 1080 } },
+        toDataURL() { return 'data:image/png;base64,first' }
+      }
+    }
+  ])
+  await new Promise((resolve) => setImmediate(resolve))
+
+  await service.close()
+  const screenshotsBeforeRestart = sentEvents.filter(([channel]) => channel === 'screen-overlay:screenshot').length
+
+  await service.start('ocr')
+  const screenshotsAfterRestart = sentEvents.filter(([channel]) => channel === 'screen-overlay:screenshot')
+  assert.equal(screenshotsAfterRestart.length, screenshotsBeforeRestart + 1)
+  assert.deepEqual(JSON.parse(JSON.stringify(screenshotsAfterRestart.at(-1))), ['screen-overlay:screenshot', 'data:image/png;base64,first'])
+
+  secondCaptureDeferred.resolve([
+    {
+      display_id: '1',
+      thumbnail: {
+        getSize() { return { width: 1920, height: 1080 } },
+        toDataURL() { return 'data:image/png;base64,second' }
+      }
+    }
+  ])
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.deepEqual(JSON.parse(JSON.stringify(sentEvents.filter(([channel]) => channel === 'screen-overlay:screenshot').at(-1))), [
+    'screen-overlay:screenshot',
+    'data:image/png;base64,second'
   ])
 })
 

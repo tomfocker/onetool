@@ -13,11 +13,12 @@ export class ScreenOverlayService {
   private mainWindow: BrowserWindow | null = null
   private currentMode: ScreenOverlayMode = 'translate'
   private sessionActive = false
+  private prepareWindowsTask: Promise<void> | null = null
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
     if (window) {
-      void this.prepareWindows().catch((error) => {
+      void this.schedulePrepareWindows().catch((error) => {
         console.warn('[ScreenOverlayService] Failed to precreate overlay windows:', error)
       })
     }
@@ -113,6 +114,9 @@ export class ScreenOverlayService {
 
     win.setAlwaysOnTop(true, 'screen-saver')
     win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    if (this.sessionActive) {
+      win.show()
+    }
 
     const route = this.getOverlayRoute()
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
@@ -128,6 +132,15 @@ export class ScreenOverlayService {
 
     this.overlayWindows.set(display.id, win)
     return win
+  }
+
+  private schedulePrepareWindows(): Promise<void> {
+    if (!this.prepareWindowsTask) {
+      this.prepareWindowsTask = this.prepareWindows().finally(() => {
+        this.prepareWindowsTask = null
+      })
+    }
+    return this.prepareWindowsTask
   }
 
   private async prepareWindows(): Promise<void> {
@@ -180,7 +193,9 @@ export class ScreenOverlayService {
         console.warn('[ScreenOverlayService] OCR warmup failed:', error)
       })
 
-      await this.prepareWindows()
+      void this.schedulePrepareWindows().catch((error) => {
+        console.warn('[ScreenOverlayService] Failed to prepare overlay windows during start:', error)
+      })
       this.broadcastSessionStart()
 
       for (const win of this.overlayWindows.values()) {
@@ -188,6 +203,7 @@ export class ScreenOverlayService {
           win.show()
         }
       }
+      this.dispatchScreensToReadyWindows()
 
       void this.captureAllScreens()
         .then(() => this.dispatchScreensToReadyWindows())
@@ -204,7 +220,6 @@ export class ScreenOverlayService {
   close(): IpcResponse {
     try {
       this.sessionActive = false
-      this.screenMap.clear()
       this.overlayWindows.forEach(win => {
         if (!win.isDestroyed()) win.hide()
       })
