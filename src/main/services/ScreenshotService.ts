@@ -12,14 +12,119 @@ import type {
 } from '../../shared/selectionSession'
 
 export class ScreenshotService {
-  private selectionWindows: BrowserWindow[] = []
+  private selectionWindowsByChannel: Record<string, BrowserWindow[]> = {
+    'screenshot-selection-result': [],
+    'recorder-selection-result': []
+  }
   private selectionResultsChannel: string = 'screenshot-selection-result'
   private mainWindow: BrowserWindow | null = null
+  private loadedSelectionWindows = new WeakSet<BrowserWindow>()
 
   constructor() { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
+    if (window) {
+      this.prepareSelectionWindows('screenshot-selection-result')
+      this.prepareSelectionWindows('recorder-selection-result')
+    }
+  }
+
+  private getSelectionRoute(resultChannel: string) {
+    return resultChannel === 'recorder-selection-result' ? '#/recorder-selection' : '#/screenshot-selection'
+  }
+
+  private getSelectionSessionChannel(resultChannel: string) {
+    return resultChannel === 'recorder-selection-result' ? 'recorder-selection:session-start' : 'screenshot-selection:session-start'
+  }
+
+  private createSelectionWindow(display: Electron.Display, resultChannel: string) {
+    const { x, y, width, height } = display.bounds
+    const route = this.getSelectionRoute(resultChannel)
+    const win = new BrowserWindow({
+      x, y, width, height,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      movable: false,
+      hasShadow: false,
+      enableLargerThanScreen: true,
+      backgroundColor: '#00000000',
+      show: false,
+      fullscreenable: true,
+      kiosk: true,
+      webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
+    })
+
+    win.setIgnoreMouseEvents(false)
+    win.setAlwaysOnTop(true, 'screen-saver')
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    win.setMenu(null)
+    win.setMenuBarVisibility(false)
+
+    win.webContents.once?.('did-finish-load', () => {
+      this.loadedSelectionWindows.add(win)
+    })
+
+    const url = is.dev && process.env['ELECTRON_RENDERER_URL']
+      ? `${process.env['ELECTRON_RENDERER_URL']}${route}`
+      : join(__dirname, '../renderer/index.html') + `${route}`
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      win.loadURL(url)
+    } else {
+      win.loadURL(`file://${join(__dirname, '../renderer/index.html')}${route}`)
+    }
+
+    win.on('closed', () => {
+      const pool = this.selectionWindowsByChannel[resultChannel]
+      const index = pool.indexOf(win)
+      if (index > -1) pool.splice(index, 1)
+    })
+
+    return win
+  }
+
+  private prepareSelectionWindows(resultChannel: string) {
+    const displays = screen.getAllDisplays()
+    const pool = this.selectionWindowsByChannel[resultChannel]
+
+    for (const display of displays) {
+      const existingWindow = pool.find((win) => {
+        if (win.isDestroyed()) return false
+        const bounds = win.getBounds?.()
+        return (
+          bounds?.x === display.bounds.x &&
+          bounds?.y === display.bounds.y &&
+          bounds?.width === display.bounds.width &&
+          bounds?.height === display.bounds.height
+        )
+      })
+
+      if (!existingWindow) {
+        pool.push(this.createSelectionWindow(display, resultChannel))
+      }
+    }
+
+    return pool
+  }
+
+  private dispatchSelectionSession(
+    win: BrowserWindow,
+    sessionChannel: string,
+    sessionPayload: ScreenshotSelectionSessionPayload | RecorderSelectionSessionPayload
+  ) {
+    if (this.loadedSelectionWindows.has(win)) {
+      win.webContents.send?.(sessionChannel, sessionPayload)
+      return
+    }
+
+    win.webContents.once?.('did-finish-load', () => {
+      this.loadedSelectionWindows.add(win)
+      win.webContents.send?.(sessionChannel, sessionPayload)
+    })
   }
 
   /**
@@ -153,8 +258,8 @@ export class ScreenshotService {
     const displays = screen.getAllDisplays()
     const nextSelectionWindows: BrowserWindow[] = []
     const isRecorderSelection = resultChannel === 'recorder-selection-result'
-    const route = isRecorderSelection ? '#/recorder-selection' : '#/screenshot-selection'
-    const sessionChannel = isRecorderSelection ? 'recorder-selection:session-start' : 'screenshot-selection:session-start'
+    const sessionChannel = this.getSelectionSessionChannel(resultChannel)
+    const pool = this.prepareSelectionWindows(resultChannel)
 
     for (const display of displays) {
       if (restrictBounds) {
@@ -190,7 +295,7 @@ export class ScreenshotService {
             : null,
           enhanced
         }
-      const existingWindow = this.selectionWindows.find((win) => {
+      const existingWindow = pool.find((win) => {
         if (win.isDestroyed()) return false
         const bounds = win.getBounds?.()
         return bounds?.x === x && bounds?.y === y && bounds?.width === width && bounds?.height === height
@@ -198,65 +303,25 @@ export class ScreenshotService {
 
       if (existingWindow) {
         existingWindow.show?.()
-        existingWindow.webContents.send?.(sessionChannel, sessionPayload)
+        this.dispatchSelectionSession(existingWindow, sessionChannel, sessionPayload)
         nextSelectionWindows.push(existingWindow)
         continue
       }
-
-      const win = new BrowserWindow({
-        x, y, width, height,
-        transparent: true,
-        frame: false,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        resizable: false,
-        movable: false,
-        hasShadow: false,
-        enableLargerThanScreen: true,
-        backgroundColor: '#00000000',
-        show: false,
-        fullscreenable: true,
-        kiosk: true,
-        webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
-      })
-
-      win.setIgnoreMouseEvents(false)
-      win.setAlwaysOnTop(true, 'screen-saver')
-      win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-      win.setMenu(null)
-      win.setMenuBarVisibility(false)
-
-      win.webContents.once?.('did-finish-load', () => {
-        win.webContents.send?.(sessionChannel, sessionPayload)
-      })
-
-      const url = is.dev && process.env['ELECTRON_RENDERER_URL']
-        ? `${process.env['ELECTRON_RENDERER_URL']}${route}`
-        : join(__dirname, '../renderer/index.html') + `${route}`
-
-      if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-        win.loadURL(url)
-      } else {
-        win.loadURL(`file://${join(__dirname, '../renderer/index.html')}${route}`)
-      }
-
-      win.on('closed', () => {
-        const index = this.selectionWindows.indexOf(win)
-        if (index > -1) this.selectionWindows.splice(index, 1)
-      })
-
+      const win = this.createSelectionWindow(display, resultChannel)
+      pool.push(win)
+      this.dispatchSelectionSession(win, sessionChannel, sessionPayload)
       win.show()
       nextSelectionWindows.push(win)
     }
 
-    this.selectionWindows = nextSelectionWindows
+    this.selectionWindowsByChannel[resultChannel] = pool
   }
 
   closeSelectionWindow(sender: Electron.WebContents, bounds: any): void {
     const senderWindow = BrowserWindow.fromWebContents(sender)
     const senderBounds = senderWindow?.getBounds()
 
-    const windowsToClose = [...this.selectionWindows]
+    const windowsToClose = [...(this.selectionWindowsByChannel[this.selectionResultsChannel] ?? [])]
 
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       let finalBounds = bounds
