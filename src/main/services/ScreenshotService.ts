@@ -145,10 +145,9 @@ export class ScreenshotService {
     enhanced: boolean = false,
     initialBounds?: { x: number; y: number; width: number; height: number }
   ): void {
-    if (this.selectionWindows.length > 0) return
-
     this.selectionResultsChannel = resultChannel
     const displays = screen.getAllDisplays()
+    const nextSelectionWindows: BrowserWindow[] = []
 
     for (const display of displays) {
       if (restrictBounds) {
@@ -162,6 +161,17 @@ export class ScreenshotService {
       }
 
       const { x, y, width, height } = display.bounds
+      const existingWindow = this.selectionWindows.find((win) => {
+        if (win.isDestroyed()) return false
+        const bounds = win.getBounds?.()
+        return bounds?.x === x && bounds?.y === y && bounds?.width === width && bounds?.height === height
+      })
+
+      if (existingWindow) {
+        existingWindow.show?.()
+        nextSelectionWindows.push(existingWindow)
+        continue
+      }
 
       const win = new BrowserWindow({
         x, y, width, height,
@@ -174,6 +184,7 @@ export class ScreenshotService {
         hasShadow: false,
         enableLargerThanScreen: true,
         backgroundColor: '#00000000',
+        show: false,
         fullscreenable: true,
         kiosk: true,
         webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
@@ -208,8 +219,11 @@ export class ScreenshotService {
         if (index > -1) this.selectionWindows.splice(index, 1)
       })
 
-      this.selectionWindows.push(win)
+      win.show()
+      nextSelectionWindows.push(win)
     }
+
+    this.selectionWindows = nextSelectionWindows
   }
 
   closeSelectionWindow(sender: Electron.WebContents, bounds: any): void {
@@ -217,7 +231,6 @@ export class ScreenshotService {
     const senderBounds = senderWindow?.getBounds()
 
     const windowsToClose = [...this.selectionWindows]
-    this.selectionWindows = []
 
     if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       let finalBounds = bounds
@@ -234,7 +247,7 @@ export class ScreenshotService {
 
     setTimeout(() => {
       windowsToClose.forEach(win => {
-        if (!win.isDestroyed()) win.close()
+        if (!win.isDestroyed()) win.hide?.()
       })
     }, 0)
   }
