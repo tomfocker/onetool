@@ -4,42 +4,7 @@ import path from 'path'
 import { EventEmitter } from 'events'
 import { GlobalStore } from '../../shared/types'
 import { logger } from '../utils/logger'
-import { DEFAULT_PINNED_TOOL_IDS } from '../../shared/devEnvironment'
-import { createDefaultDownloadOrganizerStoredState } from '../../shared/downloadOrganizer'
-import { createDefaultTaskbarAppearanceSettings } from '../../shared/taskbarAppearance'
-
-const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
-  'control',
-  'taskmgr',
-  'powershell',
-  'services',
-  'devmgmt',
-  'diskmgmt',
-  'appwiz',
-  'sysdm'
-]
-
-const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
-export const GLOBAL_STORE_SCHEMA_VERSION = 1
-
-const DEFAULT_SETTINGS: GlobalStore['settings'] = {
-  schemaVersion: 1,
-  recorderHotkey: 'Alt+Shift+R',
-  screenshotHotkey: 'Alt+Shift+S',
-  screenshotSavePath: '',
-  autoSaveScreenshot: false,
-  autoCheckForUpdates: true,
-  floatBallHotkey: 'Alt+Shift+F',
-  clipboardHotkey: 'Alt+Shift+V',
-  minimizeToTray: true,
-  translateApiUrl: '',
-  translateApiKey: '',
-  translateModel: '',
-  taskbarAppearanceEnabled: defaultTaskbarAppearanceSettings.enabled,
-  taskbarAppearancePreset: defaultTaskbarAppearanceSettings.preset,
-  taskbarAppearanceIntensity: defaultTaskbarAppearanceSettings.intensity,
-  taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex
-}
+import { createDefaultGlobalStore, GLOBAL_STORE_SCHEMA_VERSION, migrateGlobalStore } from '../../shared/storeSchema'
 
 export class StoreService extends EventEmitter {
   private store: GlobalStore
@@ -54,62 +19,11 @@ export class StoreService extends EventEmitter {
   }
 
   private getInitialData(): GlobalStore {
-    return {
-      schemaVersion: GLOBAL_STORE_SCHEMA_VERSION,
-      settings: { ...DEFAULT_SETTINGS },
-      renamePresets: [],
-      webActivatorConfigs: [],
-      toolUsages: [],
-      pinnedToolIds: [...DEFAULT_PINNED_TOOL_IDS],
-      windowsManagerFavorites: [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
-      clipboardHistory: [],
-      downloadOrganizer: createDefaultDownloadOrganizerStoredState(),
-      version: app.getVersion()
-    }
+    return createDefaultGlobalStore(app.getVersion())
   }
 
   private normalizeStoreData(parsed: Partial<GlobalStore> & Record<string, any>): GlobalStore {
-    const defaults = this.getInitialData()
-    const defaultDownloadOrganizer = createDefaultDownloadOrganizerStoredState()
-
-    return {
-      ...defaults,
-      ...parsed,
-      schemaVersion:
-        typeof parsed.schemaVersion === 'number' && Number.isFinite(parsed.schemaVersion)
-          ? parsed.schemaVersion
-          : GLOBAL_STORE_SCHEMA_VERSION,
-      version: typeof parsed.version === 'string' && parsed.version.trim().length > 0
-        ? parsed.version
-        : defaults.version,
-      pinnedToolIds: Array.isArray(parsed.pinnedToolIds)
-        ? Array.from(new Set(parsed.pinnedToolIds.filter((item: unknown): item is string => typeof item === 'string'))).slice(0, 6)
-        : [...DEFAULT_PINNED_TOOL_IDS],
-      windowsManagerFavorites: Array.isArray(parsed.windowsManagerFavorites)
-        ? parsed.windowsManagerFavorites.filter((item: unknown): item is string => typeof item === 'string')
-        : [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
-      settings: { ...DEFAULT_SETTINGS, ...(parsed.settings || {}) },
-      downloadOrganizer: {
-        ...defaultDownloadOrganizer,
-        ...(parsed.downloadOrganizer || {}),
-        config: {
-          ...defaultDownloadOrganizer.config,
-          ...(parsed.downloadOrganizer?.config || {}),
-          rules: Array.isArray(parsed.downloadOrganizer?.config?.rules)
-            ? parsed.downloadOrganizer.config.rules
-            : defaultDownloadOrganizer.config.rules,
-          ignoredExtensions: Array.isArray(parsed.downloadOrganizer?.config?.ignoredExtensions)
-            ? parsed.downloadOrganizer.config.ignoredExtensions
-            : defaultDownloadOrganizer.config.ignoredExtensions
-        },
-        lastPreviewItems: Array.isArray(parsed.downloadOrganizer?.lastPreviewItems)
-          ? parsed.downloadOrganizer.lastPreviewItems
-          : [],
-        activity: Array.isArray(parsed.downloadOrganizer?.activity)
-          ? parsed.downloadOrganizer.activity
-          : []
-      }
-    }
+    return migrateGlobalStore(parsed, app.getVersion())
   }
 
   private migrateStoreData(parsed: Partial<GlobalStore> & Record<string, any>): GlobalStore {
@@ -126,12 +40,13 @@ export class StoreService extends EventEmitter {
         const data = fs.readFileSync(this.storePath, 'utf8')
         const parsed = JSON.parse(data) as Partial<GlobalStore> & Record<string, any>
         this.store = this.migrateStoreData(parsed)
+        const defaults = this.getInitialData()
 
         if (this.store.pinnedToolIds.length === 0) {
-          this.store.pinnedToolIds = [...DEFAULT_PINNED_TOOL_IDS]
+          this.store.pinnedToolIds = [...defaults.pinnedToolIds]
         }
         if (this.store.windowsManagerFavorites.length === 0) {
-          this.store.windowsManagerFavorites = [...DEFAULT_WINDOWS_MANAGER_FAVORITES]
+          this.store.windowsManagerFavorites = [...defaults.windowsManagerFavorites]
         }
         logger.info('StoreService: Data loaded successfully.')
       } else {

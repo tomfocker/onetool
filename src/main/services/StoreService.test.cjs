@@ -44,6 +44,67 @@ function loadStoreServiceModule(overrides = {}) {
     debug() {},
     error() {}
   }
+  const settingsSchemaPath = path.join(__dirname, '../../shared/settingsSchema.ts')
+  const settingsSchemaSource = fs.readFileSync(settingsSchemaPath, 'utf8')
+  const settingsSchemaTranspiled = ts.transpileModule(settingsSchemaSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: settingsSchemaPath
+  }).outputText
+  const settingsSchemaModule = { exports: {} }
+  const taskbarAppearanceModule = overrides.taskbarAppearanceModule || require(path.join(__dirname, '../../shared/taskbarAppearance.ts'))
+  vm.runInNewContext(settingsSchemaTranspiled, {
+    module: settingsSchemaModule,
+    exports: settingsSchemaModule.exports,
+    require: (specifier) => {
+      if (specifier === './taskbarAppearance') {
+        return taskbarAppearanceModule
+      }
+      return require(specifier)
+    },
+    __dirname: path.dirname(settingsSchemaPath),
+    __filename: settingsSchemaPath,
+    console,
+    process,
+    Buffer
+  }, { filename: settingsSchemaPath })
+
+  const storeSchemaPath = path.join(__dirname, '../../shared/storeSchema.ts')
+  const storeSchemaSource = fs.readFileSync(storeSchemaPath, 'utf8')
+  const storeSchemaTranspiled = ts.transpileModule(storeSchemaSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: storeSchemaPath
+  }).outputText
+  const storeSchemaModule = { exports: {} }
+  vm.runInNewContext(storeSchemaTranspiled, {
+    module: storeSchemaModule,
+    exports: storeSchemaModule.exports,
+    require: (specifier) => {
+      if (specifier === './settingsSchema') {
+        return settingsSchemaModule.exports
+      }
+      if (specifier === './downloadOrganizer') {
+        return require(path.join(__dirname, '../../shared/downloadOrganizer.ts'))
+      }
+      if (specifier === './devEnvironment') {
+        return require(path.join(__dirname, '../../shared/devEnvironment.ts'))
+      }
+      return require(specifier)
+    },
+    __dirname: path.dirname(storeSchemaPath),
+    __filename: storeSchemaPath,
+    console,
+    process,
+    Buffer
+  }, { filename: storeSchemaPath })
+
   const fsModule = overrides.fsModule || {
     existsSync: () => true,
     readFileSync: () => storedJson,
@@ -51,7 +112,6 @@ function loadStoreServiceModule(overrides = {}) {
       writeFile: async () => {}
     }
   }
-  const taskbarAppearanceModule = overrides.taskbarAppearanceModule || require(path.join(__dirname, '../../shared/taskbarAppearance.ts'))
 
   const customRequire = (specifier) => {
     if (specifier === 'electron') {
@@ -84,6 +144,14 @@ function loadStoreServiceModule(overrides = {}) {
 
     if (specifier === '../../shared/taskbarAppearance') {
       return taskbarAppearanceModule
+    }
+
+    if (specifier === '../../shared/settingsSchema') {
+      return settingsSchemaModule.exports
+    }
+
+    if (specifier === '../../shared/storeSchema') {
+      return storeSchemaModule.exports
     }
 
     if (specifier === '../utils/logger') {
