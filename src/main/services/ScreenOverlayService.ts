@@ -14,12 +14,16 @@ export class ScreenOverlayService {
   private currentMode: ScreenOverlayMode = 'translate'
   private sessionActive = false
   private prepareWindowsTask: Promise<void> | null = null
+  private captureScreensTask: Promise<void> | null = null
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
     if (window) {
       void this.schedulePrepareWindows().catch((error) => {
         console.warn('[ScreenOverlayService] Failed to precreate overlay windows:', error)
+      })
+      void this.scheduleCaptureAllScreens().catch((error) => {
+        console.warn('[ScreenOverlayService] Failed to prewarm screenshots:', error)
       })
     }
   }
@@ -77,6 +81,17 @@ export class ScreenOverlayService {
     } catch (error) {
       console.error('[ScreenOverlayService] Batch capture failed:', error)
     }
+  }
+
+  private scheduleCaptureAllScreens(): Promise<void> {
+    if (!this.captureScreensTask) {
+      this.captureScreensTask = this.captureAllScreens()
+        .then(() => this.dispatchScreensToReadyWindows())
+        .finally(() => {
+          this.captureScreensTask = null
+        })
+    }
+    return this.captureScreensTask
   }
 
   private resolveActiveDisplay(displays: Electron.Display[]): Electron.Display {
@@ -205,11 +220,9 @@ export class ScreenOverlayService {
       }
       this.dispatchScreensToReadyWindows()
 
-      void this.captureAllScreens()
-        .then(() => this.dispatchScreensToReadyWindows())
-        .catch((error) => {
-          console.error('[ScreenOverlayService] Deferred screen capture failed:', error)
-        })
+      void this.scheduleCaptureAllScreens().catch((error) => {
+        console.error('[ScreenOverlayService] Deferred screen capture failed:', error)
+      })
 
       return { success: true, data: {} }
     } catch (error) {

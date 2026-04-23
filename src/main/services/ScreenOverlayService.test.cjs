@@ -414,6 +414,91 @@ test('setMainWindow prepares hidden overlay windows and later reuses them across
   ])
 })
 
+test('setMainWindow prewarms screenshot cache before the first overlay session', async () => {
+  let captureCallCount = 0
+  const firstCaptureDeferred = deferred()
+  const secondCaptureDeferred = deferred()
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.webContents = { id: 11, send() {} }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {}
+    show() {}
+  }
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]
+        }
+      },
+      desktopCapturer: {
+        getSources() {
+          captureCallCount += 1
+          return captureCallCount === 1 ? firstCaptureDeferred.promise : secondCaptureDeferred.promise
+        }
+      },
+      ipcMain: {
+        on() {}
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  service.setMainWindow({})
+
+  firstCaptureDeferred.resolve([
+    {
+      display_id: '1',
+      thumbnail: {
+        getSize() { return { width: 1920, height: 1080 } },
+        toDataURL() { return 'data:image/png;base64,prewarm' }
+      }
+    }
+  ])
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(service.screenMap.get(1), 'data:image/png;base64,prewarm')
+
+  await service.start('translate')
+  assert.equal(captureCallCount, 2)
+
+  secondCaptureDeferred.resolve([
+    {
+      display_id: '1',
+      thumbnail: {
+        getSize() { return { width: 1920, height: 1080 } },
+        toDataURL() { return 'data:image/png;base64,fresh' }
+      }
+    }
+  ])
+})
+
 test('restart reuses the previous screenshot cache before async recapture finishes', async () => {
   const sentEvents = []
   let ipcReadyHandler = null
