@@ -31,6 +31,8 @@ import {
 } from './bootstrap/runtimeBootstrap'
 import { registerAppLifecycle } from './bootstrap/appLifecycle'
 import { createMainWindow } from './bootstrap/createMainWindow'
+import { registerProcessDiagnostics } from './bootstrap/diagnostics'
+import { setupSingleInstance } from './bootstrap/singleInstance'
 import { startWarmups } from './bootstrap/startWarmups'
 
 // Import IPC Handlers
@@ -134,20 +136,21 @@ function createWindow(): void {
   })
 }
 
-const gotTheLock = app.requestSingleInstanceLock()
+const { hasLock } = setupSingleInstance({
+  app,
+  getMainWindow: () => mainWindow
+})
 
-if (!gotTheLock) {
-  app.quit()
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore()
-      if (!mainWindow.isVisible()) mainWindow.show()
-      mainWindow.focus()
-    }
+if (hasLock) {
+  registerProcessDiagnostics({
+    processLike: process,
+    app,
+    logger,
+    serializeUnhandledReason
   })
 }
 
+if (hasLock) {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.onetool')
 
@@ -226,8 +229,5 @@ app.whenReady().then(() => {
     }
   })
 })
-
-app.on('child-process-gone', (_event, details) => {
-  logger.error('Child process gone', details)
-})
+}
 
