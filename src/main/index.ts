@@ -30,6 +30,7 @@ import {
   scheduleDoctorAudit
 } from './bootstrap/runtimeBootstrap'
 import { registerAppLifecycle } from './bootstrap/appLifecycle'
+import { createMainWindow } from './bootstrap/createMainWindow'
 import { startWarmups } from './bootstrap/startWarmups'
 
 // Import IPC Handlers
@@ -68,74 +69,6 @@ import { registerBilibiliDownloaderIpc } from './ipc/bilibiliDownloaderIpc'
 let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
-  const iconPath = app.isPackaged
-    ? path.join(process.resourcesPath, 'icon.png')
-    : path.join(__dirname, '../../resources/icon.png')
-
-  let windowIcon: NativeImage | undefined
-  if (fs.existsSync(iconPath)) {
-    windowIcon = nativeImage.createFromPath(iconPath)
-  }
-
-  mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
-    center: true,
-    resizable: true,
-    show: false,
-    frame: false,
-    autoHideMenuBar: true,
-    icon: windowIcon,
-    webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
-  })
-
-  bindMainWindowServices(mainWindow, {
-    autoClickerService,
-    clipboardService,
-    hotkeyService,
-    screenRecorderService,
-    screenOverlayService,
-    colorPickerService,
-    webActivatorService,
-    quickInstallerService,
-    spaceCleanupService,
-    downloadOrganizerService,
-    windowManagerService,
-    screenshotService
-  })
-
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
-    // 窗口显示后延迟初始化剪贴板监听，确保 UI 已准备好接收初始历史数据
-    setTimeout(() => {
-      clipboardService.startWatcher()
-    }, 1000)
-  })
-
-  mainWindow.on('close', (event) => {
-    const minimizeToTray = settingsService.getSettings().minimizeToTray
-
-    if (shouldHideMainWindowOnClose({
-      isQuitting: windowManagerService.getIsQuitting(),
-      minimizeToTray
-    })) {
-      event.preventDefault()
-      mainWindow?.hide()
-    }
-  })
-
-  mainWindow.on('closed', () => {
-    mainWindow = null
-  })
-
-  mainWindow.on('unresponsive', () => {
-    logger.error('Main window became unresponsive')
-  })
-
-  mainWindow.webContents.on('render-process-gone', (_event, details) => {
-    logger.error('Renderer process gone', details)
-  })
-
   // Capture unhandled exceptions
   process.on('uncaughtException', (error) => {
     logger.error('Uncaught Exception', error)
@@ -148,16 +81,57 @@ function createWindow(): void {
     })
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
-  })
+  const iconPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'icon.png')
+    : path.join(__dirname, '../../resources/icon.png')
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
-  }
+  const preloadPath = join(__dirname, '../preload/index.js')
+  const rendererHtmlPath = join(__dirname, '../renderer/index.html')
+
+  mainWindow = createMainWindow({
+    BrowserWindow,
+    shell,
+    runtime: {
+      isDevelopment: is.dev,
+      rendererUrl: process.env['ELECTRON_RENDERER_URL']
+    },
+    assets: {
+      iconPath,
+      preloadPath,
+      rendererHtmlPath
+    },
+    settingsService,
+    windowManagerService,
+    clipboardService,
+    logger,
+    shouldHideMainWindowOnClose,
+    createWindowIcon: (resolvedIconPath) => {
+      if (fs.existsSync(resolvedIconPath)) {
+        return nativeImage.createFromPath(resolvedIconPath)
+      }
+      return undefined
+    },
+    createPreloadPreferences: (resolvedPreloadPath) =>
+      createIsolatedPreloadWebPreferences(resolvedPreloadPath),
+    bindMainWindowServices: (window) =>
+      bindMainWindowServices(window, {
+        autoClickerService,
+        clipboardService,
+        hotkeyService,
+        screenRecorderService,
+        screenOverlayService,
+        colorPickerService,
+        webActivatorService,
+        quickInstallerService,
+        spaceCleanupService,
+        downloadOrganizerService,
+        windowManagerService,
+        screenshotService
+      }),
+    onWindowClosed: () => {
+      mainWindow = null
+    }
+  })
 }
 
 const gotTheLock = app.requestSingleInstanceLock()
@@ -250,10 +224,6 @@ app.whenReady().then(() => {
       isPortableWindowsRuntime:
         Boolean(process.env.PORTABLE_EXECUTABLE_FILE) || Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
     }
-  })
-
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
