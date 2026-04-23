@@ -23,7 +23,12 @@ import { createIsolatedPreloadWebPreferences } from './utils/windowSecurity'
 import { logger } from './utils/logger'
 import { serializeUnhandledReason, shouldHideMainWindowOnClose } from './utils/runtimePolicy'
 import { createBeforeQuitAndInstallHook } from './utils/updateInstallFlow'
-import { bindMainWindowServices, registerMainProcessIpc } from './bootstrap/runtimeBootstrap'
+import {
+  bindMainWindowServices,
+  initializeMainRuntime,
+  registerMainProcessIpc,
+  scheduleDoctorAudit
+} from './bootstrap/runtimeBootstrap'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -204,21 +209,7 @@ app.whenReady().then(() => {
     registerBilibiliDownloaderIpc
   })
 
-  // Silent system health check
-  setTimeout(async () => {
-    const res = await doctorService.runFullAudit()
-    if (res.success && res.data) {
-      const issues = Object.entries(res.data).filter(([_, v]: [string, any]) => !v.ok)
-      if (issues.length > 0 && mainWindow) {
-        mainWindow.webContents.send('app-notification', {
-          type: 'warning',
-          title: '系统环境自检提醒',
-          message: `发现 ${issues.length} 项环境依赖异常，部分工具可能无法正常工作。请前往设置页查看详情。`,
-          duration: 10000
-        })
-      }
-    }
-  }, 3000)
+  scheduleDoctorAudit(() => mainWindow, { doctorService })
   registerWindowIpc()
 
   app.on('browser-window-created', (_, window) => {
@@ -228,18 +219,15 @@ app.whenReady().then(() => {
   // Global Initializations
   createWindow()
   void restoreTaskbarAppearanceOnStartup()
-  void downloadOrganizerService.initialize()
-  windowManagerService.setTrayEnabled(settingsService.getSettings().minimizeToTray)
-  windowManagerService.createFloatBallWindow()
-  appUpdateService.setBeforeQuitAndInstall(createBeforeQuitAndInstallHook(windowManagerService))
-
-  settingsService.on('changed', (newSettings) => {
-    windowManagerService.setTrayEnabled(newSettings.minimizeToTray)
-  })
-
-  registerAutoUpdateSettingsChangeHandler({
+  void initializeMainRuntime({
     settingsService,
+    downloadOrganizerService,
+    windowManagerService,
     appUpdateService,
+    autoClickerService,
+    hotkeyService,
+    registerAutoUpdateSettingsChangeHandler: (input) => registerAutoUpdateSettingsChangeHandler(input as any),
+    createBeforeQuitAndInstallHook,
     runtime: {
       platform: process.platform,
       isPackaged: app.isPackaged,
@@ -248,21 +236,6 @@ app.whenReady().then(() => {
         Boolean(process.env.PORTABLE_EXECUTABLE_FILE) || Boolean(process.env.PORTABLE_EXECUTABLE_DIR)
     }
   })
-
-  void appUpdateService.initialize()
-
-  autoClickerService.registerShortcuts()
-  // clipboardService.startWatcher() // 移除此处的重复调用，改为在 ready-to-show 后启动
-  hotkeyService.registerRecorderShortcut()
-  hotkeyService.registerScreenshotShortcut()
-  hotkeyService.registerTranslatorShortcut()
-  hotkeyService.registerFloatBallShortcut()
-  hotkeyService.registerClipboardShortcut()
-
-  // Retry shortcut registration after 1s to avoid conflicts
-  setTimeout(() => {
-    autoClickerService.registerShortcuts()
-  }, 1000)
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

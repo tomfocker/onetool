@@ -126,3 +126,151 @@ test('registerMainProcessIpc wires window-aware registrations through the shared
   assert.ok(calls.some(([label]) => label === 'registerScreenOverlayIpc'))
   assert.ok(calls.some(([label]) => label === 'registerTaskbarAppearanceIpc'))
 })
+
+test('initializeMainRuntime wires post-window services, updates, and hotkeys', async () => {
+  const { initializeMainRuntime } = loadBootstrapModule()
+  const calls = []
+  let settingsChangedHandler = null
+  const scheduledTimers = []
+
+  const settingsService = {
+    getSettings() {
+      return { minimizeToTray: true }
+    },
+    on(event, handler) {
+      if (event === 'changed') {
+        settingsChangedHandler = handler
+      }
+    }
+  }
+
+  await initializeMainRuntime({
+    settingsService,
+    downloadOrganizerService: {
+      async initialize() {
+        calls.push(['downloadOrganizer.initialize'])
+      }
+    },
+    windowManagerService: {
+      setTrayEnabled(value) {
+        calls.push(['windowManager.setTrayEnabled', value])
+      },
+      createFloatBallWindow() {
+        calls.push(['windowManager.createFloatBallWindow'])
+      }
+    },
+    appUpdateService: {
+      setBeforeQuitAndInstall(hook) {
+        calls.push(['appUpdate.setBeforeQuitAndInstall', hook])
+      },
+      async initialize() {
+        calls.push(['appUpdate.initialize'])
+      }
+    },
+    autoClickerService: {
+      registerShortcuts() {
+        calls.push(['autoClicker.registerShortcuts'])
+      }
+    },
+    hotkeyService: {
+      registerRecorderShortcut() {
+        calls.push(['hotkey.registerRecorderShortcut'])
+      },
+      registerScreenshotShortcut() {
+        calls.push(['hotkey.registerScreenshotShortcut'])
+      },
+      registerTranslatorShortcut() {
+        calls.push(['hotkey.registerTranslatorShortcut'])
+      },
+      registerFloatBallShortcut() {
+        calls.push(['hotkey.registerFloatBallShortcut'])
+      },
+      registerClipboardShortcut() {
+        calls.push(['hotkey.registerClipboardShortcut'])
+      }
+    },
+    registerAutoUpdateSettingsChangeHandler(input) {
+      calls.push(['registerAutoUpdateSettingsChangeHandler', input.runtime])
+    },
+    createBeforeQuitAndInstallHook(windowManagerService) {
+      calls.push(['createBeforeQuitAndInstallHook', Boolean(windowManagerService)])
+      return 'before-quit-hook'
+    },
+    runtime: {
+      platform: 'win32',
+      isPackaged: true,
+      isDevelopment: false,
+      isPortableWindowsRuntime: false
+    },
+    scheduleTimeout(handler, timeoutMs) {
+      scheduledTimers.push(timeoutMs)
+      handler()
+      return timeoutMs
+    }
+  })
+
+  assert.ok(calls.some(([label]) => label === 'downloadOrganizer.initialize'))
+  assert.ok(calls.some(([label]) => label === 'windowManager.createFloatBallWindow'))
+  assert.ok(calls.some(([label]) => label === 'appUpdate.initialize'))
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([label]) => label === 'windowManager.setTrayEnabled'))), [
+    ['windowManager.setTrayEnabled', true]
+  ])
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([label]) => label === 'registerAutoUpdateSettingsChangeHandler'))), [
+    ['registerAutoUpdateSettingsChangeHandler', {
+      platform: 'win32',
+      isPackaged: true,
+      isDevelopment: false,
+      isPortableWindowsRuntime: false
+    }]
+  ])
+  assert.equal(scheduledTimers.includes(1000), true)
+  assert.equal(typeof settingsChangedHandler, 'function')
+
+  settingsChangedHandler({ minimizeToTray: false })
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.filter(([label]) => label === 'windowManager.setTrayEnabled'))), [
+    ['windowManager.setTrayEnabled', true],
+    ['windowManager.setTrayEnabled', false]
+  ])
+})
+
+test('scheduleDoctorAudit notifies the renderer when health issues are found', async () => {
+  const { scheduleDoctorAudit } = loadBootstrapModule()
+  const notifications = []
+  const scheduledTimers = []
+
+  scheduleDoctorAudit(
+    () => ({
+      webContents: {
+        send(channel, payload) {
+          notifications.push([channel, payload])
+        }
+      }
+    }),
+    {
+      doctorService: {
+        async runFullAudit() {
+          return {
+            success: true,
+            data: {
+              winget: { ok: false },
+              git: { ok: true },
+              node: { ok: false }
+            }
+          }
+        }
+      },
+      scheduleTimeout(handler, timeoutMs) {
+        scheduledTimers.push(timeoutMs)
+        void handler()
+        return timeoutMs
+      }
+    }
+  )
+
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.deepEqual(scheduledTimers, [3000])
+  assert.equal(notifications.length, 1)
+  assert.equal(notifications[0][0], 'app-notification')
+  assert.equal(notifications[0][1].type, 'warning')
+  assert.match(notifications[0][1].message, /2 项环境依赖异常/)
+})
