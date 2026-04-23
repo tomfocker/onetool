@@ -7,7 +7,9 @@ const ts = require('typescript')
 
 function loadBootstrapModule() {
   const filePath = path.join(__dirname, 'runtimeBootstrap.ts')
+  const registerIpcPath = path.join(__dirname, 'registerIpc.ts')
   const source = fs.readFileSync(filePath, 'utf8')
+  const registerIpcSource = fs.readFileSync(registerIpcPath, 'utf8')
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
@@ -16,12 +18,41 @@ function loadBootstrapModule() {
     },
     fileName: filePath
   }).outputText
+  const transpiledRegisterIpc = ts.transpileModule(registerIpcSource, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: registerIpcPath
+  }).outputText
+
+  const registerIpcModule = { exports: {} }
+  vm.runInNewContext(transpiledRegisterIpc, {
+    module: registerIpcModule,
+    exports: registerIpcModule.exports,
+    require,
+    __dirname: path.dirname(registerIpcPath),
+    __filename: registerIpcPath,
+    console,
+    process,
+    Buffer,
+    setTimeout,
+    clearTimeout
+  }, { filename: registerIpcPath })
 
   const module = { exports: {} }
+  const localRequire = (specifier) => {
+    if (specifier === './registerIpc') {
+      return registerIpcModule.exports
+    }
+    return require(specifier)
+  }
+
   vm.runInNewContext(transpiled, {
     module,
     exports: module.exports,
-    require,
+    require: localRequire,
     __dirname: path.dirname(filePath),
     __filename: filePath,
     console,

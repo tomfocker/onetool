@@ -29,6 +29,8 @@ import {
   registerMainProcessIpc,
   scheduleDoctorAudit
 } from './bootstrap/runtimeBootstrap'
+import { registerAppLifecycle } from './bootstrap/appLifecycle'
+import { startWarmups } from './bootstrap/startWarmups'
 
 // Import IPC Handlers
 import { registerAutoClickerIpc } from './ipc/autoClickerIpc'
@@ -175,8 +177,12 @@ if (!gotTheLock) {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.onetool')
 
-  settingsService.loadSettings()
-  screenRecorderService.initFfmpeg()
+  startWarmups({
+    settingsService,
+    screenRecorderService,
+    restoreTaskbarAppearanceOnStartup,
+    scheduleDoctorAudit: () => scheduleDoctorAudit(() => mainWindow, { doctorService })
+  })
 
   registerMainProcessIpc(() => mainWindow, {
     registerAutoClickerIpc,
@@ -209,16 +215,25 @@ app.whenReady().then(() => {
     registerBilibiliDownloaderIpc
   })
 
-  scheduleDoctorAudit(() => mainWindow, { doctorService })
   registerWindowIpc()
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+  registerAppLifecycle({
+    app,
+    BrowserWindow,
+    globalShortcut,
+    optimizer,
+    runtime: {
+      platform: process.platform
+    },
+    createWindow,
+    windowManagerService,
+    autoClickerService,
+    screenRecorderService,
+    processRegistry
   })
 
   // Global Initializations
   createWindow()
-  void restoreTaskbarAppearanceOnStartup()
   void initializeMainRuntime({
     settingsService,
     downloadOrganizerService,
@@ -244,22 +259,5 @@ app.whenReady().then(() => {
 
 app.on('child-process-gone', (_event, details) => {
   logger.error('Child process gone', details)
-})
-
-app.on('will-quit', () => {
-  globalShortcut.unregisterAll()
-})
-
-app.on('before-quit', () => {
-  windowManagerService.setIsQuitting(true)
-  autoClickerService.stop()
-  screenRecorderService.stop()
-  processRegistry.killAll()
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
 })
 
