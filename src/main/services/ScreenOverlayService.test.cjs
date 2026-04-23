@@ -340,3 +340,95 @@ test('setMainWindow prepares hidden overlay windows and later reuses them across
     ['screen-overlay:session-start', { mode: 'ocr' }]
   ])
 })
+
+test('start sizes deferred capture around the active display instead of the largest display', async () => {
+  const getSourcesDeferred = deferred()
+  const captureRequests = []
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.webContents = { id: 1, send() {} }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {}
+    show() {}
+  }
+
+  const displays = [
+    { id: 1, bounds: { x: 0, y: 0, width: 2560, height: 1440 } },
+    { id: 2, bounds: { x: 1920, y: 0, width: 1280, height: 720 } }
+  ]
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return displays
+        },
+        getCursorScreenPoint() {
+          return { x: 2200, y: 200 }
+        },
+        getDisplayNearestPoint() {
+          return displays[1]
+        }
+      },
+      desktopCapturer: {
+        getSources(options) {
+          captureRequests.push(options)
+          return getSourcesDeferred.promise
+        }
+      },
+      ipcMain: {
+        on() {}
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  await service.start('translate')
+
+  assert.equal(captureRequests.length, 1)
+  assert.deepEqual(JSON.parse(JSON.stringify(captureRequests[0].thumbnailSize)), {
+    width: 1280,
+    height: 720
+  })
+
+  getSourcesDeferred.resolve([
+    {
+      display_id: '1',
+      thumbnail: {
+        getSize() { return { width: 2560, height: 1440 } },
+        toDataURL() { return 'data:image/png;base64,screen-1' }
+      }
+    },
+    {
+      display_id: '2',
+      thumbnail: {
+        getSize() { return { width: 1280, height: 720 } },
+        toDataURL() { return 'data:image/png;base64,screen-2' }
+      }
+    }
+  ])
+})

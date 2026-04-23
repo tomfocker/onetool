@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Loader2, Copy, Check } from 'lucide-react'
 import type { ScreenOverlayLineResult, ScreenOverlayMode, ScreenOverlaySessionStartPayload } from '../../../shared/llm'
 import { buildOcrExtractedText, getOcrCanvasMetrics } from '../../../shared/screenOverlay'
+import { beginUtilityWindowSession } from '../../../shared/utilityWindowRuntime'
 
 interface SelectionState {
   isSelecting: boolean
@@ -43,18 +44,28 @@ export const ScreenOverlay: React.FC = () => {
   const imageRef = useRef<HTMLImageElement>(null)
 
   const resetOverlayState = useCallback((nextMode?: ScreenOverlayMode) => {
-    if (nextMode) {
-      setMode(nextMode)
-    }
+    const nextSession = beginUtilityWindowSession({
+      previous: {
+        mode,
+        status: error ? 'error' : isLoading ? 'loading' : overlayResults?.length || ocrExtractedText ? 'completed' : 'idle',
+        error,
+        copied,
+        overlayResults: overlayResults ?? []
+      },
+      incoming: {
+        mode: nextMode ?? mode
+      }
+    })
+    setMode(nextSession.mode)
     setSelection({ isSelecting: false, startX: 0, startY: 0, endX: 0, endY: 0 })
     setSelectionRect(null)
-    setOverlayResults(null)
+    setOverlayResults(nextSession.overlayResults.length ? nextSession.overlayResults : null)
     setOcrExtractedText(null)
-    setError(null)
+    setError(nextSession.error)
     setIsLoading(false)
-    setCopied(false)
+    setCopied(nextSession.copied)
     setOverlayScale({ x: 1, y: 1 })
-  }, [])
+  }, [copied, error, isLoading, mode, ocrExtractedText, overlayResults])
 
   useEffect(() => {
     if (!window.electron?.screenOverlay) return

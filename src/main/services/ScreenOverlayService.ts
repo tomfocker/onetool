@@ -50,8 +50,9 @@ export class ScreenOverlayService {
     this.screenMap.clear()
 
     try {
-      const maxCaptureWidth = Math.min(Math.max(...displays.map((display) => display.bounds.width), 1920), 2560)
-      const maxCaptureHeight = Math.min(Math.max(...displays.map((display) => display.bounds.height), 1080), 1440)
+      const activeDisplay = this.resolveActiveDisplay(displays)
+      const maxCaptureWidth = Math.min(activeDisplay.bounds.width, 2560)
+      const maxCaptureHeight = Math.min(activeDisplay.bounds.height, 1440)
       // 请求高清采样
       const sources = await desktopCapturer.getSources({
         types: ['screen'],
@@ -75,6 +76,19 @@ export class ScreenOverlayService {
     } catch (error) {
       console.error('[ScreenOverlayService] Batch capture failed:', error)
     }
+  }
+
+  private resolveActiveDisplay(displays: Electron.Display[]): Electron.Display {
+    if (!displays.length) {
+      throw new Error('No displays available for screen overlay capture')
+    }
+
+    if (typeof screen.getCursorScreenPoint === 'function' && typeof screen.getDisplayNearestPoint === 'function') {
+      const cursorPoint = screen.getCursorScreenPoint()
+      return screen.getDisplayNearestPoint(cursorPoint)
+    }
+
+    return displays[0]
   }
 
   private getOverlayRoute(): string {

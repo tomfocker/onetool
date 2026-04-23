@@ -11,11 +11,33 @@ import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 
 export class ColorPickerService {
   private mainWindow: BrowserWindow | null = null
-  private colorPickerWindows: BrowserWindow[] = []
+  private colorPickerWindows: Map<number, BrowserWindow> = new Map()
+  private readyDisplays: Set<number> = new Set()
+  private screenshotMap: Map<number, string> = new Map()
   private pickSessionPromise: Promise<IpcResponse<{ color?: PickedColor }>> | null = null
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
+    if (window) {
+      void this.prepareOverlayWindows().catch((error) => {
+        console.warn('[ColorPickerService] Failed to precreate overlay windows:', error)
+      })
+    }
+  }
+
+  constructor() {
+    ipcMain.on('color-picker:overlay-ready', (event) => {
+      for (const [displayId, win] of this.colorPickerWindows.entries()) {
+        if (!win.isDestroyed() && event.sender.id === win.webContents.id) {
+          this.readyDisplays.add(displayId)
+          const dataUrl = this.screenshotMap.get(displayId)
+          if (dataUrl) {
+            win.webContents.send('color-picker:screenshot', dataUrl)
+          }
+          break
+        }
+      }
+    })
   }
 
   private async captureAllScreens(): Promise<Map<number, string>> {
@@ -49,6 +71,84 @@ export class ColorPickerService {
     return screenshots
   }
 
+  private buildOverlayRoute(displayId: number, x: number, y: number) {
+    return `/color-picker-overlay?display=${displayId}&dx=${x}&dy=${y}`
+  }
+
+  private createOverlayWindow(display: Electron.Display): BrowserWindow {
+    const { x, y, width, height } = display.bounds
+    const route = this.buildOverlayRoute(display.id, x, y)
+    const win = new BrowserWindow({
+      x,
+      y,
+      width,
+      height,
+      transparent: true,
+      frame: false,
+      alwaysOnTop: true,
+      skipTaskbar: true,
+      resizable: false,
+      focusable: true,
+      show: false,
+      fullscreenable: true,
+      kiosk: true,
+      webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
+    })
+
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      void win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
+    } else {
+      void win.loadFile(join(__dirname, '../renderer/index.html'), { hash: route })
+    }
+
+    win.webContents.on('did-fail-load', () => {
+      console.error(`ColorPicker Window for display ${display.id} failed to load`)
+    })
+
+    win.on('closed', () => {
+      this.colorPickerWindows.delete(display.id)
+      this.readyDisplays.delete(display.id)
+    })
+
+    this.colorPickerWindows.set(display.id, win)
+    return win
+  }
+
+  private async prepareOverlayWindows(): Promise<void> {
+    const displays = screen.getAllDisplays()
+    const activeDisplayIds = new Set(displays.map((display) => display.id))
+
+    for (const [displayId, win] of this.colorPickerWindows.entries()) {
+      if (!activeDisplayIds.has(displayId)) {
+        if (!win.isDestroyed()) {
+          win.close()
+        }
+        this.colorPickerWindows.delete(displayId)
+        this.readyDisplays.delete(displayId)
+      }
+    }
+
+    for (const display of displays) {
+      const existingWindow = this.colorPickerWindows.get(display.id)
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        continue
+      }
+      this.createOverlayWindow(display)
+    }
+  }
+
+  private dispatchScreensToReadyWindows(): void {
+    for (const displayId of this.readyDisplays) {
+      const win = this.colorPickerWindows.get(displayId)
+      const dataUrl = this.screenshotMap.get(displayId)
+      if (win && !win.isDestroyed() && dataUrl) {
+        win.webContents.send('color-picker:screenshot', dataUrl)
+      }
+    }
+  }
+
   async pick(): Promise<IpcResponse<{ color?: PickedColor }>> {
     if (this.pickSessionPromise) {
       return { success: false, error: 'Color picker is already active' }
@@ -60,22 +160,18 @@ export class ColorPickerService {
     }
 
     this.pickSessionPromise = new Promise((resolve) => {
-      const displayMap = new Map<number, { win: BrowserWindow; displayId: number }>()
-      let screenshotMap = new Map<number, string>()
       let finished = false
 
       const cleanup = () => {
         ipcMain.removeListener('color-picker:confirm-pick', onPicked)
         ipcMain.removeListener('color-picker:cancel-pick', onCancelled)
-        ipcMain.removeListener('color-picker:overlay-ready', onOverlayReady)
+        this.screenshotMap.clear()
 
         this.colorPickerWindows.forEach((win) => {
           if (!win.isDestroyed()) {
-            win.close()
+            win.hide()
           }
         })
-        this.colorPickerWindows = []
-        displayMap.clear()
 
         if (this.mainWindow && !this.mainWindow.isDestroyed()) {
           this.mainWindow.show()
@@ -93,21 +189,6 @@ export class ColorPickerService {
         resolve(result)
       }
 
-      const onOverlayReady = (event: Electron.IpcMainEvent) => {
-        const entry = displayMap.get(event.sender.id)
-        if (!entry) {
-          return
-        }
-
-        const dataUrl = screenshotMap.get(entry.displayId)
-        if (!dataUrl) {
-          finish({ success: false, error: `Missing screenshot for display ${entry.displayId}` })
-          return
-        }
-
-        entry.win.webContents.send('color-picker:screenshot', dataUrl)
-      }
-
       const onPicked = (_event: Electron.IpcMainEvent, data: PickedColor) => {
         finish({ success: true, data: { color: data } })
       }
@@ -116,13 +197,10 @@ export class ColorPickerService {
         finish({ success: false, error: 'Cancelled' })
       }
 
-      const buildOverlayRoute = (displayId: number, x: number, y: number) => {
-        return `/color-picker-overlay?display=${displayId}&dx=${x}&dy=${y}`
-      }
-
       void (async () => {
         try {
-          screenshotMap = await this.captureAllScreens()
+          await this.prepareOverlayWindows()
+          this.screenshotMap = await this.captureAllScreens()
 
           if (this.mainWindow && !this.mainWindow.isDestroyed()) {
             this.mainWindow.hide()
@@ -130,51 +208,13 @@ export class ColorPickerService {
 
           ipcMain.once('color-picker:confirm-pick', onPicked)
           ipcMain.once('color-picker:cancel-pick', onCancelled)
-          ipcMain.on('color-picker:overlay-ready', onOverlayReady)
 
-          this.colorPickerWindows = displays.map((display) => {
-            const { x, y, width, height } = display.bounds
-            const route = buildOverlayRoute(display.id, x, y)
-
-            const win = new BrowserWindow({
-              x,
-              y,
-              width,
-              height,
-              transparent: true,
-              frame: false,
-              alwaysOnTop: true,
-              skipTaskbar: true,
-              resizable: false,
-              focusable: true,
-              show: false,
-              fullscreenable: true,
-              kiosk: true,
-              webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
-            })
-
-            win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
-            displayMap.set(win.webContents.id, { win, displayId: display.id })
-
-            if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-              win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${route}`)
-            } else {
-              win.loadFile(join(__dirname, '../renderer/index.html'), { hash: route })
+          this.colorPickerWindows.forEach((win) => {
+            if (!win.isDestroyed() && !finished) {
+              win.show()
             }
-
-            win.once('ready-to-show', () => {
-              if (!finished) {
-                win.show()
-              }
-            })
-
-            win.webContents.on('did-fail-load', () => {
-              console.error(`ColorPicker Window for display ${display.id} failed to load`)
-              finish({ success: false, error: 'Overlay load failed' })
-            })
-
-            return win
           })
+          this.dispatchScreensToReadyWindows()
         } catch (error) {
           console.error('ColorPickerService: pick session error:', error)
           finish({ success: false, error: (error as Error).message })
