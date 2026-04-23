@@ -677,6 +677,9 @@ test('start sizes deferred capture around the active display instead of the larg
   process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
   const service = new ScreenOverlayService()
   await service.start('translate')
+  for (let attempt = 0; attempt < 4 && captureRequests.length === 0; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve))
+  }
 
   assert.equal(captureRequests.length, 1)
   assert.deepEqual(JSON.parse(JSON.stringify(captureRequests[0].thumbnailSize)), {
@@ -700,4 +703,85 @@ test('start sizes deferred capture around the active display instead of the larg
       }
     }
   ])
+})
+
+test('start shows the active display overlay before secondary displays', async () => {
+  const showOrder = []
+
+  class FakeBrowserWindow {
+    constructor(options) {
+      this.options = options
+      this.webContents = { id: options.x === 0 ? 1 : 2, send() {} }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {}
+    show() {
+      showOrder.push(this.options.x === 0 ? 'primary' : 'secondary')
+    }
+  }
+
+  const displays = [
+    { id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } },
+    { id: 2, bounds: { x: 1920, y: 0, width: 1280, height: 720 } }
+  ]
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return displays
+        },
+        getCursorScreenPoint() {
+          return { x: 2300, y: 200 }
+        },
+        getDisplayNearestPoint() {
+          return displays[1]
+        }
+      },
+      desktopCapturer: {
+        getSources() {
+          return Promise.resolve([])
+        }
+      },
+      ipcMain: {
+        on() {}
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  service.setMainWindow({})
+  for (let attempt = 0; attempt < 4 && showOrder.length === 0; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  await service.start('translate')
+  assert.equal(showOrder[0], 'secondary')
+
+  for (let attempt = 0; attempt < 4 && showOrder.length < 2; attempt += 1) {
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+  assert.deepEqual(showOrder.slice(0, 2), ['secondary', 'primary'])
 })

@@ -107,6 +107,34 @@ export class ScreenOverlayService {
     return displays[0]
   }
 
+  private showOverlayWindows(): void {
+    const displays = screen.getAllDisplays()
+    const activeDisplayId = this.resolveActiveDisplay(displays).id
+    const deferredWindows: BrowserWindow[] = []
+
+    for (const [displayId, win] of this.overlayWindows.entries()) {
+      if (win.isDestroyed()) {
+        continue
+      }
+
+      if (displayId === activeDisplayId) {
+        win.show()
+      } else {
+        deferredWindows.push(win)
+      }
+    }
+
+    if (deferredWindows.length) {
+      void Promise.resolve().then(() => {
+        for (const win of deferredWindows) {
+          if (!win.isDestroyed()) {
+            win.show()
+          }
+        }
+      })
+    }
+  }
+
   private getOverlayRoute(): string {
     return '/screen-overlay'
   }
@@ -212,12 +240,7 @@ export class ScreenOverlayService {
         console.warn('[ScreenOverlayService] Failed to prepare overlay windows during start:', error)
       })
       this.broadcastSessionStart()
-
-      for (const win of this.overlayWindows.values()) {
-        if (!win.isDestroyed()) {
-          win.show()
-        }
-      }
+      this.showOverlayWindows()
       this.dispatchScreensToReadyWindows()
 
       void this.scheduleCaptureAllScreens().catch((error) => {
