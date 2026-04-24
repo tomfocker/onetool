@@ -144,6 +144,14 @@ function loadBilibiliDownloaderServiceModule(overrides = {}) {
         return overrides.fsModule || createFsMock()
       }
 
+      if (specifier === './ScreenRecorderService') {
+        return {
+          screenRecorderService: overrides.screenRecorderService || {
+            getFfmpegPath: () => 'C:\\toolbox\\ffmpeg.exe'
+          }
+        }
+      }
+
       if (specifier.startsWith('.')) {
         let resolvedPath = path.resolve(path.dirname(filePath), specifier)
         if (!path.extname(resolvedPath) && fs.existsSync(`${resolvedPath}.ts`)) {
@@ -184,6 +192,18 @@ function loadBilibiliDownloaderServiceModule(overrides = {}) {
 
   return executeModule(path.join(__dirname, 'BilibiliDownloaderService.ts'))
 }
+
+test('uses the bundled recorder ffmpeg path by default', () => {
+  const { BilibiliDownloaderService } = loadBilibiliDownloaderServiceModule({
+    screenRecorderService: {
+      getFfmpegPath: () => 'D:\\onetool\\resources\\ffmpeg.exe'
+    }
+  })
+
+  const service = new BilibiliDownloaderService()
+
+  assert.equal(service.getFfmpegPathImpl(), 'D:\\onetool\\resources\\ffmpeg.exe')
+})
 
 test('bootstrapQrLogin returns QR metadata and leaves login session logged out', async () => {
   const fetchCalls = []

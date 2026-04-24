@@ -202,15 +202,28 @@ export class ScreenRecorderService {
     let selectedPath = ''
     const staticFfmpegPath = typeof ffmpegStatic === 'string' ? ffmpegStatic : ''
     const unpackedStaticFfmpegPath = staticFfmpegPath ? toUnpackedAsarPath(staticFfmpegPath) : ''
+    const preparedWorkspaceFfmpegPath = path.resolve(__dirname, '../../../resources/ffmpeg/ffmpeg.exe')
 
     if (isDev) {
-      selectedPath = staticFfmpegPath
+      const possiblePaths = [
+        staticFfmpegPath,
+        preparedWorkspaceFfmpegPath
+      ]
+
+      for (const testPath of possiblePaths) {
+        if (testPath && fs.existsSync(testPath)) {
+          selectedPath = testPath
+          break
+        }
+      }
     } else {
       const possiblePaths = [
         path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
         path.join(process.resourcesPath, 'ffmpeg.exe'),
+        path.join(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe'),
         path.join(process.resourcesPath, 'node_modules', 'ffmpeg-static', 'ffmpeg.exe'),
         path.join(path.dirname(app.getPath('exe')), 'resources', 'ffmpeg.exe'),
+        path.join(path.dirname(app.getPath('exe')), 'resources', 'ffmpeg', 'ffmpeg.exe'),
         path.join(path.dirname(app.getPath('exe')), 'ffmpeg.exe'),
         unpackedStaticFfmpegPath,
         staticFfmpegPath

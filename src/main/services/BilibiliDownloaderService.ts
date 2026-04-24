@@ -8,6 +8,7 @@ import {
   normalizeBilibiliParsedLink,
   parseBilibiliLink
 } from '../../shared/bilibiliDownloader'
+import { screenRecorderService } from './ScreenRecorderService'
 import type {
   BilibiliDownloaderState,
   BilibiliExportMode,
@@ -369,7 +370,10 @@ export class BilibiliDownloaderService {
     this.fetchImpl = dependencies.fetch ?? (typeof fetch === 'function' ? fetch.bind(globalThis) : null)
     this.now = dependencies.now ?? (() => Date.now())
     this.downloadBinaryImpl = dependencies.downloadBinary ?? ((input) => this.downloadBinary(input))
-    this.getFfmpegPathImpl = dependencies.getFfmpegPath ?? (() => process.env.FFMPEG_PATH ?? 'ffmpeg')
+    this.getFfmpegPathImpl = dependencies.getFfmpegPath ?? (() => {
+      const bundledFfmpegPath = screenRecorderService.getFfmpegPath()
+      return process.env.FFMPEG_PATH ?? bundledFfmpegPath ?? 'ffmpeg'
+    })
     this.runFfmpegImpl = dependencies.runFfmpeg ?? ((input) => this.runFfmpeg(input))
   }
 

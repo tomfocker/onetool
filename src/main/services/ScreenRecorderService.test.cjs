@@ -850,3 +850,40 @@ test('getFfmpegPath prefers the unpacked ffmpeg binary in packaged builds', () =
     process.resourcesPath = originalResourcesPath
   }
 })
+
+test('getFfmpegPath falls back to the prepared workspace ffmpeg binary in development', () => {
+  const { ScreenRecorderService } = loadScreenRecorderServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: false,
+        getPath: () => 'D:/code/onetool'
+      }
+    },
+    childProcessModule: {
+      spawn() {
+        throw new Error('spawn should not run in this unit test')
+      },
+      execSync() {
+        return ''
+      }
+    }
+  })
+
+  const originalExistsSync = fs.existsSync
+  fs.existsSync = (candidatePath) => (
+    String(candidatePath).replace(/\\/g, '/')
+    === 'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
+  )
+
+  try {
+    const recorder = new ScreenRecorderService()
+    const result = recorder.getFfmpegPath()
+
+    assert.equal(
+      result.replace(/\\/g, '/'),
+      'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
+    )
+  } finally {
+    fs.existsSync = originalExistsSync
+  }
+})

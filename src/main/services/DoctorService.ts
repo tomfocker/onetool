@@ -1,4 +1,4 @@
-import { execSync } from 'child_process'
+import { execFileSync, execSync } from 'child_process'
 import fs from 'fs'
 import { logger } from '../utils/logger'
 import { IpcResponse } from '../../shared/types'
@@ -41,12 +41,17 @@ export class DoctorService {
 
   private checkFFmpeg() {
     try {
-      const path = screenRecorderService.getFfmpegPath()
-      if (fs.existsSync(path)) {
-        execSync(`"${path}" -version`, { windowsHide: true, timeout: 2000 })
-        return { ok: true, path }
+      const ffmpegPath = screenRecorderService.getFfmpegPath()
+      if (!ffmpegPath) {
+        return { ok: false, error: '未解析到 FFmpeg 路径' }
       }
-      return { ok: false, error: 'FFmpeg 路径无效' }
+
+      if (!fs.existsSync(ffmpegPath)) {
+        return { ok: false, path: ffmpegPath, error: 'FFmpeg 二进制缺失' }
+      }
+
+      execFileSync(ffmpegPath, ['-version'], { windowsHide: true, timeout: 2000 })
+      return { ok: true, path: ffmpegPath }
     } catch (e) {
       return { ok: false, error: 'FFmpeg 无法执行或损坏' }
     }
@@ -54,7 +59,13 @@ export class DoctorService {
 
   private checkPowerShell() {
     try {
-      const policy = execSync('powershell Get-ExecutionPolicy', { windowsHide: true }).toString().trim()
+      const policy = execFileSync(
+        'powershell.exe',
+        ['-NoProfile', '-NonInteractive', '-Command', 'Get-ExecutionPolicy'],
+        { windowsHide: true }
+      )
+        .toString()
+        .trim()
       const isOk = !['Restricted', 'AllSigned'].includes(policy)
       return { ok: isOk, executionPolicy: policy, error: isOk ? undefined : '执行策略受限' }
     } catch (e) {

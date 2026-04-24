@@ -4,6 +4,7 @@ dist
 release
 release_new
 release_preview
+release_preview_*/
 release_rc*/
 .worktrees
 
@@ -28,3 +29,4 @@ resources/model-download/python/**/test/
 resources/model-download/python/**/tests/
 eng.traineddata
 chi_sim.traineddata
+resources/ffmpeg/
