@@ -852,11 +852,13 @@ test('getFfmpegPath prefers the unpacked ffmpeg binary in packaged builds', () =
 })
 
 test('getFfmpegPath prefers the prepared workspace ffmpeg binary over ffmpeg-static in development', () => {
+  const repoRoot = path.resolve(__dirname, '../../..')
+  const expectedPreparedFfmpegPath = path.join(repoRoot, 'resources', 'ffmpeg', 'ffmpeg.exe')
   const { ScreenRecorderService } = loadScreenRecorderServiceModule({
     electronModule: {
       app: {
         isPackaged: false,
-        getPath: () => 'D:/code/onetool'
+        getPath: () => repoRoot
       }
     },
     childProcessModule: {
@@ -874,7 +876,7 @@ test('getFfmpegPath prefers the prepared workspace ffmpeg binary over ffmpeg-sta
     const normalizedPath = String(candidatePath).replace(/\\/g, '/')
     return (
       normalizedPath === 'C:/tmp/ffmpeg.exe'
-      || normalizedPath === 'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
+      || normalizedPath === expectedPreparedFfmpegPath.replace(/\\/g, '/')
     )
   }
 
@@ -884,7 +886,7 @@ test('getFfmpegPath prefers the prepared workspace ffmpeg binary over ffmpeg-sta
 
     assert.equal(
       result.replace(/\\/g, '/'),
-      'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
+      expectedPreparedFfmpegPath.replace(/\\/g, '/')
     )
   } finally {
     fs.existsSync = originalExistsSync
