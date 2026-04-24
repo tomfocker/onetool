@@ -2,9 +2,9 @@
 
 Windows 本地高频小工具箱。
 
-`v0.1.0` 已发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
+`v0.2.0` 已发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
 
-![Version](https://img.shields.io/badge/version-v0.1.0-2563eb.svg)
+![Version](https://img.shields.io/badge/version-v0.2.0-2563eb.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-0f172a.svg)
 ![License](https://img.shields.io/badge/license-MIT-16a34a.svg)
 
@@ -53,15 +53,15 @@ Windows 本地高频小工具箱。
 
 当前发布页提供两种 Windows 包：
 
-- 安装版：`onetool-0.1.0-win-x64-setup.exe`
-- 便携版：`onetool-0.1.0-win-x64-portable.exe`
+- 安装版：`onetool-0.2.0-win-x64-setup.exe`
+- 便携版：`onetool-0.2.0-win-x64-portable.exe`
 
 选择建议：
 
 - 长期使用，优先安装版
 - 临时试用、随身携带或不想安装，使用便携版
 
-当前 `v0.1.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
+当前 `v0.2.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
 
 更新行为：
 
@@ -70,11 +70,11 @@ Windows 本地高频小工具箱。
 
 ## 当前版本定位
 
-`v0.1.0` 是首个公开 Windows 版本，当前发布重点是：
+`v0.2.0` 是首个明显偏向基础能力升级的 Windows 版本，当前发布重点是：
 
-- 跑通完整 Windows 发布链路
-- 提供安装版和便携版
-- 保持应用内更新与 GitHub Release 对齐
+- 建立全局 LLM 能力层和首批 AI 增强工具
+- 收口主进程启动链与 settings/store 迁移基线
+- 保持 Windows 安装版更新链路与 GitHub Release 对齐
 
 暂不承诺：
 

@@ -51,10 +51,10 @@ const {
   deriveInitialRecorderSelectionRect
 } = loadUseRecorderSelectionModule()
 
-test('deriveInitialRecorderSelectionRect maps absolute bounds into the current display viewport', () => {
+test('deriveInitialRecorderSelectionRect reuses authoritative session bounds directly', () => {
   assert.deepEqual(
     JSON.parse(JSON.stringify(deriveInitialRecorderSelectionRect(
-      '?dx=1920&dy=0&initial=%7B%22x%22%3A2000%2C%22y%22%3A100%2C%22width%22%3A320%2C%22height%22%3A180%7D'
+      { x: 80, y: 100, width: 320, height: 180 }
     ))),
     {
       x: 80,
