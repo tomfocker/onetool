@@ -206,8 +206,8 @@ export class ScreenRecorderService {
 
     if (isDev) {
       const possiblePaths = [
-        staticFfmpegPath,
-        preparedWorkspaceFfmpegPath
+        preparedWorkspaceFfmpegPath,
+        staticFfmpegPath
       ]
 
       for (const testPath of possiblePaths) {

@@ -851,7 +851,7 @@ test('getFfmpegPath prefers the unpacked ffmpeg binary in packaged builds', () =
   }
 })
 
-test('getFfmpegPath falls back to the prepared workspace ffmpeg binary in development', () => {
+test('getFfmpegPath prefers the prepared workspace ffmpeg binary over ffmpeg-static in development', () => {
   const { ScreenRecorderService } = loadScreenRecorderServiceModule({
     electronModule: {
       app: {
@@ -870,10 +870,13 @@ test('getFfmpegPath falls back to the prepared workspace ffmpeg binary in develo
   })
 
   const originalExistsSync = fs.existsSync
-  fs.existsSync = (candidatePath) => (
-    String(candidatePath).replace(/\\/g, '/')
-    === 'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
-  )
+  fs.existsSync = (candidatePath) => {
+    const normalizedPath = String(candidatePath).replace(/\\/g, '/')
+    return (
+      normalizedPath === 'C:/tmp/ffmpeg.exe'
+      || normalizedPath === 'D:/code/onetool/resources/ffmpeg/ffmpeg.exe'
+    )
+  }
 
   try {
     const recorder = new ScreenRecorderService()
