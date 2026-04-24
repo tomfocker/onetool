@@ -15,6 +15,8 @@ import {
 } from '../../shared/spaceCleanup'
 import { logger } from '../utils/logger'
 import { getFastScanEligibility } from '../utils/windowsVolume'
+import { isProcessElevated } from '../utils/windowsAdmin'
+import { ElevatedNtfsScanRunner } from './ElevatedNtfsScanRunner'
 import {
   NtfsFastScannerBridge,
   type NtfsFastScannerBridgeEvent,
@@ -28,7 +30,9 @@ type SpaceCleanupServiceDependencies = {
   shellModule?: typeof shell
   clipboardModule?: typeof clipboard
   getFastScanEligibility?: typeof getFastScanEligibility
+  isProcessElevated?: typeof isProcessElevated
   ntfsFastScannerBridge?: Pick<NtfsFastScannerBridge, 'start'>
+  elevatedNtfsScanRunner?: Pick<ElevatedNtfsScanRunner, 'start'>
   now?: () => number
   createId?: () => string
   yieldEvery?: number
@@ -67,6 +71,21 @@ function getErrorMessage(error: unknown) {
   }
 
   return String(error)
+}
+
+function normalizeNtfsFastScanFailureMessage(message: string): string {
+  if (/管理员权限请求已取消/i.test(message)) {
+    return '你取消了管理员权限请求，NTFS 极速扫描未启动'
+  }
+
+  if (
+    /failed to open NTFS volume/i.test(message) &&
+    (/(access is denied|拒绝访问)/i.test(message) || /\bos error 5\b/i.test(message))
+  ) {
+    return '当前进程没有管理员权限，NTFS 极速扫描需要提升权限后才能直接访问磁盘卷'
+  }
+
+  return message
 }
 
 function treeHasSkippedEntries(node: SpaceCleanupNode | null | undefined): boolean {
@@ -114,7 +133,9 @@ export class SpaceCleanupService {
   private readonly shellModule: typeof shell
   private readonly clipboardModule: typeof clipboard
   private readonly getFastScanEligibility: typeof getFastScanEligibility
+  private readonly isProcessElevated: typeof isProcessElevated
   private readonly ntfsFastScannerBridge: Pick<NtfsFastScannerBridge, 'start'>
+  private readonly elevatedNtfsScanRunner: Pick<ElevatedNtfsScanRunner, 'start'>
   private readonly now: () => number
   private readonly createId: () => string
   private readonly yieldEvery: number
@@ -126,9 +147,11 @@ export class SpaceCleanupService {
     this.shellModule = dependencies.shellModule ?? shell
     this.clipboardModule = dependencies.clipboardModule ?? clipboard
     this.getFastScanEligibility = dependencies.getFastScanEligibility ?? getFastScanEligibility
+    this.isProcessElevated = dependencies.isProcessElevated ?? isProcessElevated
     this.ntfsFastScannerBridge = dependencies.ntfsFastScannerBridge ?? new NtfsFastScannerBridge({
       scannerPath: resolveNtfsFastScannerPath(this.pathModule)
     })
+    this.elevatedNtfsScanRunner = dependencies.elevatedNtfsScanRunner ?? new ElevatedNtfsScanRunner()
     this.now = dependencies.now ?? Date.now
     this.createId = dependencies.createId ?? randomUUID
     this.yieldEvery = dependencies.yieldEvery ?? 50
@@ -206,7 +229,12 @@ export class SpaceCleanupService {
     }
 
     if (eligibility.mode === 'ntfs-fast') {
-      return this.startNtfsFastScan(rootPath)
+      const elevated = await this.isProcessElevated()
+      if (elevated) {
+        return this.startNtfsFastScan(rootPath)
+      }
+
+      return this.startElevatedNtfsFastScan(rootPath)
     }
 
     return this.startFilesystemScan(rootPath, eligibility.reason)
@@ -341,10 +369,13 @@ export class SpaceCleanupService {
       })
     } catch (error) {
       logger.warn('SpaceCleanup: ntfs-fast startup failed, falling back to filesystem scan', error)
-      void this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${getErrorMessage(error)}`)
+      const message = normalizeNtfsFastScanFailureMessage(getErrorMessage(error))
+      void this.startFilesystemScan(rootPath, `NTFS 极速扫描不可用，已回退到普通扫描：${message}`)
       return { success: true, data: this.currentSession }
     }
     this.activeNtfsFastScanRun = run
+    void this.attachNtfsFastScanRun(rootPath, run)
+    return { success: true, data: this.currentSession }
 
     void run.done.then(() => {
       if (this.currentSession.status !== 'scanning') {
@@ -360,7 +391,7 @@ export class SpaceCleanupService {
       }
       this.emit('space-cleanup-complete', this.currentSession)
     }).catch((error) => {
-      const message = getErrorMessage(error)
+      const message = normalizeNtfsFastScanFailureMessage(getErrorMessage(error))
       if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
         this.currentSession = {
           ...this.currentSession,
@@ -380,6 +411,68 @@ export class SpaceCleanupService {
     })
 
     return { success: true, data: this.currentSession }
+  }
+
+  private async startElevatedNtfsFastScan(rootPath: string): Promise<IpcResponse<SpaceCleanupSession>> {
+    this.currentSession = {
+      ...this.currentSession,
+      rootPath,
+      scanMode: 'ntfs-fast',
+      scanModeReason: '正在请求管理员权限以执行 NTFS 极速扫描',
+      isPartial: true,
+      error: null
+    }
+    this.emit('space-cleanup-progress', this.currentSession)
+
+    let run: NtfsFastScannerRunHandle
+    try {
+      run = await this.elevatedNtfsScanRunner.start(rootPath, (event) => {
+        this.handleNtfsFastScanEvent(event)
+      })
+    } catch (error) {
+      logger.warn('SpaceCleanup: elevated ntfs-fast startup failed, falling back to filesystem scan', error)
+      const message = normalizeNtfsFastScanFailureMessage(getErrorMessage(error))
+      return this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
+    }
+
+    this.activeNtfsFastScanRun = run
+    void this.attachNtfsFastScanRun(rootPath, run)
+    return { success: true, data: this.currentSession }
+  }
+
+  private async attachNtfsFastScanRun(rootPath: string, run: NtfsFastScannerRunHandle): Promise<void> {
+    await run.done.then(() => {
+      if (this.currentSession.status !== 'scanning') {
+        return
+      }
+
+      this.currentSession = {
+        ...this.currentSession,
+        status: 'completed',
+        finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString(),
+        isPartial: shouldKeepNtfsSessionPartial(this.currentSession),
+        error: null
+      }
+      this.emit('space-cleanup-complete', this.currentSession)
+    }).catch((error) => {
+      const message = normalizeNtfsFastScanFailureMessage(getErrorMessage(error))
+      if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
+        this.currentSession = {
+          ...this.currentSession,
+          status: 'cancelled',
+          finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
+        }
+        this.emit('space-cleanup-complete', this.currentSession)
+        return
+      }
+
+      logger.warn('SpaceCleanup: ntfs-fast scan failed after start, falling back to filesystem scan', error)
+      void this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
+    }).finally(() => {
+      if (this.activeNtfsFastScanRun === run) {
+        this.activeNtfsFastScanRun = null
+      }
+    })
   }
 
   private emit(channel: string, payload: SpaceCleanupSession) {

@@ -76,6 +76,12 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
       }
     }
 
+    if (specifier === '../utils/windowsAdmin') {
+      return {
+        isProcessElevated: overrides.isProcessElevated || (async () => true)
+      }
+    }
+
     if (specifier === './NtfsFastScannerBridge') {
       const defaultRunHandle = {
         done: Promise.resolve(),
@@ -89,6 +95,23 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
             }
 
             return defaultRunHandle
+          }
+        }
+      }
+    }
+
+    if (specifier === './ElevatedNtfsScanRunner') {
+      return {
+        ElevatedNtfsScanRunner: class ElevatedNtfsScanRunnerMock {
+          start(rootPath, onEvent) {
+            if (overrides.elevatedRunner?.start) {
+              return overrides.elevatedRunner.start(rootPath, onEvent)
+            }
+
+            return Promise.resolve({
+              done: Promise.resolve(),
+              cancel() {}
+            })
           }
         }
       }
@@ -125,9 +148,14 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
 test('package build config includes ntfs fast scanner resource', () => {
   const pkg = require(path.join(__dirname, '../../../package.json'))
   const entry = pkg.build.win.extraResources.find((item) => item.from === 'resources/space-scan/ntfs-fast-scan.exe')
+  const helperEntry = pkg.build.win.extraResources.find(
+    (item) => item.from === 'resources/space-scan/run-elevated-ntfs-fast-scan.ps1'
+  )
 
   assert.ok(entry)
   assert.equal(entry.to, 'space-scan/ntfs-fast-scan.exe')
+  assert.ok(helperEntry)
+  assert.equal(helperEntry.to, 'space-scan/run-elevated-ntfs-fast-scan.ps1')
 })
 
 test('idle space cleanup session includes scan mode metadata', () => {
@@ -243,7 +271,94 @@ test('startScan keeps filesystem mode and ineligibility reason for non-eligible 
   assert.equal(result.data.summary.totalBytes, 7)
 })
 
-test('startScan falls back to filesystem scan when fast eligibility lookup fails', async () => {
+test('startScan still attempts ntfs-fast when fsutil-style eligibility probing fails', async () => {
+  let fastStartCalls = 0
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({
+      mode: 'ntfs-fast',
+      reason: 'fsutil 探测失败，无法预判文件系统；将先尝试 NTFS 极速扫描，失败后自动回退普通扫描'
+    }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        fastStartCalls += 1
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 21,
+            scannedFiles: 1,
+            scannedDirectories: 1,
+            skippedEntries: 0,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\', 21)
+        })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5400, createId: () => 'session-fast-after-fsutil-fail' })
+  const result = await service.startScan('D:\\')
+  await Promise.resolve()
+  const finalSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(fastStartCalls, 1)
+  assert.equal(finalSession.data.scanMode, 'ntfs-fast')
+  assert.equal(finalSession.data.status, 'completed')
+  assert.equal(finalSession.data.summary.totalBytes, 21)
+})
+
+test('startScan requests elevated ntfs-fast execution when current process is not elevated', async () => {
+  let elevatedCalls = 0
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    isProcessElevated: async () => false,
+    elevatedRunner: {
+      async start(_rootPath, onEvent) {
+        elevatedCalls += 1
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 222,
+            scannedFiles: 2,
+            scannedDirectories: 1,
+            skippedEntries: 0,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\', 222)
+        })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5410, createId: () => 'session-fast-elevated-1' })
+  const result = await service.startScan('D:\\')
+  await Promise.resolve()
+  const finalSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(elevatedCalls, 1)
+  assert.equal(finalSession.data.scanMode, 'ntfs-fast')
+  assert.equal(finalSession.data.status, 'completed')
+  assert.equal(finalSession.data.summary.totalBytes, 222)
+})
+
+test('startScan falls back to filesystem scan when fast eligibility lookup throws before mode resolution', async () => {
   const entries = {
     'D:\\': [createDirent('fallback.bin', 'file')]
   }
@@ -337,6 +452,81 @@ test('startScan falls back to filesystem scan when a started ntfs-fast run fails
   assert.equal(finalSession.data.scanMode, 'filesystem')
   assert.equal(finalSession.data.scanModeReason, 'NTFS 极速扫描失败，已回退到普通扫描：native worker crashed')
   assert.equal(finalSession.data.summary.totalBytes, 17)
+})
+
+test('startScan reports a friendly administrator hint when ntfs-fast volume access is denied', async () => {
+  const entries = {
+    'D:\\': [createDirent('fallback-after-denied.bin', 'file')]
+  }
+  const stats = {
+    'D:\\': { isDirectory: () => true, size: 0 },
+    'D:\\fallback-after-denied.bin': { isDirectory: () => false, size: 19 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start() {
+        return {
+          done: Promise.reject(new Error('scan failed: failed to open NTFS volume \\\\.\\D:: 拒绝访问。 (os error 5)')),
+          cancel() {}
+        }
+      }
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5890, createId: () => 'session-filesystem-5' })
+  const result = await service.startScan('D:\\')
+  await waitForAsyncTick()
+  const finalSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(finalSession.data.scanMode, 'filesystem')
+  assert.equal(
+    finalSession.data.scanModeReason,
+    'NTFS 极速扫描失败，已回退到普通扫描：当前进程没有管理员权限，NTFS 极速扫描需要提升权限后才能直接访问磁盘卷'
+  )
+  assert.equal(finalSession.data.summary.totalBytes, 19)
+})
+
+test('startScan reports a friendly reason when administrator permission request is cancelled', async () => {
+  const entries = {
+    'D:\\': [createDirent('fallback-after-uac-cancel.bin', 'file')]
+  }
+  const stats = {
+    'D:\\': { isDirectory: () => true, size: 0 },
+    'D:\\fallback-after-uac-cancel.bin': { isDirectory: () => false, size: 23 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    isProcessElevated: async () => false,
+    elevatedRunner: {
+      async start() {
+        throw new Error('管理员权限请求已取消')
+      }
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5905, createId: () => 'session-filesystem-uac-cancel' })
+  const result = await service.startScan('D:\\')
+  const finalSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(finalSession.data.scanMode, 'filesystem')
+  assert.equal(
+    finalSession.data.scanModeReason,
+    'NTFS 极速扫描失败，已回退到普通扫描：你取消了管理员权限请求，NTFS 极速扫描未启动'
+  )
+  assert.equal(finalSession.data.summary.totalBytes, 23)
 })
 
 test('cancelScan cancels an active ntfs-fast run through the bridge handle', async () => {

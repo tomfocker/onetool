@@ -89,7 +89,7 @@ test('getFastScanEligibility returns filesystem mode for non-NTFS volumes with a
   assert.match(result.reason, /exFAT/i)
 })
 
-test('getFastScanEligibility returns filesystem mode when the fsutil probe fails', async () => {
+test('getFastScanEligibility still attempts ntfs-fast mode when the fsutil probe fails', async () => {
   const { getFastScanEligibility } = loadWindowsVolumeModule({
     platform: 'win32',
     execFile: async () => {
@@ -99,8 +99,9 @@ test('getFastScanEligibility returns filesystem mode when the fsutil probe fails
 
   const result = await getFastScanEligibility('D:\\')
 
-  assert.equal(result.mode, 'filesystem')
+  assert.equal(result.mode, 'ntfs-fast')
   assert.match(result.reason, /fsutil/i)
+  assert.match(result.reason, /自动回退/)
 })
 
 test('getFastScanEligibility probes root volumes with a drive specifier instead of a backslash path', async () => {

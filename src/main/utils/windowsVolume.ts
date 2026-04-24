@@ -112,8 +112,8 @@ export async function getFastScanEligibility(
     }
   } catch {
     return {
-      mode: 'filesystem',
-      reason: 'NTFS 极速扫描仅支持 NTFS，fsutil 探测失败，当前文件系统未知'
+      mode: 'ntfs-fast',
+      reason: 'fsutil 探测失败，无法预判文件系统；将先尝试 NTFS 极速扫描，失败后自动回退普通扫描'
     }
   }
 }
