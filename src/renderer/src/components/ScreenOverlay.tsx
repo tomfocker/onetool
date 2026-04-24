@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Loader2, Copy, Check } from 'lucide-react'
 import type { ScreenOverlayLineResult, ScreenOverlayMode, ScreenOverlaySessionStartPayload } from '../../../shared/llm'
 import { buildOcrExtractedText, getOcrCanvasMetrics } from '../../../shared/screenOverlay'
-import { beginUtilityWindowSession } from '../../../shared/utilityWindowRuntime'
 
 interface SelectionState {
   isSelecting: boolean
@@ -44,28 +43,18 @@ export const ScreenOverlay: React.FC = () => {
   const imageRef = useRef<HTMLImageElement>(null)
 
   const resetOverlayState = useCallback((nextMode?: ScreenOverlayMode) => {
-    const nextSession = beginUtilityWindowSession({
-      previous: {
-        mode,
-        status: error ? 'error' : isLoading ? 'loading' : overlayResults?.length || ocrExtractedText ? 'completed' : 'idle',
-        error,
-        copied,
-        overlayResults: overlayResults ?? []
-      },
-      incoming: {
-        mode: nextMode ?? mode
-      }
-    })
-    setMode(nextSession.mode)
+    if (nextMode) {
+      setMode(nextMode)
+    }
     setSelection({ isSelecting: false, startX: 0, startY: 0, endX: 0, endY: 0 })
     setSelectionRect(null)
-    setOverlayResults(nextSession.overlayResults.length ? nextSession.overlayResults : null)
+    setOverlayResults(null)
     setOcrExtractedText(null)
-    setError(nextSession.error)
+    setError(null)
     setIsLoading(false)
-    setCopied(nextSession.copied)
+    setCopied(false)
     setOverlayScale({ x: 1, y: 1 })
-  }, [copied, error, isLoading, mode, ocrExtractedText, overlayResults])
+  }, [])
 
   useEffect(() => {
     if (!window.electron?.screenOverlay) return
@@ -77,7 +66,7 @@ export const ScreenOverlay: React.FC = () => {
     })
     window.electron.screenOverlay.notifyReady()
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') window.electron?.screenOverlay?.close?.()
+      if (e.key === 'Escape') handleClose()
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => {
@@ -165,14 +154,17 @@ export const ScreenOverlay: React.FC = () => {
       } else {
         setError(res?.error || '识别失败')
       }
-    } catch (error) {
-      setError((error as Error).message || '网络请求异常')
+    } catch (caughtError) {
+      setError((caughtError as Error).message || '网络请求异常')
     } finally {
       setIsLoading(false)
     }
-  }, [selection.isSelecting, selection.startX, selection.startY, selection.endX, selection.endY])
+  }, [mode, selection.endX, selection.endY, selection.isSelecting, selection.startX, selection.startY])
 
-  const handleClose = () => window.electron?.screenOverlay?.close?.()
+  const handleClose = () => {
+    resetOverlayState(mode)
+    window.electron?.screenOverlay?.close?.()
+  }
 
   const handleCopy = async () => {
     if (!ocrExtractedText) return
@@ -181,7 +173,7 @@ export const ScreenOverlay: React.FC = () => {
     window.setTimeout(() => setCopied(false), 1200)
   }
 
-  const handleReset = () => resetOverlayState()
+  const handleReset = () => resetOverlayState(mode)
 
   const { x, y, width, height } = getSelectionRect()
   const hasSelection = width > 0 && height > 0
@@ -205,7 +197,7 @@ export const ScreenOverlay: React.FC = () => {
 
       <div className='fixed inset-0 bg-black/30 pointer-events-none' />
 
-      {hasSelection && !overlayResults && (
+      {hasSelection && !overlayResults && !ocrExtractedText && (
         <div className='fixed border-2 border-white/80 shadow-lg pointer-events-none' style={{ left: x, top: y, width, height }}>
           <div className='absolute -top-1 -left-1 w-3 h-3 bg-white rounded-full' />
           <div className='absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full' />
@@ -246,7 +238,7 @@ export const ScreenOverlay: React.FC = () => {
             const rawTop = line.y / overlayScale.y
             const rawWidth = line.width / overlayScale.x
             const rawHeight = line.height / overlayScale.y
-            const displayText = mode === 'translate' ? (line.translatedText || line.text) : line.text
+            const displayText = line.translatedText || line.text
             const boxWidth = clamp(Math.max(rawWidth, displayText.length > 16 ? 180 : 120), 80, Math.max(selectionRect.width - rawLeft, 80))
             const boxHeight = Math.max(rawHeight, displayText.length > 30 ? 52 : 32)
             const fontSize = clamp(rawHeight * 0.58, 12, 28)
@@ -270,33 +262,14 @@ export const ScreenOverlay: React.FC = () => {
                     {displayText}
                   </p>
                 </div>
-                {mode === 'translate' && (
-                  <div className='absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50'>
-                    <div className='bg-zinc-900 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-white/10'>
-                      {line.text}
-                    </div>
+                <div className='absolute bottom-full left-1/2 -translate-x-1/2 mb-1 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-50'>
+                  <div className='bg-zinc-900 text-white text-[10px] px-2 py-1 rounded shadow-lg whitespace-nowrap border border-white/10'>
+                    {line.text}
                   </div>
-                )}
-                {mode === 'ocr' && (
-                  <div className='absolute -top-2 -right-2 rounded-full bg-blue-500 text-white text-[10px] px-2 py-0.5 shadow'>
-                    OCR
-                  </div>
-                )}
-                {mode === 'translate' && (
-                  <div className='absolute -top-2 -right-2 rounded-full bg-purple-500 text-white text-[10px] px-2 py-0.5 shadow'>
-                    翻译
-                  </div>
-                )}
+                </div>
               </div>
             )
           })}
-
-          <div className='absolute -top-12 left-0 flex items-center gap-2 rounded-full bg-black/55 px-4 py-2 text-white shadow-lg backdrop-blur'>
-            <span className='text-xs uppercase tracking-[0.18em] text-white/70'>{mode === 'translate' ? 'Translate' : 'OCR'}</span>
-            <span className='text-sm font-medium'>
-              {mode === 'translate' ? '译文已按原位置贴回' : '已按原位置提取文字'}
-            </span>
-          </div>
 
           <button
             className='absolute -top-4 -right-4 w-8 h-8 rounded-full bg-zinc-900/60 backdrop-blur text-white flex items-center justify-center shadow pointer-events-auto hover:bg-zinc-900 transition-colors'
@@ -345,16 +318,6 @@ export const ScreenOverlay: React.FC = () => {
                 重新框选
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {!selection.isSelecting && !isLoading && !overlayResults && !ocrExtractedText && (
-        <div className='fixed inset-0 flex items-center justify-center pointer-events-none z-40'>
-          <div className='bg-white/60 dark:bg-black/40 backdrop-blur-xl rounded-2xl px-8 py-4 shadow-lg border border-white/30 dark:border-white/10'>
-            <p className='text-foreground text-lg font-medium'>
-              {mode === 'translate' ? '选择翻译区域（ESC / 右键退出）' : '选择文字提取区域（ESC / 右键退出）'}
-            </p>
           </div>
         </div>
       )}

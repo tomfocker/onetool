@@ -5,6 +5,7 @@ import { IpcResponse } from '../../shared/types'
 import type { ScreenOverlayMode, ScreenOverlaySessionStartPayload } from '../../shared/llm'
 import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 import { ocrService } from './OcrService'
+import { logger } from '../utils/logger'
 
 export class ScreenOverlayService {
   private overlayWindows: Map<number, BrowserWindow> = new Map()
@@ -34,6 +35,12 @@ export class ScreenOverlayService {
       for (const [displayId, win] of this.overlayWindows.entries()) {
         if (!win.isDestroyed() && event.sender.id === win.webContents.id) {
           this.readyDisplays.add(displayId)
+          logger.info('[ScreenOverlayService] Renderer ready', {
+            displayId,
+            sessionActive: this.sessionActive,
+            hasCachedScreenshot: this.screenMap.has(displayId),
+            mode: this.currentMode
+          })
           if (this.sessionActive) {
             win.webContents.send('screen-overlay:session-start', { mode: this.currentMode } satisfies ScreenOverlaySessionStartPayload)
           }
@@ -78,7 +85,12 @@ export class ScreenOverlayService {
           this.screenMap.set(display.id, source.thumbnail.toDataURL())
         }
       }
+      logger.info('[ScreenOverlayService] Captured screenshots', {
+        displayCount: displays.length,
+        cachedDisplayIds: Array.from(this.screenMap.keys())
+      })
     } catch (error) {
+      logger.error('[ScreenOverlayService] Batch capture failed', error)
       console.error('[ScreenOverlayService] Batch capture failed:', error)
     }
   }
@@ -223,15 +235,44 @@ export class ScreenOverlayService {
       const win = this.overlayWindows.get(displayId)
       const dataUrl = this.screenMap.get(displayId)
       if (win && !win.isDestroyed() && dataUrl) {
+        logger.info('[ScreenOverlayService] Dispatching screenshot to ready window', {
+          displayId,
+          mode: this.currentMode,
+          webContentsId: win.webContents.id
+        })
         win.webContents.send('screen-overlay:screenshot', dataUrl)
       }
     }
+  }
+
+  private refreshScreensAfterHide(): void {
+    const pendingCaptureTask = this.captureScreensTask
+    if (pendingCaptureTask) {
+      void pendingCaptureTask.finally(() => {
+        if (!this.sessionActive) {
+          void this.scheduleCaptureAllScreens().catch((error) => {
+            console.error('[ScreenOverlayService] Deferred screen capture after close failed:', error)
+          })
+        }
+      })
+      return
+    }
+
+    void this.scheduleCaptureAllScreens().catch((error) => {
+      console.error('[ScreenOverlayService] Deferred screen capture after close failed:', error)
+    })
   }
 
   async start(mode: ScreenOverlayMode = 'translate'): Promise<IpcResponse<any>> {
     try {
       this.currentMode = mode
       this.sessionActive = true
+      logger.info('[ScreenOverlayService] Starting session', {
+        mode,
+        overlayWindowCount: this.overlayWindows.size,
+        readyDisplayCount: this.readyDisplays.size,
+        cachedDisplayIds: Array.from(this.screenMap.keys())
+      })
       void ocrService.warmup().catch((error) => {
         console.warn('[ScreenOverlayService] OCR warmup failed:', error)
       })
@@ -242,10 +283,11 @@ export class ScreenOverlayService {
       this.broadcastSessionStart()
       this.showOverlayWindows()
       this.dispatchScreensToReadyWindows()
-
-      void this.scheduleCaptureAllScreens().catch((error) => {
-        console.error('[ScreenOverlayService] Deferred screen capture failed:', error)
-      })
+      if (this.screenMap.size === 0) {
+        void this.scheduleCaptureAllScreens().catch((error) => {
+          console.error('[ScreenOverlayService] Deferred screen capture failed:', error)
+        })
+      }
 
       return { success: true, data: {} }
     } catch (error) {
@@ -256,9 +298,14 @@ export class ScreenOverlayService {
   close(): IpcResponse {
     try {
       this.sessionActive = false
+      logger.info('[ScreenOverlayService] Closing session', {
+        overlayWindowCount: this.overlayWindows.size,
+        readyDisplayCount: this.readyDisplays.size
+      })
       this.overlayWindows.forEach(win => {
         if (!win.isDestroyed()) win.hide()
       })
+      this.refreshScreensAfterHide()
       return { success: true }
     } catch (error) {
       return { success: false, error: (error as Error).message }

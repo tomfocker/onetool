@@ -1,0 +1,28 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+test('ScreenOverlay keeps a simple single-session interaction model', () => {
+  const filePath = path.join(__dirname, 'ScreenOverlay.tsx')
+  const source = fs.readFileSync(filePath, 'utf8')
+
+  assert.doesNotMatch(source, /beginUtilityWindowSession/)
+  assert.doesNotMatch(source, /正在准备截图背景/)
+  assert.doesNotMatch(source, /选择翻译区域（ESC \/ 右键退出）/)
+  assert.doesNotMatch(source, /选择文字提取区域（ESC \/ 右键退出）/)
+  assert.doesNotMatch(source, /const \[imageReady, setImageReady\] = useState/)
+  assert.doesNotMatch(source, /const \[sessionRevision, setSessionRevision\] = useState/)
+  assert.doesNotMatch(source, /const completingSelectionRef = useRef/)
+  assert.doesNotMatch(source, /ensureImageElementReady/)
+  assert.doesNotMatch(source, /onPointerDown=/)
+
+  assert.match(source, /const resetOverlayState = useCallback\(\(nextMode\?: ScreenOverlayMode\) => {\s*if \(nextMode\) {\s*setMode\(nextMode\)\s*}\s*setSelection\(\{ isSelecting: false, startX: 0, startY: 0, endX: 0, endY: 0 }\)\s*setSelectionRect\(null\)\s*setOverlayResults\(null\)\s*setOcrExtractedText\(null\)\s*setError\(null\)\s*setIsLoading\(false\)\s*setCopied\(false\)\s*setOverlayScale\(\{ x: 1, y: 1 }\)\s*}, \[\]\)/s)
+  assert.match(source, /const handleClose = \(\) => {\s*resetOverlayState\(mode\)\s*window\.electron\?\.screenOverlay\?\.close\?\.\(\)\s*}/s)
+  assert.match(source, /if \(e\.key === 'Escape'\) handleClose\(\)/)
+  assert.match(source, /if \(isLoading \|\| overlayResults \|\| ocrExtractedText\) return/)
+  assert.match(source, /onMouseDown=\{handleMouseDown\}/)
+  assert.match(source, /onMouseMove=\{handleMouseMove\}/)
+  assert.match(source, /onMouseUp=\{handleMouseUp\}/)
+  assert.match(source, /onMouseLeave=\{handleMouseUp\}/)
+})

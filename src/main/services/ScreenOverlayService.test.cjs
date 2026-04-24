@@ -35,6 +35,7 @@ function loadScreenOverlayServiceModule(mocks) {
     if (request === 'electron') return mocks.electron
     if (request === '@electron-toolkit/utils') return mocks.electronToolkitUtils
     if (request === '../utils/windowSecurity') return mocks.windowSecurity
+    if (request === '../utils/logger') return mocks.loggerModule || { logger: { info() {}, warn() {}, error() {}, debug() {} } }
     if (request === '../../shared/types' || request === '../../shared/llm') return {}
     if (request === './OcrService') return mocks.ocrServiceModule
     return originalLoad.call(this, request, parent, isMain)
@@ -486,6 +487,9 @@ test('setMainWindow prewarms screenshot cache before the first overlay session',
   assert.equal(service.screenMap.get(1), 'data:image/png;base64,prewarm')
 
   await service.start('translate')
+  assert.equal(captureCallCount, 1)
+
+  await service.close()
   assert.equal(captureCallCount, 2)
 
   secondCaptureDeferred.resolve([
@@ -499,11 +503,10 @@ test('setMainWindow prewarms screenshot cache before the first overlay session',
   ])
 })
 
-test('restart reuses the previous screenshot cache before async recapture finishes', async () => {
+test('restart reuses the previous screenshot cache on the next session', async () => {
   const sentEvents = []
   let ipcReadyHandler = null
   const firstCaptureDeferred = deferred()
-  const secondCaptureDeferred = deferred()
   let captureCallCount = 0
 
   class FakeBrowserWindow {
@@ -543,7 +546,7 @@ test('restart reuses the previous screenshot cache before async recapture finish
       desktopCapturer: {
         getSources() {
           captureCallCount += 1
-          return captureCallCount === 1 ? firstCaptureDeferred.promise : secondCaptureDeferred.promise
+          return firstCaptureDeferred.promise
         }
       },
       ipcMain: {
@@ -592,22 +595,77 @@ test('restart reuses the previous screenshot cache before async recapture finish
   const screenshotsAfterRestart = sentEvents.filter(([channel]) => channel === 'screen-overlay:screenshot')
   assert.equal(screenshotsAfterRestart.length, screenshotsBeforeRestart + 1)
   assert.deepEqual(JSON.parse(JSON.stringify(screenshotsAfterRestart.at(-1))), ['screen-overlay:screenshot', 'data:image/png;base64,first'])
+})
 
-  secondCaptureDeferred.resolve([
+test('start does not recapture screenshots while overlays are visible', async () => {
+  let captureCallCount = 0
+  const firstCaptureDeferred = deferred()
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.webContents = { id: 1, send() {} }
+    }
+    setAlwaysOnTop() {}
+    setVisibleOnAllWorkspaces() {}
+    loadURL() {}
+    loadFile() {}
+    once() {}
+    on() {}
+    isDestroyed() { return false }
+    close() {}
+    hide() {}
+    show() {}
+  }
+
+  const { ScreenOverlayService } = loadScreenOverlayServiceModule({
+    electron: {
+      BrowserWindow: FakeBrowserWindow,
+      screen: {
+        getAllDisplays() {
+          return [{ id: 1, bounds: { x: 0, y: 0, width: 1920, height: 1080 } }]
+        }
+      },
+      desktopCapturer: {
+        getSources() {
+          captureCallCount += 1
+          return firstCaptureDeferred.promise
+        }
+      },
+      ipcMain: {
+        on() {}
+      }
+    },
+    electronToolkitUtils: { is: { dev: true } },
+    windowSecurity: {
+      createIsolatedPreloadWebPreferences() {
+        return {}
+      }
+    },
+    ocrServiceModule: {
+      ocrService: {
+        warmup() {
+          return Promise.resolve()
+        }
+      }
+    }
+  })
+
+  process.env.ELECTRON_RENDERER_URL = 'http://localhost:5173'
+  const service = new ScreenOverlayService()
+  service.setMainWindow({})
+  firstCaptureDeferred.resolve([
     {
       display_id: '1',
       thumbnail: {
         getSize() { return { width: 1920, height: 1080 } },
-        toDataURL() { return 'data:image/png;base64,second' }
+        toDataURL() { return 'data:image/png;base64,prewarm' }
       }
     }
   ])
   await new Promise((resolve) => setImmediate(resolve))
 
-  assert.deepEqual(JSON.parse(JSON.stringify(sentEvents.filter(([channel]) => channel === 'screen-overlay:screenshot').at(-1))), [
-    'screen-overlay:screenshot',
-    'data:image/png;base64,second'
-  ])
+  await service.start('translate')
+  assert.equal(captureCallCount, 1)
 })
 
 test('start sizes deferred capture around the active display instead of the largest display', async () => {
