@@ -11,6 +11,12 @@ import type { UpdateState } from '../shared/appUpdate'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
+import type {
+  TableOcrChoosePathResult,
+  TableOcrRecognizeRequest,
+  TableOcrRecognizeResult,
+  TableOcrRuntimeStatus
+} from '../shared/tableOcr'
 import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
 import type {
   RecorderSelectionSessionPayload,
@@ -21,6 +27,8 @@ import type {
   LlmConfigStatus,
   LlmConnectionStatus,
   LlmInsight,
+  LlmCalendarAssistantRequest,
+  LlmCalendarAssistantResult,
   LlmRenameInputFile,
   LlmRenameSuggestion,
   ScreenOverlayLineResult,
@@ -138,6 +146,9 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   const llmAPI = {
     getConfigStatus: () => ipcRenderer.invoke('llm-get-config-status') as Promise<IpcResponse<LlmConfigStatus>>,
     testConnection: () => ipcRenderer.invoke('llm-test-connection') as Promise<IpcResponse<LlmConnectionStatus>>,
+    parseCalendarAssistant: (input: LlmCalendarAssistantRequest) => {
+      return ipcRenderer.invoke('llm-parse-calendar-assistant', input) as Promise<IpcResponse<LlmCalendarAssistantResult>>
+    },
     analyzeSystem: (input: LlmSystemAnalysisRequest) => {
       return ipcRenderer.invoke('llm-analyze-system', input) as Promise<IpcResponse<LlmInsight>>
     },
@@ -415,6 +426,29 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     onStateChanged: (callback: (state: ModelDownloadState) => void) => onChannel('model-download-state-changed', callback)
   }
 
+  const tableOcrAPI = {
+    getStatus: () => ipcRenderer.invoke('table-ocr-get-status') as Promise<IpcResponse<TableOcrRuntimeStatus>>,
+    prepareRuntime: () => {
+      return ipcRenderer.invoke('table-ocr-prepare-runtime') as Promise<IpcResponse<TableOcrRuntimeStatus>>
+    },
+    cancelPrepare: () => {
+      return ipcRenderer.invoke('table-ocr-cancel-prepare') as Promise<IpcResponse<TableOcrRuntimeStatus>>
+    },
+    recognize: (request: TableOcrRecognizeRequest) => {
+      return ipcRenderer.invoke('table-ocr-recognize', request) as Promise<IpcResponse<TableOcrRecognizeResult>>
+    },
+    chooseImage: () => {
+      return ipcRenderer.invoke('table-ocr-choose-image') as Promise<IpcResponse<TableOcrChoosePathResult>>
+    },
+    chooseOutputDirectory: () => {
+      return ipcRenderer.invoke('table-ocr-choose-output-dir') as Promise<IpcResponse<TableOcrChoosePathResult>>
+    },
+    openPath: (targetPath: string) => {
+      return ipcRenderer.invoke('table-ocr-open-path', targetPath) as Promise<IpcResponse<{ targetPath: string }>>
+    },
+    onStateChanged: (callback: (state: TableOcrRuntimeStatus) => void) => onChannel('table-ocr-state-changed', callback)
+  }
+
   const bilibiliDownloaderAPI = {
     getSession: () => ipcRenderer.invoke('bilibili-downloader-get-session') as Promise<IpcResponse<BilibiliLoginSession>>,
     startLogin: () => {
@@ -462,6 +496,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     devEnvironment: devEnvironmentAPI,
     downloadOrganizer: downloadOrganizerAPI,
     modelDownload: modelDownloadAPI,
+    tableOcr: tableOcrAPI,
     spaceCleanup: spaceCleanupAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,

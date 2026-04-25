@@ -7,4 +7,5 @@ export function registerLlmIpc() {
   ipcMain.handle('llm-analyze-system', async (_event, input) => llmService.analyzeSystem(input))
   ipcMain.handle('llm-suggest-rename', async (_event, input) => llmService.suggestRename(input))
   ipcMain.handle('llm-suggest-space-cleanup', async (_event, input) => llmService.suggestSpaceCleanup(input))
+  ipcMain.handle('llm-parse-calendar-assistant', async (_event, input) => llmService.parseCalendarAssistant(input))
 }

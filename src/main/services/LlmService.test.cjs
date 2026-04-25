@@ -238,6 +238,40 @@ function loadLlmServiceModule(overrides = {}) {
       }
     }
 
+    if (specifier === './llmAdapters/CalendarAssistantAdapter') {
+      return {
+        CalendarAssistantAdapter: overrides.CalendarAssistantAdapter || class CalendarAssistantAdapter {
+          buildCompletion(input) {
+            return {
+              systemPrompt: [
+                '你是自然语言日历意图解析器。',
+                '只返回 JSON：{"action":"create|filter|help","message":"","event":{}}'
+              ].join('\n'),
+              userPrompt: `用户输入：${input.message}`
+            }
+          }
+
+          mapAssistantResult(_input, payload) {
+            return {
+              type: 'create',
+              message: payload.message || '已创建日程',
+              event: {
+                title: payload.event?.title || '方案会',
+                date: payload.event?.date || '2025-07-24',
+                start: payload.event?.start || '15:00',
+                end: payload.event?.end || '16:00',
+                calendar: payload.event?.calendar || '工作',
+                color: '#38b887',
+                location: payload.event?.location || '',
+                participants: payload.event?.participants || '',
+                description: payload.event?.description || ''
+              }
+            }
+          }
+        }
+      }
+    }
+
     if (specifier === '../../shared/types' || specifier === '../../shared/llm') {
       return {}
     }
@@ -460,6 +494,90 @@ test('suggestSpaceCleanup delegates prompt construction to the space cleanup ada
   assert.equal(adapterCalls.length, 1)
   assert.deepEqual(adapterCalls[0], input)
   assert.equal(result.data.summary, '已生成建议')
+})
+
+test('parseCalendarAssistant delegates natural language parsing to the shared llm client', async () => {
+  const adapterCalls = []
+  const { LlmService } = loadLlmServiceModule({
+    CalendarAssistantAdapter: class CalendarAssistantAdapter {
+      buildCompletion(input) {
+        adapterCalls.push(input)
+        return {
+          systemPrompt: 'calendar-system',
+          userPrompt: 'calendar-user'
+        }
+      }
+
+      mapAssistantResult(input, payload) {
+        return {
+          type: 'create',
+          message: payload.message,
+          event: {
+            title: payload.event.title,
+            date: payload.event.date,
+            start: payload.event.start,
+            end: payload.event.end,
+            calendar: payload.event.calendar,
+            color: '#38b887',
+            location: payload.event.location,
+            participants: payload.event.participants,
+            description: `source:${input.message}`
+          }
+        }
+      }
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body)
+      assert.deepEqual(body.messages, [
+        { role: 'system', content: 'calendar-system' },
+        { role: 'user', content: 'calendar-user' }
+      ])
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    action: 'create',
+                    message: '已创建方案会',
+                    event: {
+                      title: '方案会',
+                      date: '2025-07-24',
+                      start: '15:00',
+                      end: '16:00',
+                      calendar: '工作',
+                      location: '湖景会议室',
+                      participants: '林澈'
+                    }
+                  })
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const service = new LlmService()
+  const input = {
+    message: '明天下午三点和林澈开方案会，地点湖景会议室',
+    context: {
+      selectedDate: '2025-07-23',
+      today: '2025-07-23',
+      events: []
+    }
+  }
+
+  const result = await service.parseCalendarAssistant(input)
+
+  assert.equal(result.success, true)
+  assert.deepEqual(adapterCalls, [input])
+  assert.equal(result.data.type, 'create')
+  assert.equal(result.data.event.title, '方案会')
+  assert.equal(result.data.event.description, 'source:明天下午三点和林澈开方案会，地点湖景会议室')
 })
 
 function normalize(value) {

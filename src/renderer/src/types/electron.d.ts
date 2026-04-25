@@ -27,6 +27,12 @@ import {
 import type { UpdateState } from '../../../shared/appUpdate'
 import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
 import type { ModelDownloadRequest, ModelDownloadState } from '../../../shared/modelDownload'
+import type {
+  TableOcrChoosePathResult,
+  TableOcrRecognizeRequest,
+  TableOcrRecognizeResult,
+  TableOcrRuntimeStatus
+} from '../../../shared/tableOcr'
 import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
 import type {
   RecorderSelectionSessionPayload,
@@ -37,6 +43,8 @@ import type {
   LlmConfigStatus,
   LlmConnectionStatus,
   LlmInsight,
+  LlmCalendarAssistantRequest,
+  LlmCalendarAssistantResult,
   LlmRenameInputFile,
   LlmRenameSuggestion,
   ScreenOverlayLineResult,
@@ -75,6 +83,16 @@ declare global {
         chooseSavePath: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
         openPath: (targetPath?: string) => Promise<IpcResponse<{ targetPath: string }>>
         onStateChanged: (callback: (state: ModelDownloadState) => void) => () => void
+      }
+      tableOcr: {
+        getStatus: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
+        prepareRuntime: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
+        cancelPrepare: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
+        recognize: (request: TableOcrRecognizeRequest) => Promise<IpcResponse<TableOcrRecognizeResult>>
+        chooseImage: () => Promise<IpcResponse<TableOcrChoosePathResult>>
+        chooseOutputDirectory: () => Promise<IpcResponse<TableOcrChoosePathResult>>
+        openPath: (targetPath: string) => Promise<IpcResponse<{ targetPath: string }>>
+        onStateChanged: (callback: (state: TableOcrRuntimeStatus) => void) => () => void
       }
       spaceCleanup: {
         chooseRoot: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
@@ -143,6 +161,7 @@ declare global {
       llm: {
         getConfigStatus: () => Promise<IpcResponse<LlmConfigStatus>>
         testConnection: () => Promise<IpcResponse<LlmConnectionStatus>>
+        parseCalendarAssistant: (input: LlmCalendarAssistantRequest) => Promise<IpcResponse<LlmCalendarAssistantResult>>
         analyzeSystem: (input: LlmSystemAnalysisRequest) => Promise<IpcResponse<LlmInsight>>
         suggestRename: (input: { instructions: string; files: LlmRenameInputFile[] }) => Promise<IpcResponse<LlmRenameSuggestion>>
         suggestSpaceCleanup: (input: LlmSpaceCleanupSuggestionRequest) => Promise<IpcResponse<LlmInsight>>

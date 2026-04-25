@@ -128,9 +128,15 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.doctor.runAudit, 'function')
   assert.equal(typeof bridge.llm.getConfigStatus, 'function')
   assert.equal(typeof bridge.llm.testConnection, 'function')
+  assert.equal(typeof bridge.llm.parseCalendarAssistant, 'function')
   assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
   assert.equal(typeof bridge.taskbarAppearance.applyPreset, 'function')
   assert.equal(typeof bridge.taskbarAppearance.restoreDefault, 'function')
+  assert.equal(typeof bridge.tableOcr.getStatus, 'function')
+  assert.equal(typeof bridge.tableOcr.prepareRuntime, 'function')
+  assert.equal(typeof bridge.tableOcr.cancelPrepare, 'function')
+  assert.equal(typeof bridge.tableOcr.onStateChanged, 'function')
+  assert.equal(typeof bridge.tableOcr.recognize, 'function')
 })
 
 test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () => {
@@ -309,6 +315,14 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.spaceCleanup.deleteToTrash('C:\\scan\\movie.mkv')
   await bridge.llm.getConfigStatus()
   await bridge.llm.testConnection()
+  await bridge.llm.parseCalendarAssistant({
+    message: '明天下午三点开会',
+    context: {
+      selectedDate: '2025-07-23',
+      today: '2025-07-23',
+      events: []
+    }
+  })
   await bridge.llm.suggestRename({
     instructions: '按项目重命名',
     files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
@@ -360,6 +374,14 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['space-cleanup-delete-to-trash', 'C:\\scan\\movie.mkv'],
     ['llm-get-config-status'],
     ['llm-test-connection'],
+    ['llm-parse-calendar-assistant', {
+      message: '明天下午三点开会',
+      context: {
+        selectedDate: '2025-07-23',
+        today: '2025-07-23',
+        events: []
+      }
+    }],
     ['llm-suggest-rename', {
       instructions: '按项目重命名',
       files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
@@ -630,4 +652,39 @@ test('createElectronBridge exposes explicit model download APIs and subscription
 
   assert.equal(mocks.removed.length, 1)
   assert.equal(mocks.removed[0][0], 'model-download-state-changed')
+})
+
+test('createElectronBridge exposes explicit table OCR APIs', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  let state = null
+  const unsubscribe = bridge.tableOcr.onStateChanged((nextState) => {
+    state = nextState
+  })
+
+  await bridge.tableOcr.getStatus()
+  await bridge.tableOcr.prepareRuntime()
+  await bridge.tableOcr.cancelPrepare()
+  await bridge.tableOcr.chooseImage()
+  await bridge.tableOcr.chooseOutputDirectory()
+  await bridge.tableOcr.recognize({ inputPath: 'D:\\Pictures\\table.png', outputDirectory: 'D:\\Exports' })
+  await bridge.tableOcr.openPath('D:\\Exports\\table.xlsx')
+  mocks.listeners.get('table-ocr-state-changed')({}, { installStatus: 'running' })
+
+  assert.equal(state.installStatus, 'running')
+  assert.deepEqual(mocks.invokeCalls, [
+    ['table-ocr-get-status'],
+    ['table-ocr-prepare-runtime'],
+    ['table-ocr-cancel-prepare'],
+    ['table-ocr-choose-image'],
+    ['table-ocr-choose-output-dir'],
+    ['table-ocr-recognize', { inputPath: 'D:\\Pictures\\table.png', outputDirectory: 'D:\\Exports' }],
+    ['table-ocr-open-path', 'D:\\Exports\\table.xlsx']
+  ])
+
+  unsubscribe()
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'table-ocr-state-changed')
 })

@@ -137,6 +137,7 @@ test('registerMainProcessIpc wires window-aware registrations through the shared
     registerSpaceCleanupIpc: (getMainWindow) => calls.push(['registerSpaceCleanupIpc', getMainWindow()]),
     registerDownloadOrganizerIpc: (getMainWindow) => calls.push(['registerDownloadOrganizerIpc', getMainWindow()]),
     registerModelDownloadIpc: (getMainWindow) => calls.push(['registerModelDownloadIpc', getMainWindow()]),
+    registerTableOcrIpc: (getMainWindow) => calls.push(['registerTableOcrIpc', getMainWindow()]),
     registerBilibiliDownloaderIpc: (getMainWindow) => calls.push(['registerBilibiliDownloaderIpc', getMainWindow()])
   }
 
@@ -152,6 +153,7 @@ test('registerMainProcessIpc wires window-aware registrations through the shared
     ['registerSpaceCleanupIpc', 'main-window'],
     ['registerDownloadOrganizerIpc', 'main-window'],
     ['registerModelDownloadIpc', 'main-window'],
+    ['registerTableOcrIpc', 'main-window'],
     ['registerBilibiliDownloaderIpc', 'main-window']
   ])
   assert.ok(calls.some(([label]) => label === 'registerScreenOverlayIpc'))

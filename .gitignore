@@ -11,6 +11,8 @@ release_rc*/
 .DS_Store
 *.log
 *.tsbuildinfo
+*.py[cod]
+**/__pycache__/
 
 .vscode
 .idea

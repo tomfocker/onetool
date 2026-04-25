@@ -189,6 +189,35 @@ test('tools registry exposes the taskbar appearance tool through the main shell 
   assert.equal(warnings.length, 0)
 })
 
+test('tools registry exposes the calendar tool through the main shell route map', () => {
+  const calendarTool = actualTools.find((tool) => tool.id === 'calendar')
+
+  assert.ok(calendarTool)
+  assert.deepEqual(
+    toPlainObject(calendarTool),
+    {
+      id: 'calendar',
+      name: '日历应用',
+      description: '山景玻璃拟态日历，支持日周月视图与本地日程管理',
+      category: '日常办公',
+      icon: 'CalendarDays',
+      componentPath: 'CalendarTool'
+    }
+  )
+
+  const { result: map, warnings } = captureWarnings(() => createToolRouteModuleMap([calendarTool], {
+    './components/ConfigChecker.tsx': () => 'config',
+    './components/SettingsPage.tsx': () => 'settings',
+    './components/WebActivator.tsx': () => 'web-activator'
+  }, {
+    './tools/CalendarTool.tsx': () => 'calendar'
+  }))
+
+  assert.equal(typeof map.calendar, 'function')
+  assert.equal(typeof map.settings, 'function')
+  assert.equal(warnings.length, 0)
+})
+
 test('tools registry no longer exposes the external CapsWriter entrypoint', () => {
   const capswriterTool = actualTools.find((tool) => tool.id === 'capswriter')
 

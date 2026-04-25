@@ -42,6 +42,8 @@ function AppContent(): React.JSX.Element {
 
   useLayoutEffect(() => {
     // 注册全局系统进程唤出特定工具界面的 IPC 监听
+    if (!window.electron?.app?.onOpenTool) return
+
     const unsubOpenTool = window.electron.app.onOpenTool((toolId: string) => {
       setCurrentPage(toolId)
       setRetryKey(0)

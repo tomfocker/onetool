@@ -4,6 +4,8 @@ import type {
   LlmConfigStatus,
   LlmConnectionStatus,
   LlmInsight,
+  LlmCalendarAssistantRequest,
+  LlmCalendarAssistantResult,
   LlmRenameInputFile,
   LlmRenameSuggestion,
   ScreenOverlayLineResult,
@@ -17,6 +19,7 @@ import { ScreenshotInsightAdapter } from './llmAdapters/ScreenshotInsightAdapter
 import { RenameSuggestionAdapter } from './llmAdapters/RenameSuggestionAdapter'
 import { SpaceCleanupAdapter } from './llmAdapters/SpaceCleanupAdapter'
 import { SystemDiagnosisAdapter } from './llmAdapters/SystemDiagnosisAdapter'
+import { CalendarAssistantAdapter } from './llmAdapters/CalendarAssistantAdapter'
 import { OpenAiCompatibleClient } from './OpenAiCompatibleClient'
 
 type SettingsLike = Pick<typeof settingsService, 'getSettings'>
@@ -47,6 +50,7 @@ export class LlmService {
   private readonly renameSuggestionAdapter: RenameSuggestionAdapter
   private readonly systemDiagnosisAdapter: SystemDiagnosisAdapter
   private readonly spaceCleanupAdapter: SpaceCleanupAdapter
+  private readonly calendarAssistantAdapter: CalendarAssistantAdapter
 
   constructor(dependencies: LlmServiceDependencies = {}) {
     this.settings = dependencies.settingsService ?? settingsService
@@ -56,6 +60,7 @@ export class LlmService {
     this.renameSuggestionAdapter = new RenameSuggestionAdapter()
     this.systemDiagnosisAdapter = new SystemDiagnosisAdapter()
     this.spaceCleanupAdapter = new SpaceCleanupAdapter()
+    this.calendarAssistantAdapter = new CalendarAssistantAdapter()
   }
 
   getConfigStatus(): IpcResponse<LlmConfigStatus> {
@@ -173,6 +178,30 @@ export class LlmService {
         this.spaceCleanupAdapter.buildCompletion(input)
       )
       return { success: true, data: this.spaceCleanupAdapter.mapInsightResult(payload) }
+    } catch (error) {
+      return { success: false, error: this.toErrorMessage(error) }
+    }
+  }
+
+  async parseCalendarAssistant(input: LlmCalendarAssistantRequest): Promise<IpcResponse<LlmCalendarAssistantResult>> {
+    if (!input.message.trim()) {
+      return {
+        success: true,
+        data: {
+          type: 'help',
+          message: '你可以直接说：明天下午3点安排设计评审，地点会议室A。'
+        }
+      }
+    }
+
+    try {
+      const payload = await this.createStructuredCompletion<{
+        action?: unknown
+        message?: unknown
+        search?: unknown
+        event?: Record<string, unknown>
+      }>(this.calendarAssistantAdapter.buildCompletion(input))
+      return { success: true, data: this.calendarAssistantAdapter.mapAssistantResult(input, payload) }
     } catch (error) {
       return { success: false, error: this.toErrorMessage(error) }
     }

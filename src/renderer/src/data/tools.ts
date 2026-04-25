@@ -90,12 +90,28 @@ export const tools: ToolDefinition[] = [
     componentPath: 'DownloadOrganizerTool'
   },
   {
+    id: 'calendar',
+    name: '日历应用',
+    description: '山景玻璃拟态日历，支持日周月视图与本地日程管理',
+    category: '日常办公',
+    icon: 'CalendarDays',
+    componentPath: 'CalendarTool'
+  },
+  {
     id: 'model-download',
     name: '模型下载',
     description: '内置 HuggingFace 与 ModelScope 模型下载器',
     category: '实用工具',
     icon: 'CloudDownload',
     componentPath: 'ModelDownloadTool'
+  },
+  {
+    id: 'table-ocr',
+    name: '表格识别',
+    description: '本地识别图片表格并导出 Excel',
+    category: '日常办公',
+    icon: 'Table2',
+    componentPath: 'TableOcrTool'
   },
   {
     id: 'screenshot-tool',

@@ -1,7 +1,7 @@
 import React from 'react'
 import {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code, CloudDownload, PanelTop
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code, CloudDownload, PanelTop, Table2, CalendarDays
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { tools } from '@/data/tools'
@@ -15,7 +15,7 @@ interface SidebarProps {
 
 const iconMap: Record<string, any> = {
   LayoutDashboard, Package, Terminal, MousePointer, Mic,
-  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code, CloudDownload, PanelTop
+  Globe, Clock, Settings, Image, Video, Clipboard, Palette, QrCode, Radar, Inbox, Languages, Camera, ShieldCheck, TerminalSquare, Star, Code, CloudDownload, PanelTop, Table2, CalendarDays
 }
 
 const categories = ['系统维护', '日常办公', '媒体处理', '实用工具']

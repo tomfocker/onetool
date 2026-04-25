@@ -114,6 +114,10 @@
         "to": "model-download"
       },
       {
+        "from": "resources/table-ocr",
+        "to": "table-ocr"
+      },
+      {
         "from": "resources/ffmpeg/ffmpeg.exe",
         "to": "ffmpeg.exe"
       }

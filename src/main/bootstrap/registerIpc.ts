@@ -28,6 +28,7 @@ export type MainProcessIpcRegistrars = {
   registerSpaceCleanupIpc(getMainWindow: () => BrowserWindow | null): void
   registerDownloadOrganizerIpc(getMainWindow: () => BrowserWindow | null): void
   registerModelDownloadIpc(getMainWindow: () => BrowserWindow | null): void
+  registerTableOcrIpc(getMainWindow: () => BrowserWindow | null): void
   registerBilibiliDownloaderIpc(getMainWindow: () => BrowserWindow | null): void
 }
 
@@ -64,5 +65,6 @@ export function registerIpc(input: {
   registrars.registerSpaceCleanupIpc(mainWindowProvider)
   registrars.registerDownloadOrganizerIpc(mainWindowProvider)
   registrars.registerModelDownloadIpc(mainWindowProvider)
+  registrars.registerTableOcrIpc(mainWindowProvider)
   registrars.registerBilibiliDownloaderIpc(mainWindowProvider)
 }

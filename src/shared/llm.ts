@@ -77,6 +77,58 @@ export interface LlmSpaceCleanupSuggestionRequest {
   largestFiles: LlmSpaceCleanupLargestFileInput[]
 }
 
+export type LlmCalendarName = '个人' | '工作' | '家庭' | '重要'
+
+export interface LlmCalendarAssistantContextEvent {
+  title: string
+  date: string
+  start: string
+  end: string
+  calendar: LlmCalendarName
+  location?: string
+  participants?: string
+  description?: string
+}
+
+export interface LlmCalendarAssistantContext {
+  selectedDate: string
+  today: string
+  events: LlmCalendarAssistantContextEvent[]
+}
+
+export interface LlmCalendarAssistantRequest {
+  message: string
+  context: LlmCalendarAssistantContext
+}
+
+export interface LlmCalendarAssistantEventDraft {
+  title: string
+  date: string
+  start: string
+  end: string
+  calendar: LlmCalendarName
+  color: string
+  location: string
+  participants: string
+  description: string
+}
+
+export type LlmCalendarAssistantResult =
+  | {
+    type: 'create'
+    message: string
+    event: LlmCalendarAssistantEventDraft
+  }
+  | {
+    type: 'filter'
+    message: string
+    search: string
+  }
+  | {
+    type: 'help'
+    message: string
+  }
+
 export type ScreenOverlayMode = 'ocr' | 'translate'
 
 export interface ScreenOverlaySessionStartPayload {
