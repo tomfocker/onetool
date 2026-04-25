@@ -1,0 +1,18 @@
+services:
+  mountain-calendar:
+    build:
+      context: .
+    image: mountain-calendar:latest
+    container_name: mountain-calendar
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      NODE_ENV: production
+      PORT: 8080
+      DATA_DIR: /data
+    volumes:
+      - mountain-calendar-data:/data
+
+volumes:
+  mountain-calendar-data:

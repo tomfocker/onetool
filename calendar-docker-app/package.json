@@ -1,0 +1,14 @@
+{
+  "name": "mountain-calendar-docker-app",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "开箱即用的玻璃拟态山景日历 Docker WebUI 应用",
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
