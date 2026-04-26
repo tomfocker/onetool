@@ -66,6 +66,14 @@ test('createMainWindow builds the frameless shell and loads the renderer entry',
       loadCalls.push('show')
     }
 
+    isVisible() {
+      return loadCalls.includes('show')
+    }
+
+    isDestroyed() {
+      return false
+    }
+
     hide() {
       loadCalls.push('hide')
     }
@@ -133,7 +141,9 @@ test('createMainWindow builds the frameless shell and loads the renderer entry',
     },
     scheduleTimeout(handler, timeoutMs) {
       timeoutCalls.push(timeoutMs)
-      handler()
+      if (timeoutMs === 1000) {
+        handler()
+      }
       return timeoutMs
     }
   })
@@ -150,7 +160,7 @@ test('createMainWindow builds the frameless shell and loads the renderer entry',
   assert.deepEqual(JSON.parse(JSON.stringify(loadCalls)), [['loadURL', 'http://127.0.0.1:5173']])
 
   eventHandlers.get('ready-to-show')()
-  assert.deepEqual(JSON.parse(JSON.stringify(timeoutCalls)), [1000])
+  assert.deepEqual(JSON.parse(JSON.stringify(timeoutCalls)), [2500, 1000])
   assert.ok(loadCalls.includes('show'))
   assert.ok(loadCalls.includes('clipboard.startWatcher'))
 
@@ -188,6 +198,14 @@ test('createMainWindow falls back to file loading outside development mode', () 
     }
 
     on() {}
+
+    isVisible() {
+      return false
+    }
+
+    isDestroyed() {
+      return false
+    }
 
     loadURL(url) {
       loadCalls.push(['loadURL', url])
@@ -236,8 +254,106 @@ test('createMainWindow falls back to file loading outside development mode', () 
       return {}
     },
     bindMainWindowServices() {},
-    onWindowClosed() {}
+    onWindowClosed() {},
+    scheduleTimeout() {}
   })
 
   assert.deepEqual(JSON.parse(JSON.stringify(loadCalls)), [['loadFile', 'D:/renderer/index.html']])
+})
+
+test('createMainWindow shows the shell when the renderer never reaches ready-to-show', () => {
+  const { createMainWindow } = loadCreateMainWindowModule()
+  const loadCalls = []
+  const timeoutCalls = []
+  const logCalls = []
+  let visible = false
+
+  class FakeBrowserWindow {
+    constructor() {
+      this.webContents = {
+        on() {},
+        setWindowOpenHandler() {}
+      }
+    }
+
+    on() {}
+
+    show() {
+      visible = true
+      loadCalls.push('show')
+    }
+
+    isVisible() {
+      return visible
+    }
+
+    isDestroyed() {
+      return false
+    }
+
+    loadURL(url) {
+      loadCalls.push(['loadURL', url])
+    }
+
+    loadFile(file) {
+      loadCalls.push(['loadFile', file])
+    }
+  }
+
+  createMainWindow({
+    BrowserWindow: FakeBrowserWindow,
+    shell: { openExternal() {} },
+    runtime: {
+      isDevelopment: false,
+      rendererUrl: null
+    },
+    assets: {
+      iconPath: 'D:/icon.png',
+      preloadPath: 'D:/preload/index.js',
+      rendererHtmlPath: 'D:/renderer/index.html'
+    },
+    settingsService: {
+      getSettings() {
+        return { minimizeToTray: false }
+      }
+    },
+    windowManagerService: {
+      getIsQuitting() {
+        return false
+      }
+    },
+    clipboardService: {
+      startWatcher() {
+        loadCalls.push('clipboard.startWatcher')
+      }
+    },
+    logger: {
+      error(...args) {
+        logCalls.push(args)
+      }
+    },
+    shouldHideMainWindowOnClose() {
+      return false
+    },
+    createWindowIcon() {
+      return undefined
+    },
+    createPreloadPreferences() {
+      return {}
+    },
+    bindMainWindowServices() {},
+    onWindowClosed() {},
+    scheduleTimeout(handler, timeoutMs) {
+      timeoutCalls.push({ handler, timeoutMs })
+      return timeoutMs
+    }
+  })
+
+  const fallback = timeoutCalls.find((call) => call.timeoutMs === 2500)
+  assert.ok(fallback)
+  fallback.handler()
+
+  assert.equal(visible, true)
+  assert.ok(loadCalls.includes('show'))
+  assert.match(logCalls[0][0], /startup fallback/i)
 })

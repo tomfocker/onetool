@@ -39,6 +39,8 @@ type CreateMainWindowDependencies = {
   scheduleTimeout?(handler: () => void, timeoutMs: number): unknown
 }
 
+const STARTUP_VISIBLE_FALLBACK_TIMEOUT_MS = 2500
+
 export function createMainWindow(dependencies: CreateMainWindowDependencies): BrowserWindow {
   const {
     BrowserWindow,
@@ -71,12 +73,32 @@ export function createMainWindow(dependencies: CreateMainWindowDependencies): Br
 
   bindMainWindowServices(mainWindow)
 
-  mainWindow.on('ready-to-show', () => {
+  const showMainWindow = (reason: 'ready-to-show' | 'startup fallback' | 'load failure') => {
+    if (typeof mainWindow.isDestroyed === 'function' && mainWindow.isDestroyed()) {
+      return
+    }
+
+    if (typeof mainWindow.isVisible === 'function' && mainWindow.isVisible()) {
+      return
+    }
+
+    if (reason !== 'ready-to-show') {
+      logger.error(`Main window ${reason}: showing hidden shell`)
+    }
+
     mainWindow.show()
+  }
+
+  mainWindow.on('ready-to-show', () => {
+    showMainWindow('ready-to-show')
     scheduleTimeout(() => {
       clipboardService.startWatcher()
     }, 1000)
   })
+
+  scheduleTimeout(() => {
+    showMainWindow('startup fallback')
+  }, STARTUP_VISIBLE_FALLBACK_TIMEOUT_MS)
 
   mainWindow.on('close', (event) => {
     const minimizeToTray = settingsService.getSettings().minimizeToTray
@@ -101,6 +123,15 @@ export function createMainWindow(dependencies: CreateMainWindowDependencies): Br
 
   mainWindow.webContents.on('render-process-gone', (_event, details) => {
     logger.error('Renderer process gone', details)
+  })
+
+  mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
+    logger.error('Renderer failed to load', {
+      errorCode,
+      errorDescription,
+      validatedURL
+    })
+    showMainWindow('load failure')
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
