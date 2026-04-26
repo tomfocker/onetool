@@ -406,7 +406,11 @@ export function buildSpaceCleanupViewModel({
     distributionLoading: currentDirectory?.type === 'directory' && currentDirectory.path === loadingDirectoryPath,
     modeLabel: activeSession.scanMode === 'ntfs-fast' ? '极速扫描（NTFS）' : '普通扫描',
     modeReason: activeSession.scanModeReason,
-    partialLabel: activeSession.isPartial ? '结果正在持续补全' : null,
+    partialLabel: activeSession.isPartial
+      ? activeSession.scanMode === 'filesystem'
+        ? '已限制到前两级目录'
+        : '结果正在持续补全'
+      : null,
     distributionNote: distributionSource.note,
     distributionSegments,
     breadcrumbs: getNodeBreadcrumbs(resolvedTree, selectedNode?.path ?? null),

@@ -36,17 +36,20 @@ type SpaceCleanupServiceDependencies = {
   now?: () => number
   createId?: () => string
   yieldEvery?: number
+  filesystemMaxDirectoryDepth?: number
 }
 
 type TraversalState = {
   largestFiles: SpaceCleanupLargestFile[]
   largestFilesChanged: boolean
+  depthLimitReached: boolean
   cancelled: boolean
   processedEntries: number
   emitProgress: boolean
 }
 
 type MutableSummary = ReturnType<typeof createEmptySpaceCleanupSummary>
+const DEFAULT_FILESYSTEM_MAX_DIRECTORY_DEPTH = 2
 
 function resolveNtfsFastScannerPath(pathModule: typeof path) {
   const isPackaged = typeof app?.isPackaged === 'boolean' ? app.isPackaged : false
@@ -147,6 +150,7 @@ export class SpaceCleanupService {
   private readonly now: () => number
   private readonly createId: () => string
   private readonly yieldEvery: number
+  private readonly filesystemMaxDirectoryDepth: number
 
   constructor(dependencies: SpaceCleanupServiceDependencies = {}) {
     this.fsPromises = dependencies.fsPromises ?? fs
@@ -163,6 +167,8 @@ export class SpaceCleanupService {
     this.now = dependencies.now ?? Date.now
     this.createId = dependencies.createId ?? randomUUID
     this.yieldEvery = dependencies.yieldEvery ?? 50
+    this.filesystemMaxDirectoryDepth =
+      dependencies.filesystemMaxDirectoryDepth ?? DEFAULT_FILESYSTEM_MAX_DIRECTORY_DEPTH
   }
 
   setMainWindow(window: BrowserWindow | null) {
@@ -275,6 +281,7 @@ export class SpaceCleanupService {
       const traversalState: TraversalState = {
         largestFiles: [],
         largestFilesChanged: false,
+        depthLimitReached: false,
         cancelled: false,
         processedEntries: 0,
         emitProgress: false
@@ -323,6 +330,7 @@ export class SpaceCleanupService {
     const traversalState: TraversalState = {
       largestFiles: [],
       largestFilesChanged: false,
+      depthLimitReached: false,
       cancelled: false,
       processedEntries: 0,
       emitProgress: true
@@ -331,13 +339,21 @@ export class SpaceCleanupService {
     const summary = createEmptySpaceCleanupSummary()
 
     try {
-      const tree = await this.scanNode(rootPath, summary, traversalState)
+      const tree = await this.scanNode(
+        rootPath,
+        summary,
+        traversalState,
+        Number.POSITIVE_INFINITY,
+        0,
+        this.filesystemMaxDirectoryDepth
+      )
 
       const finishedStatus = this.cancelled || this.currentSession.status === 'cancelled' ? 'cancelled' : 'completed'
       this.currentSession = {
         ...this.currentSession,
         status: finishedStatus,
         finishedAt: new Date(this.now()).toISOString(),
+        isPartial: traversalState.depthLimitReached || summary.skippedEntries > 0,
         summary: {
           ...summary,
           largestFile: traversalState.largestFiles[0] ?? null
@@ -544,7 +560,9 @@ export class SpaceCleanupService {
     targetPath: string,
     summary: MutableSummary,
     traversalState: TraversalState,
-    retainedDepth = Number.POSITIVE_INFINITY
+    retainedDepth = Number.POSITIVE_INFINITY,
+    directoryDepth = 0,
+    maxDirectoryDepth = Number.POSITIVE_INFINITY
   ): Promise<SpaceCleanupNode> {
     if (this.cancelled || this.currentSession.status === 'cancelled') {
       traversalState.cancelled = true
@@ -588,6 +606,23 @@ export class SpaceCleanupService {
     traversalState.processedEntries += 1
     await this.maybeYield(summary, traversalState)
 
+    if (directoryDepth >= maxDirectoryDepth) {
+      traversalState.depthLimitReached = true
+      summary.skippedEntries += 1
+      return {
+        id: targetPath,
+        name,
+        path: targetPath,
+        type: 'directory',
+        sizeBytes: 0,
+        childrenCount: 0,
+        fileCount: 0,
+        directoryCount: 0,
+        skippedChildren: 1,
+        children: []
+      }
+    }
+
     let skippedChildren = 0
     let fileCount = 0
     let directoryCount = 0
@@ -630,7 +665,14 @@ export class SpaceCleanupService {
           continue
         }
 
-        const childNode = await this.scanNode(childPath, summary, traversalState, retainedDepth - 1)
+        const childNode = await this.scanNode(
+          childPath,
+          summary,
+          traversalState,
+          retainedDepth - 1,
+          directoryDepth + (entry.isDirectory?.() ? 1 : 0),
+          maxDirectoryDepth
+        )
         if (retainedDepth > 0) {
           children.push(childNode)
         }

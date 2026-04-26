@@ -187,7 +187,7 @@ test('buildSpaceCleanupViewModel exposes scan mode, fallback reason, and partial
 
   assert.equal(viewModel.modeLabel, '普通扫描')
   assert.match(viewModel.modeReason, /NTFS 根盘/)
-  assert.equal(viewModel.partialLabel, '结果正在持续补全')
+  assert.equal(viewModel.partialLabel, '已限制到前两级目录')
 })
 
 test('buildSpaceCleanupViewModel marks ntfs-fast sessions explicitly', () => {

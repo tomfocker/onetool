@@ -746,6 +746,50 @@ test('filesystem scan publishes discovered largest files before completion', asy
   assert.equal(eventLog[firstLargestProgressIndex].largestFile, 'huge.iso')
 })
 
+test('filesystem scan defaults to the first two directory levels', async () => {
+  const readdirCalls = []
+  const stats = {
+    'C:\\scan': { isDirectory: () => true, size: 0 },
+    'C:\\scan\\top.bin': { isDirectory: () => false, size: 100 },
+    'C:\\scan\\level1': { isDirectory: () => true, size: 0 },
+    'C:\\scan\\level1\\level2': { isDirectory: () => true, size: 0 },
+    'C:\\scan\\level1\\level2\\deep.bin': { isDirectory: () => false, size: 9999 }
+  }
+  const entries = {
+    'C:\\scan': [
+      createDirent('top.bin', 'file'),
+      createDirent('level1', 'directory')
+    ],
+    'C:\\scan\\level1': [
+      createDirent('level2', 'directory')
+    ],
+    'C:\\scan\\level1\\level2': [
+      createDirent('deep.bin', 'file')
+    ]
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fsPromises: {
+      readdir: async (targetPath) => {
+        readdirCalls.push(targetPath)
+        return entries[targetPath] || []
+      },
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 1600, createId: () => 'session-depth-limited' })
+  const result = await service.startScan('C:\\scan')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.isPartial, true)
+  assert.equal(result.data.summary.totalBytes, 100)
+  assert.equal(result.data.summary.skippedEntries, 1)
+  assert.equal(result.data.largestFiles[0].name, 'top.bin')
+  assert.deepEqual(readdirCalls, ['C:\\scan', 'C:\\scan\\level1'])
+})
+
 test('startScan reports cancelled when traversal is interrupted', async () => {
   const entries = {
     'C:\\scan': [
