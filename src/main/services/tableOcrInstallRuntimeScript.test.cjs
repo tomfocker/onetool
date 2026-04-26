@@ -90,7 +90,7 @@ test('install_runtime force-installs pip when bootstrapping from the pip wheel',
       `module.download_pip_wheel = lambda _temp_dir: Path(${JSON.stringify(path.join(tempRoot, 'pip-26.0.1-py3-none-any.whl'))})`,
       'module.run_command = lambda command, description, extra_env=None: captured.update({"command": command, "description": description, "extra_env": extra_env})',
       'module.ensure_pip()',
-      'print(json.dumps(captured, ensure_ascii=False))',
+      'print(json.dumps(captured, ensure_ascii=True))',
     ].join('\n'),
     'utf8'
   )
@@ -122,7 +122,7 @@ test('install_runtime force-reinstalls setuptools and wheel before OCR packages'
       'commands = []',
       'module.run_command = lambda command, description, extra_env=None: commands.append({"command": command, "description": description})',
       'module.install_packages("cn")',
-      'print(json.dumps(commands, ensure_ascii=False))',
+      'print(json.dumps(commands, ensure_ascii=True))',
     ].join('\n'),
     'utf8'
   )
