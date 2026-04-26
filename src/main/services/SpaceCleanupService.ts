@@ -40,6 +40,7 @@ type SpaceCleanupServiceDependencies = {
 
 type TraversalState = {
   largestFiles: SpaceCleanupLargestFile[]
+  largestFilesChanged: boolean
   cancelled: boolean
   processedEntries: number
   emitProgress: boolean
@@ -120,6 +121,13 @@ function updateSessionLargestFiles(
       largestFile: largestFiles[0] ?? null
     }
   }
+}
+
+function createLargestFilesSignature(largestFiles: SpaceCleanupLargestFile[]): string {
+  return largestFiles
+    .slice(0, 10)
+    .map((item) => `${item.path}\u0000${item.sizeBytes}`)
+    .join('\n')
 }
 
 export class SpaceCleanupService {
@@ -266,6 +274,7 @@ export class SpaceCleanupService {
       const summary = createEmptySpaceCleanupSummary()
       const traversalState: TraversalState = {
         largestFiles: [],
+        largestFilesChanged: false,
         cancelled: false,
         processedEntries: 0,
         emitProgress: false
@@ -313,6 +322,7 @@ export class SpaceCleanupService {
 
     const traversalState: TraversalState = {
       largestFiles: [],
+      largestFilesChanged: false,
       cancelled: false,
       processedEntries: 0,
       emitProgress: true
@@ -553,7 +563,11 @@ export class SpaceCleanupService {
         sizeBytes: targetStat.size,
         extension: this.pathModule.extname(targetPath) || null
       }
+      const previousLargestFilesSignature = createLargestFilesSignature(traversalState.largestFiles)
       traversalState.largestFiles = trimLargestFiles(traversalState.largestFiles, largestFile, 500)
+      traversalState.largestFilesChanged =
+        traversalState.largestFilesChanged ||
+        createLargestFilesSignature(traversalState.largestFiles) !== previousLargestFilesSignature
       await this.maybeYield(summary, traversalState)
 
       return {
@@ -653,17 +667,24 @@ export class SpaceCleanupService {
       return
     }
 
-    if (traversalState.processedEntries % this.yieldEvery !== 0) {
+    const shouldEmitProgress =
+      traversalState.largestFilesChanged ||
+      traversalState.processedEntries % this.yieldEvery === 0
+
+    if (!shouldEmitProgress) {
       return
     }
 
+    const largestFiles = traversalState.largestFiles
     this.currentSession = {
       ...this.currentSession,
+      largestFiles,
       summary: {
         ...summary,
-        largestFile: this.currentSession.largestFiles[0] ?? null
+        largestFile: largestFiles[0] ?? null
       }
     }
+    traversalState.largestFilesChanged = false
     this.emit('space-cleanup-progress', this.currentSession)
     await new Promise<void>((resolve) => setImmediate(resolve))
   }

@@ -696,6 +696,56 @@ test('startScan aggregates nested directory sizes and largest files', async () =
   assert.deepEqual(eventLog.at(-1), ['space-cleanup-complete', 'completed'])
 })
 
+test('filesystem scan publishes discovered largest files before completion', async () => {
+  const entries = {
+    'C:\\scan': [
+      createDirent('huge.iso', 'file'),
+      createDirent('small.txt', 'file')
+    ]
+  }
+
+  const stats = {
+    'C:\\scan': { isDirectory: () => true, size: 0 },
+    'C:\\scan\\huge.iso': { isDirectory: () => false, size: 1024 * 1024 * 1024 },
+    'C:\\scan\\small.txt': { isDirectory: () => false, size: 10 }
+  }
+
+  const eventLog = []
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 1500, createId: () => 'session-progress-largest', yieldEvery: 100 })
+  service.setMainWindow({
+    isDestroyed: () => false,
+    webContents: {
+      send(channel, payload) {
+        eventLog.push({
+          channel,
+          status: payload.status,
+          largestFiles: payload.largestFiles.map((item) => item.name),
+          largestFile: payload.summary.largestFile?.name ?? null
+        })
+      }
+    }
+  })
+
+  const result = await service.startScan('C:\\scan')
+
+  const firstLargestProgressIndex = eventLog.findIndex(
+    (event) => event.channel === 'space-cleanup-progress' && event.largestFiles.includes('huge.iso')
+  )
+  const completeIndex = eventLog.findIndex((event) => event.channel === 'space-cleanup-complete')
+
+  assert.equal(result.success, true)
+  assert.ok(firstLargestProgressIndex >= 0)
+  assert.ok(completeIndex > firstLargestProgressIndex)
+  assert.equal(eventLog[firstLargestProgressIndex].largestFile, 'huge.iso')
+})
+
 test('startScan reports cancelled when traversal is interrupted', async () => {
   const entries = {
     'C:\\scan': [

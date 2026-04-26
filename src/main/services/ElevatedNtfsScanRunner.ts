@@ -51,6 +51,15 @@ function getErrorMessage(error: unknown): string {
   return String(error)
 }
 
+function isRetryableFileReadError(error: unknown): boolean {
+  if (!error || typeof error !== 'object' || !('code' in error)) {
+    return false
+  }
+
+  const code = (error as { code?: unknown }).code
+  return code === 'EBUSY' || code === 'EPERM'
+}
+
 function toPowerShellSingleQuoted(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
 }
@@ -217,8 +226,13 @@ export class ElevatedNtfsScanRunner {
 
       const pollOnce = async () => {
         try {
+          let eventsFileBusy = false
           const content = await this.fsPromises.readFile(eventsPath, 'utf8').catch((error: NodeJS.ErrnoException) => {
             if (error?.code === 'ENOENT') {
+              return null
+            }
+            if (isRetryableFileReadError(error)) {
+              eventsFileBusy = true
               return null
             }
             throw error
@@ -233,10 +247,13 @@ export class ElevatedNtfsScanRunner {
             if (error?.code === 'ENOENT') {
               return null
             }
+            if (isRetryableFileReadError(error)) {
+              return null
+            }
             throw error
           })
 
-          if (exitCodeRaw == null) {
+          if (exitCodeRaw == null || eventsFileBusy) {
             return
           }
 
@@ -259,8 +276,14 @@ export class ElevatedNtfsScanRunner {
             if (error?.code === 'ENOENT') {
               return ''
             }
+            if (isRetryableFileReadError(error)) {
+              return null
+            }
             throw error
           })
+          if (stderr == null) {
+            return
+          }
 
           const exitCode = Number.parseInt(exitCodeRaw.trim(), 10)
           if (!Number.isFinite(exitCode) || exitCode !== 0) {

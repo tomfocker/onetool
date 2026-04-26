@@ -137,6 +137,66 @@ test('start replays JSON lines from the elevated helper events file', async () =
   await fs.promises.rm(tempRoot, { recursive: true, force: true })
 })
 
+test('start retries when the elevated helper events file is briefly locked', async () => {
+  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-busy-'))
+  const intervalHandlers = []
+  const events = []
+  const realFsPromises = fs.promises
+  let eventsReadCount = 0
+
+  const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
+  const runner = new ElevatedNtfsScanRunner({
+    osModule: {
+      ...os,
+      tmpdir: () => tempRoot
+    },
+    fsPromises: {
+      ...realFsPromises,
+      readFile: async (targetPath, encoding) => {
+        if (String(targetPath).endsWith('events.jsonl')) {
+          eventsReadCount += 1
+          if (eventsReadCount === 1) {
+            const error = new Error('resource busy or locked')
+            error.code = 'EBUSY'
+            throw error
+          }
+
+          return '{"type":"volume-info","mode":"ntfs-fast"}\n{"type":"complete"}\n'
+        }
+
+        if (String(targetPath).endsWith('exit-code.txt')) {
+          return '0'
+        }
+
+        return realFsPromises.readFile(targetPath, encoding)
+      }
+    },
+    setIntervalFn: (handler) => {
+      intervalHandlers.push(handler)
+      return handler
+    },
+    clearIntervalFn: () => {},
+    launchElevated: async () => ({ pid: 9100 })
+  })
+
+  try {
+    const handle = await runner.start('D:\\', (event) => {
+      events.push(event)
+    })
+    await Promise.resolve()
+
+    assert.equal(events.length, 0)
+    assert.equal(intervalHandlers.length, 1)
+
+    intervalHandlers[0]()
+    await handle.done
+
+    assert.deepEqual(events.map((event) => event.type), ['volume-info', 'complete'])
+  } finally {
+    await fs.promises.rm(tempRoot, { recursive: true, force: true })
+  }
+})
+
 test('start rejects with scanner stderr when elevated helper reports a non-zero exit code', async () => {
   const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-fail-'))
   const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
