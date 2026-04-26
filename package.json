@@ -1,6 +1,6 @@
 {
   "name": "onetool",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "高颜值本地小工具箱",
   "main": "./out/main/index.js",
   "author": "八骏马",

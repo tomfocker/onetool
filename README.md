@@ -2,9 +2,9 @@
 
 Windows 本地高频小工具箱。
 
-`v0.2.0` 已发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
+`v0.3.0` 准备发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
 
-![Version](https://img.shields.io/badge/version-v0.2.0-2563eb.svg)
+![Version](https://img.shields.io/badge/version-v0.3.0-2563eb.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-0f172a.svg)
 ![License](https://img.shields.io/badge/license-MIT-16a34a.svg)
 
@@ -46,6 +46,7 @@ Windows 本地高频小工具箱。
 
 - 装机与环境准备：常用软件安装、开发环境管理、系统配置检测
 - 文件与桌面效率：批量重命名、下载整理、文件暂存悬浮球、剪贴板管理
+- 日常办公：山景玻璃拟态日历、自然语言创建日程、图片表格识别导出 Excel
 - 多媒体与捕获：屏幕录制、截图、取色、图片处理、二维码生成
 - 网络与系统辅助：网页激活、网络雷达、空间清理、WSL 管理、屏幕翻译
 
@@ -53,15 +54,15 @@ Windows 本地高频小工具箱。
 
 当前发布页提供两种 Windows 包：
 
-- 安装版：`onetool-0.2.0-win-x64-setup.exe`
-- 便携版：`onetool-0.2.0-win-x64-portable.exe`
+- 安装版：`onetool-0.3.0-win-x64-setup.exe`
+- 便携版：`onetool-0.3.0-win-x64-portable.exe`
 
 选择建议：
 
 - 长期使用，优先安装版
 - 临时试用、随身携带或不想安装，使用便携版
 
-当前 `v0.2.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
+当前 `v0.3.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
 
 更新行为：
 
@@ -70,10 +71,11 @@ Windows 本地高频小工具箱。
 
 ## 当前版本定位
 
-`v0.2.0` 是首个明显偏向基础能力升级的 Windows 版本，当前发布重点是：
+`v0.3.0` 在 `v0.2.0` 的基础能力之上，当前发布重点是：
 
-- 建立全局 LLM 能力层和首批 AI 增强工具
-- 收口主进程启动链与 settings/store 迁移基线
+- 新增日历应用，支持本地日程管理、拖拽创建/调整和本地 LLM 自然语言创建日程
+- 新增表格识别工具，支持图片表格本地识别并导出 Excel
+- 强化 Windows 启动链路，非默认安装路径或渲染器加载异常时不再静默无响应
 - 保持 Windows 安装版更新链路与 GitHub Release 对齐
 
 暂不承诺：
