@@ -42,7 +42,7 @@ PIP_NETWORK_ARGS = ["--retries", "5", "--timeout", "120"]
 
 def emit(event, message, **extra):
     payload = {"event": event, "message": message, **extra}
-    print(f"{JSON_PREFIX}{json.dumps(payload, ensure_ascii=False)}", flush=True)
+    print(f"{JSON_PREFIX}{json.dumps(payload, ensure_ascii=True)}", flush=True)
 
 
 def run_command(command, description, extra_env=None):

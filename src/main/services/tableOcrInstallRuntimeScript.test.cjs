@@ -43,6 +43,34 @@ test('install_runtime saves downloaded pip wheel with the original wheel filenam
   assert.equal(result.stdout.trim().split(/\r?\n/).at(-1), 'pip-26.0.1-py3-none-any.whl')
 })
 
+test('install_runtime emits JSON logs safely on non-UTF-8 consoles', () => {
+  const installScript = path.resolve(__dirname, '../../../resources/table-ocr/install_runtime.py')
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'onetool-install-runtime-test-'))
+  const probeScript = path.join(tempRoot, 'probe.py')
+
+  fs.writeFileSync(
+    probeScript,
+    [
+      'import importlib.util',
+      `spec = importlib.util.spec_from_file_location("install_runtime", ${JSON.stringify(installScript)})`,
+      'module = importlib.util.module_from_spec(spec)',
+      'spec.loader.exec_module(module)',
+      'module.emit("log", "查询 pip 镜像", level="info")',
+    ].join('\n'),
+    'utf8'
+  )
+
+  const result = spawnSync(findPython(), [probeScript], {
+    encoding: 'utf8',
+    env: { ...process.env, PYTHONIOENCODING: 'cp1252' },
+    windowsHide: true,
+  })
+
+  assert.equal(result.status, 0, result.stderr || result.stdout)
+  const logLine = result.stdout.trim().split(/\r?\n/).at(-1).replace('__ONETOOL_JSON__', '')
+  assert.equal(JSON.parse(logLine).message, '查询 pip 镜像')
+})
+
 test('install_runtime force-installs pip when bootstrapping from the pip wheel', () => {
   const installScript = path.resolve(__dirname, '../../../resources/table-ocr/install_runtime.py')
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'onetool-install-runtime-test-'))
