@@ -117,3 +117,30 @@ test('migrateSettings preserves persisted taskbar appearance overrides', () => {
   assert.equal(next.taskbarAppearanceIntensity, 25)
   assert.equal(next.taskbarAppearanceTint, '#000000')
 })
+
+test('migrateSettings adds desktop calendar widget defaults for older settings files', () => {
+  const { migrateSettings } = loadSettingsSchemaModule()
+
+  const migrated = migrateSettings({
+    schemaVersion: 1,
+    recorderHotkey: 'Alt+Shift+R',
+    screenshotHotkey: 'Alt+Shift+S',
+    floatBallHotkey: 'Alt+Shift+F',
+    clipboardHotkey: 'Alt+Shift+C',
+    screenshotSavePath: '',
+    autoSaveScreenshot: false,
+    autoCheckForUpdates: true,
+    minimizeToTray: true,
+    translateApiUrl: 'https://api.openai.com/v1',
+    translateApiKey: '',
+    translateModel: 'gpt-4o',
+    taskbarAppearanceEnabled: false,
+    taskbarAppearancePreset: 'default',
+    taskbarAppearanceIntensity: 70,
+    taskbarAppearanceTint: '#00000000'
+  })
+
+  assert.equal(migrated.calendarWidgetEnabled, false)
+  assert.equal(migrated.calendarWidgetBounds, null)
+  assert.equal(migrated.calendarReminderLeadMinutes, 10)
+})

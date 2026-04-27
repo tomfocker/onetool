@@ -1,5 +1,6 @@
 import type { DownloadOrganizerStoredState } from './downloadOrganizer'
 import type { TaskbarAppearancePreset } from './taskbarAppearance'
+import type { CalendarWidgetBounds } from './calendar'
 
 /**
  * 应用全局设置
@@ -24,6 +25,10 @@ export interface AppSettings {
   taskbarAppearancePreset: TaskbarAppearancePreset
   taskbarAppearanceIntensity: number
   taskbarAppearanceTint: string
+
+  calendarWidgetEnabled: boolean
+  calendarWidgetBounds: CalendarWidgetBounds | null
+  calendarReminderLeadMinutes: number
 }
 
 /**

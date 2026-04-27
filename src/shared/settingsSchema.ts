@@ -3,6 +3,7 @@ import { createDefaultTaskbarAppearanceSettings } from './taskbarAppearance'
 import type { AppSettings } from './types'
 
 export const SETTINGS_SCHEMA_VERSION = 1
+const DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES = 10
 
 const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
 
@@ -23,7 +24,10 @@ export function createDefaultAppSettings(): AppSettings {
     taskbarAppearanceEnabled: defaultTaskbarAppearanceSettings.enabled,
     taskbarAppearancePreset: defaultTaskbarAppearanceSettings.preset,
     taskbarAppearanceIntensity: defaultTaskbarAppearanceSettings.intensity,
-    taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex
+    taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex,
+    calendarWidgetEnabled: false,
+    calendarWidgetBounds: null,
+    calendarReminderLeadMinutes: DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES
   }
 }
 
@@ -43,7 +47,15 @@ const SettingsSchema = z.object({
   taskbarAppearanceEnabled: z.boolean(),
   taskbarAppearancePreset: z.enum(['default', 'transparent', 'blur', 'acrylic']),
   taskbarAppearanceIntensity: z.number(),
-  taskbarAppearanceTint: z.string()
+  taskbarAppearanceTint: z.string(),
+  calendarWidgetEnabled: z.boolean(),
+  calendarWidgetBounds: z.object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number()
+  }).nullable(),
+  calendarReminderLeadMinutes: z.number().int().min(0).max(1440)
 })
 
 export function migrateSettings(parsed: unknown): AppSettings {
