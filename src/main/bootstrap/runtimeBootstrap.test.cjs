@@ -268,6 +268,78 @@ test('initializeMainRuntime wires post-window services, updates, and hotkeys', a
   ])
 })
 
+test('initializeMainRuntime restores the calendar widget shell and opens it from reminder notifications', async () => {
+  const { initializeMainRuntime } = loadBootstrapModule()
+  const calls = []
+  let openCalendarHandler = null
+
+  await initializeMainRuntime({
+    settingsService: {
+      getSettings() {
+        return { minimizeToTray: false }
+      },
+      on() {}
+    },
+    downloadOrganizerService: {
+      async initialize() {
+        calls.push(['downloadOrganizer.initialize'])
+      }
+    },
+    windowManagerService: {
+      setTrayEnabled(value) {
+        calls.push(['windowManager.setTrayEnabled', value])
+      },
+      createFloatBallWindow() {
+        calls.push(['windowManager.createFloatBallWindow'])
+      },
+      createCalendarWidgetWindow() {
+        calls.push(['windowManager.createCalendarWidgetWindow'])
+      },
+      showCalendarWidgetWindow() {
+        calls.push(['windowManager.showCalendarWidgetWindow'])
+      }
+    },
+    calendarReminderService: {
+      setOpenCalendarHandler(handler) {
+        openCalendarHandler = handler
+        calls.push(['calendarReminder.setOpenCalendarHandler'])
+      }
+    },
+    appUpdateService: {
+      setBeforeQuitAndInstall() {},
+      async initialize() {}
+    },
+    autoClickerService: {
+      registerShortcuts() {}
+    },
+    hotkeyService: {
+      registerRecorderShortcut() {},
+      registerScreenshotShortcut() {},
+      registerTranslatorShortcut() {},
+      registerFloatBallShortcut() {},
+      registerClipboardShortcut() {}
+    },
+    registerAutoUpdateSettingsChangeHandler() {},
+    createBeforeQuitAndInstallHook() {
+      return 'before-quit-hook'
+    },
+    runtime: {
+      platform: 'win32',
+      isPackaged: true,
+      isDevelopment: false,
+      isPortableWindowsRuntime: false
+    },
+    scheduleTimeout() {}
+  })
+
+  assert.ok(calls.some(([label]) => label === 'windowManager.createCalendarWidgetWindow'))
+  assert.ok(calls.some(([label]) => label === 'calendarReminder.setOpenCalendarHandler'))
+  assert.equal(typeof openCalendarHandler, 'function')
+
+  openCalendarHandler()
+  assert.ok(calls.some(([label]) => label === 'windowManager.showCalendarWidgetWindow'))
+})
+
 test('scheduleDoctorAudit notifies the renderer when health issues are found', async () => {
   const { scheduleDoctorAudit } = loadBootstrapModule()
   const notifications = []

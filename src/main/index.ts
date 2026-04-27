@@ -69,6 +69,7 @@ import { downloadOrganizerService } from './services/DownloadOrganizerService'
 import { registerModelDownloadIpc } from './ipc/modelDownloadIpc'
 import { registerTableOcrIpc } from './ipc/tableOcrIpc'
 import { registerBilibiliDownloaderIpc } from './ipc/bilibiliDownloaderIpc'
+import { calendarReminderService } from './services/CalendarReminderService'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -219,6 +220,7 @@ app.whenReady().then(() => {
     settingsService,
     downloadOrganizerService,
     windowManagerService,
+    calendarReminderService,
     appUpdateService,
     autoClickerService,
     hotkeyService,

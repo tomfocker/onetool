@@ -49,7 +49,9 @@ export class CalendarReminderService {
     this.Notification = dependencies.Notification ?? Notification
     this.nowProvider = dependencies.nowProvider ?? Date.now
     this.scheduleTimeout = dependencies.scheduleTimeout ?? setTimeout
-    this.clearScheduledTimeout = dependencies.clearScheduledTimeout ?? clearTimeout
+    this.clearScheduledTimeout = dependencies.clearScheduledTimeout ?? ((timer) => {
+      clearTimeout(timer as ReturnType<typeof setTimeout>)
+    })
     this.openCalendarHandler = dependencies.openCalendar ?? (() => undefined)
 
     this.settingsService.on?.('changed', () => {

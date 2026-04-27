@@ -33,6 +33,11 @@ type RuntimeInitializationDependencies = {
   windowManagerService: {
     setTrayEnabled(enabled: boolean): void
     createFloatBallWindow(): void
+    createCalendarWidgetWindow?(): void
+    showCalendarWidgetWindow?(): unknown
+  }
+  calendarReminderService?: {
+    setOpenCalendarHandler(handler: () => void): void
   }
   appUpdateService: {
     setBeforeQuitAndInstall(hook: unknown): void
@@ -107,6 +112,7 @@ export async function initializeMainRuntime(
     settingsService,
     downloadOrganizerService,
     windowManagerService,
+    calendarReminderService,
     appUpdateService,
     autoClickerService,
     hotkeyService,
@@ -119,6 +125,14 @@ export async function initializeMainRuntime(
   await downloadOrganizerService.initialize()
   windowManagerService.setTrayEnabled(Boolean(settingsService.getSettings().minimizeToTray))
   windowManagerService.createFloatBallWindow()
+  windowManagerService.createCalendarWidgetWindow?.()
+  calendarReminderService?.setOpenCalendarHandler(() => {
+    if (windowManagerService.showCalendarWidgetWindow) {
+      windowManagerService.showCalendarWidgetWindow()
+      return
+    }
+    windowManagerService.createCalendarWidgetWindow?.()
+  })
   appUpdateService.setBeforeQuitAndInstall(createBeforeQuitAndInstallHook(windowManagerService))
 
   settingsService.on('changed', (newSettings) => {
