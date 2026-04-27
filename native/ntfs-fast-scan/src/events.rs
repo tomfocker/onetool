@@ -52,6 +52,10 @@ pub enum ScanEvent {
     LargestFiles {
         largest_files: Vec<LargestFile>,
     },
+    TreeUpdate {
+        summary: ScanSummary,
+        tree: TreeNode,
+    },
     Complete {
         summary: ScanSummary,
         largest_files: Vec<LargestFile>,
@@ -66,6 +70,7 @@ impl ScanEvent {
             ScanEvent::VolumeInfo { .. } => "volume-info",
             ScanEvent::TopLevelSummary { .. } => "top-level-summary",
             ScanEvent::LargestFiles { .. } => "largest-files",
+            ScanEvent::TreeUpdate { .. } => "tree-update",
             ScanEvent::Complete { .. } => "complete",
         }
     }
@@ -97,6 +102,11 @@ impl ScanEvent {
                     "largestFiles",
                     json_array(largest_files.iter().map(LargestFile::to_json)),
                 ),
+            ]),
+            ScanEvent::TreeUpdate { summary, tree } => json_object([
+                ("type", json_string(self.event_type())),
+                ("summary", summary.to_json()),
+                ("tree", tree.to_json()),
             ]),
             ScanEvent::Complete {
                 summary,
@@ -196,6 +206,14 @@ pub fn build_scan_events(snapshot: &ScanSnapshot) -> Vec<ScanEvent> {
             tree,
         },
     ]
+}
+
+pub fn build_tree_update_event(snapshot: &ScanSnapshot) -> ScanEvent {
+    let largest_files = aggregate::largest_files(snapshot, 20);
+    let summary = aggregate::summary(snapshot, &largest_files);
+    let tree = aggregate::tree(snapshot);
+
+    ScanEvent::TreeUpdate { summary, tree }
 }
 
 pub fn emit_event<W: Write>(writer: &mut W, event: &ScanEvent) -> io::Result<()> {
@@ -351,6 +369,18 @@ mod tests {
             event.to_json_line(),
             r#"{"type":"scan-progress","stage":"reading-mft","message":"正在读取 NTFS 元数据并筛选大文件"}"#
         );
+    }
+
+    #[test]
+    fn serializes_tree_update_events_for_progressive_rendering() {
+        let event = build_tree_update_event(&sample_snapshot());
+
+        assert_eq!(event.event_type(), "tree-update");
+        let line = event.to_json_line();
+        assert!(line.contains(r#""type":"tree-update""#));
+        assert!(line.contains(r#""summary":{"#));
+        assert!(line.contains(r#""tree":{"#));
+        assert!(line.contains(r#""children":["#));
     }
 
     #[test]

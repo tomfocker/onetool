@@ -23,7 +23,7 @@ pub fn summary(snapshot: &ScanSnapshot, largest_files: &[LargestFile]) -> ScanSu
 }
 
 pub fn tree(snapshot: &ScanSnapshot) -> TreeNode {
-    map_tree_node(&snapshot.root, 2)
+    map_tree_node(&snapshot.root, 3)
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -138,7 +138,14 @@ fn count_files(entry: &ScanEntry) -> u64 {
 fn count_directories_recursive(entry: &ScanEntry) -> u64 {
     match entry.kind {
         EntryKind::File => 0,
-        EntryKind::Directory => entry.children.iter().map(|child| 1 + count_directories_recursive(child)).sum(),
+        EntryKind::Directory => entry
+            .children
+            .iter()
+            .map(|child| match child.kind {
+                EntryKind::File => 0,
+                EntryKind::Directory => 1 + count_directories_recursive(child),
+            })
+            .sum(),
     }
 }
 
@@ -146,7 +153,12 @@ fn count_skipped_children_recursive(entry: &ScanEntry) -> u64 {
     match entry.kind {
         EntryKind::File => entry.skipped_children,
         EntryKind::Directory => {
-            entry.skipped_children + entry.children.iter().map(count_skipped_children_recursive).sum::<u64>()
+            entry.skipped_children
+                + entry
+                    .children
+                    .iter()
+                    .map(count_skipped_children_recursive)
+                    .sum::<u64>()
         }
     }
 }

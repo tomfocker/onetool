@@ -27,7 +27,13 @@ fn run() -> Result<(), String> {
     )
     .map_err(|error| format!("failed to write event: {error}"))?;
 
-    let snapshot = ntfs::scan_volume(&root).map_err(|error| format!("scan failed: {error}"))?;
+    let snapshot = ntfs::scan_volume_with_progress(&root, |progress_snapshot| {
+        events::emit_event(
+            &mut stdout,
+            &events::build_tree_update_event(progress_snapshot),
+        )
+    })
+    .map_err(|error| format!("scan failed: {error}"))?;
 
     events::emit_event(
         &mut stdout,

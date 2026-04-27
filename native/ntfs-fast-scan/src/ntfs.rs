@@ -33,6 +33,8 @@ const GENERIC_READ_ACCESS: u32 = 0x8000_0000;
 const FILE_RECORD_BUFFER_SIZE: usize = 64 * 1024;
 #[cfg(windows)]
 const FILE_RECORD_SEGMENT_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
+#[cfg(windows)]
+const PROGRESS_RECORD_INTERVAL: usize = 2048;
 
 #[cfg(windows)]
 #[allow(
@@ -311,15 +313,24 @@ impl EnumeratedEntry {
     }
 }
 
+#[allow(dead_code)]
 pub fn scan_volume(root: &Path) -> io::Result<ScanSnapshot> {
+    scan_volume_with_progress(root, |_| Ok(()))
+}
+
+pub fn scan_volume_with_progress<F>(root: &Path, mut progress: F) -> io::Result<ScanSnapshot>
+where
+    F: FnMut(&ScanSnapshot) -> io::Result<()>,
+{
     #[cfg(windows)]
     {
-        return scan_volume_windows(root);
+        return scan_volume_windows(root, &mut progress);
     }
 
     #[cfg(not(windows))]
     {
         let _ = root;
+        let _ = progress;
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "ntfs-fast-scan requires Windows NTFS volume access",
@@ -573,6 +584,40 @@ struct RawRecord {
 }
 
 #[cfg(windows)]
+#[derive(Clone, Debug)]
+struct RawRecordDescriptor {
+    parent_id: FileReference,
+    name: String,
+}
+
+#[cfg(windows)]
+#[derive(Clone, Debug)]
+struct PartialNodeState {
+    id: FileReference,
+    parent_id: FileReference,
+    name: String,
+    kind: EntryKind,
+    path: String,
+    depth: usize,
+    size_bytes: u64,
+    children_count: u64,
+    skipped_children: u64,
+}
+
+#[cfg(windows)]
+#[derive(Debug)]
+struct TopLevelProgressBuilder {
+    root_path: String,
+    filesystem: String,
+    root_reference: FileReference,
+    records: HashMap<FileReference, RawRecordDescriptor>,
+    states: HashMap<FileReference, PartialNodeState>,
+    files_scanned: u64,
+    skipped_entries: u64,
+    total_bytes: u64,
+}
+
+#[cfg(windows)]
 #[derive(Debug)]
 struct FileRecordQueryBuffer {
     output: Vec<u8>,
@@ -616,7 +661,10 @@ impl Drop for OwnedHandle {
 }
 
 #[cfg(windows)]
-fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
+fn scan_volume_windows<F>(root: &Path, progress: &mut F) -> io::Result<ScanSnapshot>
+where
+    F: FnMut(&ScanSnapshot) -> io::Result<()>,
+{
     let validated_root = validate_root_path(root)?;
     let filesystem = query_volume_filesystem(&validated_root)?;
     let root_handle = open_root_handle(&validated_root)?;
@@ -629,9 +677,15 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
         IdFormat::Legacy64 => FileReference::from_u64(root_identifiers.legacy_id),
         IdFormat::Extended128 => root_identifiers.extended_id,
     };
+    let mut progress_builder = TopLevelProgressBuilder::new(
+        &validated_root.root_path,
+        &filesystem,
+        root_reference,
+        &raw_records,
+    );
 
     let mut entries = Vec::with_capacity(raw_records.len());
-    for record in raw_records {
+    for (index, record) in raw_records.into_iter().enumerate() {
         let size_bytes = match record.kind {
             EntryKind::File => resolve_file_size(
                 volume_handle.raw,
@@ -640,6 +694,7 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
             ),
             EntryKind::Directory => Some(0),
         };
+        progress_builder.observe(&record, size_bytes);
 
         entries.push(EnumeratedEntry::from_parts(
             record.id,
@@ -648,6 +703,10 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
             record.kind,
             size_bytes,
         ));
+
+        if (index + 1) % PROGRESS_RECORD_INTERVAL == 0 {
+            progress(&progress_builder.to_snapshot())?;
+        }
     }
 
     build_snapshot_from_entries(
@@ -656,6 +715,215 @@ fn scan_volume_windows(root: &Path) -> io::Result<ScanSnapshot> {
         root_reference,
         entries,
     )
+}
+
+#[cfg(windows)]
+impl TopLevelProgressBuilder {
+    fn new(
+        root_path: &str,
+        filesystem: &str,
+        root_reference: FileReference,
+        raw_records: &[RawRecord],
+    ) -> Self {
+        let records = raw_records
+            .iter()
+            .map(|record| {
+                (
+                    record.id,
+                    RawRecordDescriptor {
+                        parent_id: record.parent_id,
+                        name: record.name.clone(),
+                    },
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let child_counts = raw_records.iter().fold(
+            HashMap::<FileReference, u64>::new(),
+            |mut counts, record| {
+                *counts.entry(record.parent_id).or_insert(0) += 1;
+                counts
+            },
+        );
+        let mut states = HashMap::new();
+
+        for record in raw_records {
+            let Some(chain) = chain_to_root(record.id, root_reference, &records) else {
+                continue;
+            };
+            let depth = chain.len();
+            if !(1..=3).contains(&depth) {
+                continue;
+            }
+
+            let path = build_path_from_chain(root_path, &chain, &records);
+            states.insert(
+                record.id,
+                PartialNodeState {
+                    id: record.id,
+                    parent_id: record.parent_id,
+                    name: record.name.clone(),
+                    kind: record.kind.clone(),
+                    path,
+                    depth,
+                    size_bytes: 0,
+                    children_count: *child_counts.get(&record.id).unwrap_or(&0),
+                    skipped_children: 0,
+                },
+            );
+        }
+
+        Self {
+            root_path: root_path.to_owned(),
+            filesystem: filesystem.to_owned(),
+            root_reference,
+            records,
+            states,
+            files_scanned: 0,
+            skipped_entries: 0,
+            total_bytes: 0,
+        }
+    }
+
+    fn observe(&mut self, record: &RawRecord, size_bytes: Option<u64>) {
+        if record.id == self.root_reference {
+            return;
+        }
+
+        let Some(chain) = chain_to_root(record.id, self.root_reference, &self.records) else {
+            return;
+        };
+        let ancestors = chain.iter().take(3).copied().collect::<Vec<_>>();
+
+        match record.kind {
+            EntryKind::File => {
+                if let Some(size) = size_bytes {
+                    self.files_scanned += 1;
+                    self.total_bytes += size;
+                    for ancestor_id in ancestors {
+                        if let Some(state) = self.states.get_mut(&ancestor_id) {
+                            state.size_bytes += size;
+                        }
+                    }
+                } else {
+                    self.skipped_entries += 1;
+                    for ancestor_id in ancestors {
+                        if let Some(state) = self.states.get_mut(&ancestor_id) {
+                            state.skipped_children += 1;
+                        }
+                    }
+                }
+            }
+            EntryKind::Directory => {}
+        }
+    }
+
+    fn to_snapshot(&self) -> ScanSnapshot {
+        let mut root_children = self
+            .states
+            .values()
+            .filter(|state| state.depth == 1)
+            .map(|state| self.to_scan_entry(state))
+            .collect::<Vec<_>>();
+        root_children.sort_by(|left, right| {
+            right
+                .size_bytes
+                .cmp(&left.size_bytes)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+
+        ScanSnapshot {
+            root_path: self.root_path.clone(),
+            filesystem: self.filesystem.clone(),
+            root: ScanEntry {
+                path: self.root_path.clone(),
+                name: self.root_path.clone(),
+                kind: EntryKind::Directory,
+                size_bytes: self.total_bytes,
+                skipped_children: root_children
+                    .iter()
+                    .map(|child| child.skipped_children)
+                    .sum(),
+                children: root_children,
+            },
+            files_scanned: self.files_scanned,
+            skipped_entries: self.skipped_entries,
+        }
+    }
+
+    fn to_scan_entry(&self, state: &PartialNodeState) -> ScanEntry {
+        let mut children = if state.kind == EntryKind::Directory {
+            self.states
+                .values()
+                .filter(|child| child.depth == state.depth + 1 && child.parent_id == state.id)
+                .map(|child| self.to_scan_entry(child))
+                .collect::<Vec<_>>()
+        } else {
+            Vec::new()
+        };
+        children.sort_by(|left, right| {
+            right
+                .size_bytes
+                .cmp(&left.size_bytes)
+                .then_with(|| left.path.cmp(&right.path))
+        });
+
+        let skipped_children = state.skipped_children
+            + children
+                .iter()
+                .map(|child| child.skipped_children)
+                .sum::<u64>();
+
+        ScanEntry {
+            path: state.path.clone(),
+            name: state.name.clone(),
+            kind: state.kind.clone(),
+            size_bytes: state.size_bytes,
+            skipped_children: skipped_children
+                + state.children_count.saturating_sub(children.len() as u64),
+            children,
+        }
+    }
+}
+
+#[cfg(windows)]
+fn chain_to_root(
+    node_id: FileReference,
+    root_reference: FileReference,
+    records: &HashMap<FileReference, RawRecordDescriptor>,
+) -> Option<Vec<FileReference>> {
+    let mut chain = Vec::new();
+    let mut current = node_id;
+    let mut visited = HashSet::new();
+
+    loop {
+        if current == root_reference {
+            chain.reverse();
+            return Some(chain);
+        }
+
+        if !visited.insert(current) {
+            return None;
+        }
+
+        let record = records.get(&current)?;
+        chain.push(current);
+        current = record.parent_id;
+    }
+}
+
+#[cfg(windows)]
+fn build_path_from_chain(
+    root_path: &str,
+    chain: &[FileReference],
+    records: &HashMap<FileReference, RawRecordDescriptor>,
+) -> String {
+    let mut path = PathBuf::from(root_path);
+    for node_id in chain {
+        if let Some(record) = records.get(node_id) {
+            path.push(&record.name);
+        }
+    }
+    path_string(&path)
 }
 
 #[cfg(windows)]
@@ -1341,6 +1609,81 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
+    fn progress_builder_streams_three_level_directory_sizes() {
+        let root = FileReference::from_u64(5);
+        let users = FileReference::from_u64(10);
+        let admin = FileReference::from_u64(11);
+        let cache = FileReference::from_u64(12);
+        let pagefile = FileReference::from_u64(13);
+        let records = vec![
+            RawRecord {
+                id: users,
+                parent_id: root,
+                name: "Users".to_owned(),
+                kind: EntryKind::Directory,
+                file_reference_number: 10,
+            },
+            RawRecord {
+                id: admin,
+                parent_id: users,
+                name: "Admin".to_owned(),
+                kind: EntryKind::Directory,
+                file_reference_number: 11,
+            },
+            RawRecord {
+                id: cache,
+                parent_id: admin,
+                name: "cache.bin".to_owned(),
+                kind: EntryKind::File,
+                file_reference_number: 12,
+            },
+            RawRecord {
+                id: pagefile,
+                parent_id: root,
+                name: "pagefile.sys".to_owned(),
+                kind: EntryKind::File,
+                file_reference_number: 13,
+            },
+        ];
+        let mut builder = TopLevelProgressBuilder::new(r"C:\", "NTFS", root, &records);
+
+        builder.observe(&records[2], Some(100));
+        builder.observe(&records[3], Some(50));
+
+        let snapshot = builder.to_snapshot();
+        assert_eq!(snapshot.root.size_bytes, 150);
+        assert_eq!(snapshot.files_scanned, 2);
+
+        let users_entry = snapshot
+            .root
+            .children
+            .iter()
+            .find(|entry| entry.path == r"C:\Users")
+            .expect("Users entry");
+        assert_eq!(users_entry.size_bytes, 100);
+
+        let admin_entry = users_entry
+            .children
+            .iter()
+            .find(|entry| entry.path == r"C:\Users\Admin")
+            .expect("Admin entry");
+        assert_eq!(admin_entry.size_bytes, 100);
+        assert_eq!(admin_entry.skipped_children, 0);
+        assert_eq!(admin_entry.children.len(), 1);
+        assert_eq!(admin_entry.children[0].path, r"C:\Users\Admin\cache.bin");
+        assert_eq!(admin_entry.children[0].size_bytes, 100);
+
+        let pagefile_entry = snapshot
+            .root
+            .children
+            .iter()
+            .find(|entry| entry.path == r"C:\pagefile.sys")
+            .expect("root file entry");
+        assert_eq!(pagefile_entry.size_bytes, 50);
+    }
+
+    #[cfg(windows)]
+    #[test]
     fn parse_file_record_uses_file_name_real_size_when_present() {
         let mut record = vec![0u8; 160];
         record[..4].copy_from_slice(b"FILE");
@@ -1432,11 +1775,9 @@ mod tests {
         let error = parse_file_record_output(requested, &output)
             .expect_err("mismatched file record output");
         assert!(
-            error
-                .to_string()
-                .contains(&format!(
-                    "returned file reference {returned} did not match requested {requested}"
-                )),
+            error.to_string().contains(&format!(
+                "returned file reference {returned} did not match requested {requested}"
+            )),
             "unexpected error: {error}"
         );
     }
