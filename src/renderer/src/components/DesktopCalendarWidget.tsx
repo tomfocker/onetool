@@ -41,7 +41,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
   const [backgroundMode, setBackgroundMode] = useState<CalendarWidgetBackgroundMode>('solid')
   const [glassOpacity, setGlassOpacity] = useState(DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY)
   const [glassBlur, setGlassBlur] = useState(DEFAULT_CALENDAR_WIDGET_GLASS_BLUR)
-  const [glassControlsOpen, setGlassControlsOpen] = useState(true)
+  const [glassControlsOpen, setGlassControlsOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -55,7 +55,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
       setAlwaysOnTop(Boolean(result.data.alwaysOnTop))
       const nextMode = result.data.backgroundMode === 'glass' ? 'glass' : 'solid'
       setBackgroundMode(nextMode)
-      setGlassControlsOpen(nextMode === 'glass')
+      setGlassControlsOpen(false)
       setGlassOpacity(normalizeCalendarWidgetGlassOpacity(result.data.glassOpacity))
       setGlassBlur(normalizeCalendarWidgetGlassBlur(result.data.glassBlur))
     }
@@ -169,6 +169,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
     : 'bg-white ring-slate-200'
   const controlButtonClass = 'grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950'
   const glassFilter = `blur(${glassBlur}px) saturate(180%)`
+  const glassFrostOpacity = Math.min(0.72, Math.max(0.16, 0.16 + glassBlur / 120))
   const glassSurfaceStyle: GlassStyle | undefined = isGlassBackground
     ? {
         backgroundColor: `rgba(255, 255, 255, ${glassOpacity / 100})`,
@@ -183,6 +184,21 @@ export function DesktopCalendarWidget(): React.JSX.Element {
         WebkitBackdropFilter: glassFilter
       }
     : undefined
+  const glassFrostStyle: GlassStyle | undefined = isGlassBackground
+    ? {
+        background: [
+          `linear-gradient(135deg, rgba(255, 255, 255, ${Math.min(0.44, glassOpacity / 160)}), rgba(241, 245, 249, ${Math.min(0.28, glassOpacity / 260)}))`,
+          'radial-gradient(circle at 24% 0%, rgba(255, 255, 255, 0.62), transparent 44%)',
+          'radial-gradient(circle at 88% 18%, rgba(209, 250, 229, 0.28), transparent 36%)'
+        ].join(', '),
+        opacity: glassFrostOpacity,
+        filter: `blur(${Math.round(glassBlur / 10)}px)`,
+        backdropFilter: `blur(${glassBlur}px) saturate(180%)`,
+        WebkitBackdropFilter: glassFilter,
+        transform: 'scale(1.02)',
+        willChange: 'opacity, filter, backdrop-filter'
+      }
+    : undefined
   const headerStyle = isGlassBackground ? { ...dragRegionStyle, ...glassSurfaceStyle } : dragRegionStyle
 
   return (
@@ -191,9 +207,16 @@ export function DesktopCalendarWidget(): React.JSX.Element {
         'calendar-widget-shell relative h-full w-full overflow-hidden rounded-lg border',
         calendarWidgetSurfaceClass
       )} style={glassSurfaceStyle}>
+        {isGlassBackground && (
+          <div
+            aria-hidden="true"
+            className="calendar-widget-glass-frost pointer-events-none absolute inset-0 z-0"
+            style={glassFrostStyle}
+          />
+        )}
         <header
           className={cn(
-            'calendar-widget-drag-region grid grid-cols-[1fr_auto] items-center gap-2 border-b px-3 py-2',
+            'calendar-widget-drag-region relative z-20 grid grid-cols-[1fr_auto] items-center gap-2 border-b px-3 py-2',
             calendarWidgetHeaderClass
           )}
           style={headerStyle}
@@ -276,10 +299,14 @@ export function DesktopCalendarWidget(): React.JSX.Element {
 
         {isGlassBackground && glassControlsOpen && (
           <section
-            className="absolute right-3 top-[58px] z-20 grid w-[260px] gap-3 rounded-lg border border-white/70 p-3 shadow-2xl shadow-slate-950/15 ring-1 ring-white/60"
+            className="absolute right-11 top-11 z-30 grid w-[220px] origin-top-right gap-2 rounded-md border border-white/70 p-2.5 shadow-xl shadow-slate-950/15 ring-1 ring-white/60"
             style={{ ...noDragStyle, ...glassPanelStyle }}
           >
-            <label className="grid gap-1">
+            <span
+              aria-hidden="true"
+              className="absolute -top-1.5 right-8 h-3 w-3 rotate-45 border-l border-t border-white/70 bg-white/70"
+            />
+            <label className="relative grid gap-1">
               <span className="flex items-center justify-between text-[10px] font-black text-slate-600">
                 <span>透明度</span>
                 <span>{glassOpacity}%</span>
@@ -292,10 +319,10 @@ export function DesktopCalendarWidget(): React.JSX.Element {
                 step={1}
                 value={glassOpacity}
                 onChange={(event) => updateGlassSettings({ opacity: Number(event.currentTarget.value) })}
-                className="h-2 w-full accent-emerald-600"
+                className="h-1.5 w-full accent-emerald-600"
               />
             </label>
-            <label className="grid gap-1">
+            <label className="relative grid gap-1">
               <span className="flex items-center justify-between text-[10px] font-black text-slate-600">
                 <span>模糊</span>
                 <span>{glassBlur}px</span>
@@ -308,13 +335,13 @@ export function DesktopCalendarWidget(): React.JSX.Element {
                 step={1}
                 value={glassBlur}
                 onChange={(event) => updateGlassSettings({ blur: Number(event.currentTarget.value) })}
-                className="h-2 w-full accent-emerald-600"
+                className="h-1.5 w-full accent-emerald-600"
               />
             </label>
           </section>
         )}
 
-        <div className="grid h-[calc(100%-49px)] grid-rows-[auto_1fr] gap-2 p-3">
+        <div className="relative z-10 grid h-[calc(100%-49px)] grid-rows-[auto_1fr] gap-2 p-3">
           <section className={cn('rounded-lg p-2 ring-1', calendarWidgetMonthClass)} style={glassPanelStyle}>
             <div className="grid grid-cols-7 gap-1 pb-1 text-center text-[10px] font-black text-slate-400">
               {['日', '一', '二', '三', '四', '五', '六'].map((label) => <span key={label}>{label}</span>)}

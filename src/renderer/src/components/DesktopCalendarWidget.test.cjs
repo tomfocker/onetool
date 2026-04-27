@@ -46,6 +46,9 @@ test('DesktopCalendarWidget exposes glass opacity and blur sliders with live bac
 
   assert.match(source, /glassOpacity/)
   assert.match(source, /glassBlur/)
+  assert.match(source, /calendar-widget-glass-frost/)
+  assert.match(source, /glassFrostStyle/)
+  assert.match(source, /filter: `blur\(\$\{Math\.round\(glassBlur \/ 10\)\}px\)`/)
   assert.match(source, /backdropFilter: `blur\(\$\{glassBlur\}px\) saturate\(180%\)`/)
   assert.match(source, /aria-label="毛玻璃透明度"/)
   assert.match(source, /aria-label="毛玻璃模糊强度"/)
@@ -53,4 +56,15 @@ test('DesktopCalendarWidget exposes glass opacity and blur sliders with live bac
   assert.match(source, /max=\{95\}/)
   assert.match(source, /min=\{0\}/)
   assert.match(source, /max=\{64\}/)
+})
+
+test('DesktopCalendarWidget keeps glass controls compact and anchored to the toolbar', () => {
+  const source = readSource('DesktopCalendarWidget.tsx')
+
+  assert.match(source, /const \[glassControlsOpen, setGlassControlsOpen\] = useState\(false\)/)
+  assert.match(source, /setGlassControlsOpen\(false\)/)
+  assert.match(source, /origin-top-right/)
+  assert.match(source, /w-\[220px\]/)
+  assert.doesNotMatch(source, /top-\[58px\]/)
+  assert.doesNotMatch(source, /w-\[260px\]/)
 })
