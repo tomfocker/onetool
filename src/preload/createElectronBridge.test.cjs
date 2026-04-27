@@ -129,6 +129,13 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.llm.getConfigStatus, 'function')
   assert.equal(typeof bridge.llm.testConnection, 'function')
   assert.equal(typeof bridge.llm.parseCalendarAssistant, 'function')
+  assert.equal(typeof bridge.calendar.getWidgetState, 'function')
+  assert.equal(typeof bridge.calendar.showWidget, 'function')
+  assert.equal(typeof bridge.calendar.hideWidget, 'function')
+  assert.equal(typeof bridge.calendar.toggleWidget, 'function')
+  assert.equal(typeof bridge.calendar.setWidgetBounds, 'function')
+  assert.equal(typeof bridge.calendar.replaceEvents, 'function')
+  assert.equal(typeof bridge.calendar.onEventsUpdated, 'function')
   assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
   assert.equal(typeof bridge.taskbarAppearance.applyPreset, 'function')
   assert.equal(typeof bridge.taskbarAppearance.restoreDefault, 'function')
@@ -155,6 +162,38 @@ test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () 
   assert.deepEqual(mocks.invokeCalls[0], ['floatball-end-drag', undefined])
   assert.deepEqual(mocks.invokeCalls[1], ['floatball-peek', undefined])
   assert.deepEqual(mocks.invokeCalls[2], ['floatball-restore-dock', undefined])
+})
+
+test('createElectronBridge maps calendar widget helpers and event subscriptions', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+  let pushedEvents = null
+
+  const unsubscribe = bridge.calendar.onEventsUpdated((events) => {
+    pushedEvents = events
+  })
+
+  await bridge.calendar.getWidgetState()
+  await bridge.calendar.showWidget()
+  await bridge.calendar.hideWidget()
+  await bridge.calendar.toggleWidget()
+  await bridge.calendar.setWidgetBounds({ x: 12, y: 24, width: 320, height: 420 })
+  await bridge.calendar.replaceEvents([{ id: 'event-1', title: '客户电话' }])
+  mocks.listeners.get('calendar-events-updated')({}, [{ id: 'event-2', title: '复盘' }])
+  unsubscribe()
+
+  assert.deepEqual(mocks.invokeCalls, [
+    ['calendar-widget-get-state'],
+    ['calendar-widget-show'],
+    ['calendar-widget-hide'],
+    ['calendar-widget-toggle'],
+    ['calendar-widget-set-bounds', { x: 12, y: 24, width: 320, height: 420 }],
+    ['calendar-events-replace', [{ id: 'event-1', title: '客户电话' }]]
+  ])
+  assert.deepEqual(pushedEvents, [{ id: 'event-2', title: '复盘' }])
+  assert.equal(mocks.removed.length, 1)
+  assert.equal(mocks.removed[0][0], 'calendar-events-updated')
 })
 
 test('registerFloatBallIpc wires explicit float ball drag lifecycle channels', () => {

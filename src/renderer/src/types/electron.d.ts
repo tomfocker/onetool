@@ -53,6 +53,7 @@ import type {
   LlmSpaceCleanupSuggestionRequest,
   LlmSystemAnalysisRequest
 } from '../../../shared/llm'
+import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../../../shared/calendar'
 
 declare global {
   interface Window {
@@ -299,6 +300,11 @@ declare global {
         move: (x: number, y: number) => void
         setPosition: (x: number, y: number) => void
         resize: (width: number, height: number) => void
+        beginDrag: (payload: { pointerOffsetX: number; pointerOffsetY: number }) => void
+        dragTo: (payload: { screenX: number; screenY: number }) => void
+        endDrag: () => Promise<IpcResponse<any>>
+        peek: () => Promise<IpcResponse<any>>
+        restoreDock: () => Promise<IpcResponse<any>>
         startDrag: (filePath: string) => void
         hideWindow: () => void
         showWindow: () => void
@@ -306,6 +312,15 @@ declare global {
         getState: () => Promise<IpcResponse<{ exists: boolean; visible: boolean }>>
         setHotkey: (hotkey: string) => Promise<IpcResponse>
         onVisibilityChanged: (callback: (visible: boolean) => void) => () => void
+      }
+      calendar: {
+        getWidgetState: () => Promise<IpcResponse<CalendarWidgetState>>
+        showWidget: () => Promise<IpcResponse<CalendarWidgetState>>
+        hideWidget: () => Promise<IpcResponse<CalendarWidgetState>>
+        toggleWidget: () => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetBounds: (bounds: CalendarWidgetBounds) => Promise<IpcResponse<CalendarWidgetState>>
+        replaceEvents: (events: CalendarEvent[]) => Promise<IpcResponse<CalendarEvent[]>>
+        onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => () => void
       }
       translate: {
         translateImage: (base64Image: string, mode?: ScreenOverlayMode) => Promise<IpcResponse<ScreenOverlayLineResult[]>>

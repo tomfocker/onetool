@@ -8,6 +8,7 @@ import {
   WebActivatorShortcutSchema
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
+import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../shared/calendar'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
@@ -257,6 +258,20 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     getState: () => ipcRenderer.invoke('floatball-get-state'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('settings-set-floatball-hotkey', hotkey),
     onVisibilityChanged: (callback: (visible: boolean) => void) => onChannel('floatball-visibility-changed', callback)
+  }
+
+  const calendarAPI = {
+    getWidgetState: () => ipcRenderer.invoke('calendar-widget-get-state') as Promise<IpcResponse<CalendarWidgetState>>,
+    showWidget: () => ipcRenderer.invoke('calendar-widget-show') as Promise<IpcResponse<CalendarWidgetState>>,
+    hideWidget: () => ipcRenderer.invoke('calendar-widget-hide') as Promise<IpcResponse<CalendarWidgetState>>,
+    toggleWidget: () => ipcRenderer.invoke('calendar-widget-toggle') as Promise<IpcResponse<CalendarWidgetState>>,
+    setWidgetBounds: (bounds: CalendarWidgetBounds) => {
+      return ipcRenderer.invoke('calendar-widget-set-bounds', bounds) as Promise<IpcResponse<CalendarWidgetState>>
+    },
+    replaceEvents: (events: CalendarEvent[]) => {
+      return ipcRenderer.invoke('calendar-events-replace', events) as Promise<IpcResponse<CalendarEvent[]>>
+    },
+    onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => onChannel('calendar-events-updated', callback)
   }
 
   const screenOverlayAPI = {
@@ -514,6 +529,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     screenRecorder: screenRecorderAPI,
     window: windowAPI,
     floatBall: floatBallAPI,
+    calendar: calendarAPI,
     screenOverlay: screenOverlayAPI,
     screenshot: screenshotAPI,
     colorPicker: colorPickerAPI,

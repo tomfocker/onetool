@@ -5,6 +5,7 @@ export type BootstrapRoute =
   | 'color-picker-overlay'
   | 'recorder-selection'
   | 'screenshot-selection'
+  | 'calendar-widget'
 
 export function resolveBootstrapRoute(hash: string): BootstrapRoute {
   const normalizedHash = hash || ''
@@ -27,6 +28,10 @@ export function resolveBootstrapRoute(hash: string): BootstrapRoute {
 
   if (normalizedHash.startsWith('#/screenshot-selection')) {
     return 'screenshot-selection'
+  }
+
+  if (normalizedHash.startsWith('#/calendar-widget')) {
+    return 'calendar-widget'
   }
 
   return 'app'

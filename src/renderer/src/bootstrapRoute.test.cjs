@@ -56,6 +56,11 @@ test('resolveBootstrapRoute detects screenshot selection overlays as a lightweig
   assert.equal(resolveBootstrapRoute('#/screenshot-selection?display=1'), 'screenshot-selection')
 })
 
+test('resolveBootstrapRoute detects the desktop calendar widget route as a lightweight entry', () => {
+  const { resolveBootstrapRoute } = loadBootstrapRouteModule()
+  assert.equal(resolveBootstrapRoute('#/calendar-widget'), 'calendar-widget')
+})
+
 test('resolveBootstrapRoute falls back to the main app for normal routes', () => {
   const { resolveBootstrapRoute } = loadBootstrapRouteModule()
   assert.equal(resolveBootstrapRoute('#/settings'), 'app')
