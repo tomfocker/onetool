@@ -22,6 +22,7 @@ export type MainProcessIpcRegistrars = {
   registerSystemIpc(getMainWindow: () => BrowserWindow | null): void
   registerScreenshotIpc(): void
   registerFloatBallIpc(): void
+  registerCalendarIpc(getMainWindow: () => BrowserWindow | null): void
   registerUpdateIpc(getMainWindow: () => BrowserWindow | null): void
   registerWebActivatorIpc(): void
   registerWslIpc(): void
@@ -59,6 +60,7 @@ export function registerIpc(input: {
   registrars.registerSystemIpc(mainWindowProvider)
   registrars.registerScreenshotIpc()
   registrars.registerFloatBallIpc()
+  registrars.registerCalendarIpc(mainWindowProvider)
   registrars.registerUpdateIpc(mainWindowProvider)
   registrars.registerWebActivatorIpc()
   registrars.registerWslIpc()

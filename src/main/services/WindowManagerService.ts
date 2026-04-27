@@ -3,7 +3,10 @@ import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import fs from 'fs'
 import { IpcResponse } from '../../shared/types'
+import type { AppSettings } from '../../shared/types'
+import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../../shared/calendar'
 import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
+import { settingsService as defaultSettingsService } from './SettingsService'
 
 type FloatBallDockSide = 'left' | 'right' | null
 type FloatBallDockState = 'free' | 'dragging' | 'preview' | 'docked' | 'peek' | 'expanded'
@@ -22,9 +25,15 @@ type DisplayWorkArea = {
   height: number
 }
 
+type CalendarWidgetSettingsService = {
+  getSettings(): Pick<AppSettings, 'calendarWidgetEnabled' | 'calendarWidgetBounds'>
+  updateSettings(updates: Partial<Pick<AppSettings, 'calendarWidgetEnabled' | 'calendarWidgetBounds'>>): Promise<IpcResponse> | IpcResponse
+}
+
 export class WindowManagerService {
   private mainWindow: BrowserWindow | null = null
   private floatBallWindow: BrowserWindow | null = null
+  private calendarWidgetWindow: BrowserWindow | null = null
   private tray: Tray | null = null
   private isQuitting = false
   private floatBallVisible = true
@@ -43,6 +52,9 @@ export class WindowManagerService {
   private readonly floatBallDockAnimationDurationMs = 260
   private readonly floatBallStartupTopInset = 24
   private readonly floatBallStartupTopOffset = 84
+  private readonly calendarWidgetDefaultBounds = { width: 320, height: 420 }
+  private readonly calendarWidgetMinBounds = { width: 280, height: 320 }
+  private readonly calendarWidgetInset = 24
 
   private getDockedFloatBallX(
     workArea: DisplayWorkArea,
@@ -100,7 +112,7 @@ export class WindowManagerService {
     }
   }
 
-  constructor() { }
+  constructor(private readonly settingsService: CalendarWidgetSettingsService = defaultSettingsService) { }
 
   setMainWindow(window: BrowserWindow | null) {
     this.mainWindow = window
@@ -166,6 +178,10 @@ export class WindowManagerService {
 
   getFloatBallWindow() {
     return this.floatBallWindow
+  }
+
+  getCalendarWidgetWindow() {
+    return this.calendarWidgetWindow
   }
 
   private resetFloatBallDragState() {
@@ -234,6 +250,60 @@ export class WindowManagerService {
       y: Math.round(Math.min(Math.max(bounds.y, workArea.y), workArea.y + workArea.height - bounds.height)),
       width: bounds.width,
       height: bounds.height
+    }
+  }
+
+  private getDefaultCalendarWidgetBounds(): CalendarWidgetBounds {
+    const display = this.mainWindow && !this.mainWindow.isDestroyed()
+      ? screen.getDisplayMatching(this.mainWindow.getBounds())
+      : screen.getPrimaryDisplay()
+    const { x, y, width, height } = display.workArea
+    return {
+      x: Math.round(x + width - this.calendarWidgetDefaultBounds.width - this.calendarWidgetInset),
+      y: Math.round(y + height - this.calendarWidgetDefaultBounds.height - this.calendarWidgetInset),
+      width: this.calendarWidgetDefaultBounds.width,
+      height: this.calendarWidgetDefaultBounds.height
+    }
+  }
+
+  private normalizeCalendarWidgetBounds(bounds: CalendarWidgetBounds): CalendarWidgetBounds {
+    const width = Math.max(this.calendarWidgetMinBounds.width, Math.round(bounds.width))
+    const height = Math.max(this.calendarWidgetMinBounds.height, Math.round(bounds.height))
+    const display = screen.getDisplayMatching({
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width,
+      height
+    })
+    return this.clampBoundsToWorkArea({
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width,
+      height
+    }, display.workArea)
+  }
+
+  private getInitialCalendarWidgetBounds(): CalendarWidgetBounds {
+    const settings = this.settingsService.getSettings()
+    return this.normalizeCalendarWidgetBounds(settings.calendarWidgetBounds ?? this.getDefaultCalendarWidgetBounds())
+  }
+
+  private persistCalendarWidgetBounds(bounds: CalendarWidgetBounds): void {
+    const normalized = this.normalizeCalendarWidgetBounds(bounds)
+    void this.settingsService.updateSettings({ calendarWidgetBounds: normalized })
+  }
+
+  private getCalendarWidgetStateData(enabledOverride?: boolean): CalendarWidgetState {
+    const exists = Boolean(this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed())
+    const visible = Boolean(exists && this.calendarWidgetWindow?.isVisible())
+    const settings = this.settingsService.getSettings()
+    return {
+      exists,
+      visible,
+      enabled: enabledOverride ?? Boolean(settings.calendarWidgetEnabled),
+      bounds: exists
+        ? this.calendarWidgetWindow!.getBounds()
+        : settings.calendarWidgetBounds
     }
   }
 
@@ -658,6 +728,141 @@ export class WindowManagerService {
       this.floatBallDockedLayoutState = null
       this.resetFloatBallDragState()
     })
+  }
+
+  createCalendarWidgetWindow(): void {
+    if (this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed()) {
+      return
+    }
+
+    const bounds = this.getInitialCalendarWidgetBounds()
+    this.calendarWidgetWindow = new BrowserWindow({
+      ...bounds,
+      show: false,
+      type: 'toolbar',
+      frame: false,
+      transparent: true,
+      hasShadow: true,
+      backgroundColor: '#00000000',
+      alwaysOnTop: true,
+      resizable: true,
+      minWidth: this.calendarWidgetMinBounds.width,
+      minHeight: this.calendarWidgetMinBounds.height,
+      skipTaskbar: true,
+      focusable: true,
+      webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
+    })
+
+    this.calendarWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
+    this.calendarWidgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+
+    if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+      this.calendarWidgetWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/calendar-widget`)
+    } else {
+      this.calendarWidgetWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+        hash: '/calendar-widget'
+      })
+    }
+
+    this.calendarWidgetWindow.once('ready-to-show', () => {
+      if (
+        this.settingsService.getSettings().calendarWidgetEnabled &&
+        this.calendarWidgetWindow &&
+        !this.calendarWidgetWindow.isDestroyed()
+      ) {
+        this.calendarWidgetWindow.showInactive()
+        this.calendarWidgetWindow.moveTop()
+      }
+    })
+
+    const persistBounds = () => {
+      if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+        return
+      }
+      this.persistCalendarWidgetBounds(this.calendarWidgetWindow.getBounds())
+    }
+    this.calendarWidgetWindow.on('moved', persistBounds)
+    this.calendarWidgetWindow.on('resized', persistBounds)
+
+    this.calendarWidgetWindow.on('closed', () => {
+      this.calendarWidgetWindow = null
+    })
+  }
+
+  getCalendarWidgetState(): IpcResponse<CalendarWidgetState> {
+    return { success: true, data: this.getCalendarWidgetStateData() }
+  }
+
+  showCalendarWidgetWindow(): IpcResponse<CalendarWidgetState> {
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      this.createCalendarWidgetWindow()
+    }
+
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      return { success: false, error: '日历悬浮窗不存在' }
+    }
+
+    const nextBounds = this.normalizeCalendarWidgetBounds(this.calendarWidgetWindow.getBounds())
+    this.calendarWidgetWindow.setBounds(nextBounds)
+    this.calendarWidgetWindow.showInactive()
+    this.calendarWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
+    this.calendarWidgetWindow.moveTop()
+    void this.settingsService.updateSettings({ calendarWidgetEnabled: true })
+    return {
+      success: true,
+      data: {
+        ...this.getCalendarWidgetStateData(true),
+        bounds: nextBounds
+      }
+    }
+  }
+
+  hideCalendarWidgetWindow(): IpcResponse<CalendarWidgetState> {
+    if (this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed()) {
+      this.calendarWidgetWindow.hide()
+    }
+    void this.settingsService.updateSettings({ calendarWidgetEnabled: false })
+    return {
+      success: true,
+      data: this.getCalendarWidgetStateData(false)
+    }
+  }
+
+  toggleCalendarWidgetWindow(): IpcResponse<CalendarWidgetState> {
+    const isVisible = Boolean(this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed() && this.calendarWidgetWindow.isVisible())
+    return isVisible ? this.hideCalendarWidgetWindow() : this.showCalendarWidgetWindow()
+  }
+
+  setCalendarWidgetBounds(bounds: CalendarWidgetBounds): IpcResponse<CalendarWidgetState> {
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      this.createCalendarWidgetWindow()
+    }
+
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      return { success: false, error: '日历悬浮窗不存在' }
+    }
+
+    const nextBounds = this.normalizeCalendarWidgetBounds(bounds)
+    this.calendarWidgetWindow.setBounds(nextBounds)
+    this.persistCalendarWidgetBounds(nextBounds)
+
+    return {
+      success: true,
+      data: {
+        ...this.getCalendarWidgetStateData(),
+        bounds: nextBounds
+      }
+    }
+  }
+
+  broadcastCalendarEvents(events: CalendarEvent[]): void {
+    const targets = [this.mainWindow, this.calendarWidgetWindow]
+    for (const target of targets) {
+      if (!target || target.isDestroyed()) {
+        continue
+      }
+      target.webContents.send('calendar-events-updated', events)
+    }
   }
 
   createTray(): void {

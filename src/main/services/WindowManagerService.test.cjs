@@ -20,6 +20,21 @@ function loadWindowManagerServiceModule(overrides = {}) {
   const module = { exports: {} }
   const browserWindowInstances = []
   const trayInstances = []
+  const settingsUpdates = []
+  const settingsService = overrides.settingsService || {
+    settings: {
+      calendarWidgetEnabled: false,
+      calendarWidgetBounds: null
+    },
+    getSettings() {
+      return this.settings
+    },
+    async updateSettings(updates) {
+      settingsUpdates.push(updates)
+      this.settings = { ...this.settings, ...updates }
+      return { success: true }
+    }
+  }
 
   class BrowserWindowMock {
     constructor(options) {
@@ -33,6 +48,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
         height: options.height ?? 0
       }
       this._boundsHistory = [{ ...this._bounds }]
+      this._visible = Boolean(options.show)
       this.webContents = {
         isLoading: () => false,
         once() {},
@@ -66,9 +82,9 @@ function loadWindowManagerServiceModule(overrides = {}) {
       this._handlers.get(event).push(handler)
     }
     isDestroyed() { return false }
-    isVisible() { return false }
-    showInactive() {}
-    hide() {}
+    isVisible() { return this._visible }
+    showInactive() { this._visible = true }
+    hide() { this._visible = false }
     moveTop() {}
     getBounds() { return this._bounds }
     setBounds(bounds) {
@@ -129,6 +145,10 @@ function loadWindowManagerServiceModule(overrides = {}) {
       return {}
     }
 
+    if (specifier === './SettingsService') {
+      return { settingsService }
+    }
+
     if (specifier === '../utils/windowSecurity') {
       return {
         createIsolatedPreloadWebPreferences(preload) {
@@ -163,7 +183,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
     clearInterval() {}
   }, { filename: filePath })
 
-  return { ...module.exports, browserWindowInstances, trayInstances }
+  return { ...module.exports, browserWindowInstances, trayInstances, settingsUpdates, settingsService }
 }
 
 test('createFloatBallWindow creates a focusable float ball window for native drag and drop', () => {
@@ -471,4 +491,96 @@ test('dragFloatBallTo prefers setPosition while dragging when the float ball siz
 
   assert.equal(result.success, true)
   assert.equal(setPositionCalls, 1)
+})
+
+test('createCalendarWidgetWindow creates a persistent transparent desktop calendar window', () => {
+  const { WindowManagerService, browserWindowInstances } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.createCalendarWidgetWindow()
+
+  const widgetWindow = browserWindowInstances[0]
+  assert.equal(browserWindowInstances.length, 1)
+  assert.equal(widgetWindow.options.width, 320)
+  assert.equal(widgetWindow.options.height, 420)
+  assert.equal(widgetWindow.options.frame, false)
+  assert.equal(widgetWindow.options.transparent, true)
+  assert.equal(widgetWindow.options.skipTaskbar, true)
+  assert.equal(widgetWindow.options.resizable, true)
+  assert.equal(widgetWindow.options.alwaysOnTop, true)
+  assert.equal(widgetWindow.options.webPreferences.contextIsolation, true)
+  assert.equal(widgetWindow.options.webPreferences.nodeIntegration, false)
+  assert.equal(widgetWindow.options.webPreferences.sandbox, true)
+  assert.equal(widgetWindow.loadedFiles[0].options.hash, '/calendar-widget')
+})
+
+test('showCalendarWidgetWindow creates, shows, and enables the desktop calendar widget', () => {
+  const { WindowManagerService, browserWindowInstances, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  const result = service.showCalendarWidgetWindow()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.visible, true)
+  assert.equal(result.data.enabled, true)
+  assert.equal(browserWindowInstances[0].isVisible(), true)
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), { calendarWidgetEnabled: true })
+})
+
+test('hideCalendarWidgetWindow hides and disables the desktop calendar widget', () => {
+  const { WindowManagerService, browserWindowInstances, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.showCalendarWidgetWindow()
+  const result = service.hideCalendarWidgetWindow()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.visible, false)
+  assert.equal(result.data.enabled, false)
+  assert.equal(browserWindowInstances[0].isVisible(), false)
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), { calendarWidgetEnabled: false })
+})
+
+test('setCalendarWidgetBounds clamps the desktop calendar inside the active display and persists it', () => {
+  const { WindowManagerService, browserWindowInstances, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.createCalendarWidgetWindow()
+  const result = service.setCalendarWidgetBounds({ x: -200, y: -100, width: 180, height: 240 })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(JSON.parse(JSON.stringify(result.data.bounds)), { x: 0, y: 0, width: 280, height: 320 })
+  assert.deepEqual(JSON.parse(JSON.stringify(browserWindowInstances[0].getBounds())), { x: 0, y: 0, width: 280, height: 320 })
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), {
+    calendarWidgetBounds: { x: 0, y: 0, width: 280, height: 320 }
+  })
+})
+
+test('calendar widget state reflects the persisted enabled flag when the window is not created yet', () => {
+  const { WindowManagerService } = loadWindowManagerServiceModule({
+    settingsService: {
+      settings: {
+        calendarWidgetEnabled: true,
+        calendarWidgetBounds: { x: 24, y: 32, width: 360, height: 440 }
+      },
+      getSettings() {
+        return this.settings
+      },
+      async updateSettings(updates) {
+        this.settings = { ...this.settings, ...updates }
+        return { success: true }
+      }
+    }
+  })
+  const service = new WindowManagerService()
+
+  const result = service.getCalendarWidgetState()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(JSON.parse(JSON.stringify(result.data)), {
+    exists: false,
+    visible: false,
+    enabled: true,
+    bounds: { x: 24, y: 32, width: 360, height: 440 }
+  })
 })

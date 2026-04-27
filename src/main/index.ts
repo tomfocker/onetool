@@ -55,6 +55,7 @@ import { registerSystemIpc } from './ipc/systemIpc'
 import { registerWindowIpc } from './ipc/windowIpc'
 import { registerScreenshotIpc } from './ipc/screenshotIpc'
 import { registerFloatBallIpc } from './ipc/floatBallIpc'
+import { registerCalendarIpc } from './ipc/calendarIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
 import { registerLlmIpc } from './ipc/llmIpc'
 import { registerTaskbarAppearanceIpc, restoreTaskbarAppearanceOnStartup } from './ipc/taskbarAppearanceIpc'
@@ -184,6 +185,7 @@ app.whenReady().then(() => {
     registerSystemIpc,
     registerScreenshotIpc,
     registerFloatBallIpc,
+    registerCalendarIpc,
     registerUpdateIpc,
     registerWebActivatorIpc,
     registerWslIpc,
