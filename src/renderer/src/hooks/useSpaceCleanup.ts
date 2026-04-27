@@ -366,6 +366,7 @@ export function buildSpaceCleanupViewModel({
   loadingDirectoryPath?: string | null
 }) {
   const activeSession = session ?? createIdleSpaceCleanupSession()
+  const isScanning = activeSession.status === 'scanning'
   const resolvedTree = applyHydratedSpaceCleanupDirectories(activeSession.tree, hydratedDirectories)
   const largestFileMatch = selectedPath
     ? activeSession.largestFiles.find((item) => item.path === selectedPath) ?? null
@@ -402,6 +403,18 @@ export function buildSpaceCleanupViewModel({
     tree: resolvedTree,
     selectedNode,
     currentDirectory,
+    isScanning,
+    activityLabel: isScanning
+      ? activeSession.scanModeReason ??
+        (activeSession.scanMode === 'ntfs-fast'
+          ? '正在执行 NTFS 极速扫描，读取文件记录并筛选大文件'
+          : '正在扫描目录并统计空间占用')
+      : null,
+    emptyTreeLabel: isScanning
+      ? activeSession.scanMode === 'ntfs-fast'
+        ? 'NTFS 极速扫描正在读取文件记录，完成后会立即显示目录树和大文件列表。'
+        : '普通扫描正在遍历前两级目录，发现大文件后会持续刷新。'
+      : '扫描完成后会在这里显示目录树。',
     distributionRoot,
     distributionLoading: currentDirectory?.type === 'directory' && currentDirectory.path === loadingDirectoryPath,
     modeLabel: activeSession.scanMode === 'ntfs-fast' ? '极速扫描（NTFS）' : '普通扫描',

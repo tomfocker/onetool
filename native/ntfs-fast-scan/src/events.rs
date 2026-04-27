@@ -37,6 +37,10 @@ pub struct TreeNode {
 
 #[derive(Clone, Debug)]
 pub enum ScanEvent {
+    Progress {
+        stage: String,
+        message: String,
+    },
     VolumeInfo {
         mode: String,
         root_path: String,
@@ -58,6 +62,7 @@ pub enum ScanEvent {
 impl ScanEvent {
     pub fn event_type(&self) -> &'static str {
         match self {
+            ScanEvent::Progress { .. } => "scan-progress",
             ScanEvent::VolumeInfo { .. } => "volume-info",
             ScanEvent::TopLevelSummary { .. } => "top-level-summary",
             ScanEvent::LargestFiles { .. } => "largest-files",
@@ -67,6 +72,11 @@ impl ScanEvent {
 
     pub fn to_json_line(&self) -> String {
         match self {
+            ScanEvent::Progress { stage, message } => json_object([
+                ("type", json_string(self.event_type())),
+                ("stage", json_string(stage)),
+                ("message", json_string(message)),
+            ]),
             ScanEvent::VolumeInfo {
                 mode,
                 root_path,
@@ -327,6 +337,20 @@ mod tests {
             files_scanned: 1,
             skipped_entries: 1,
         }
+    }
+
+    #[test]
+    fn serializes_scan_progress_stage_events() {
+        let event = ScanEvent::Progress {
+            stage: "reading-mft".to_owned(),
+            message: "正在读取 NTFS 元数据并筛选大文件".to_owned(),
+        };
+
+        assert_eq!(event.event_type(), "scan-progress");
+        assert_eq!(
+            event.to_json_line(),
+            r#"{"type":"scan-progress","stage":"reading-mft","message":"正在读取 NTFS 元数据并筛选大文件"}"#
+        );
     }
 
     #[test]

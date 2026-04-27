@@ -50,6 +50,8 @@ type TraversalState = {
 
 type MutableSummary = ReturnType<typeof createEmptySpaceCleanupSummary>
 const DEFAULT_FILESYSTEM_MAX_DIRECTORY_DEPTH = 2
+const NTFS_FAST_SCAN_READING_REASON = '正在读取 NTFS 元数据并筛选大文件'
+const NTFS_FAST_SCAN_ELEVATED_READING_REASON = '已获得管理员权限，正在读取 NTFS 元数据并筛选大文件'
 
 function resolveNtfsFastScannerPath(pathModule: typeof path) {
   const isPackaged = typeof app?.isPackaged === 'boolean' ? app.isPackaged : false
@@ -382,7 +384,7 @@ export class SpaceCleanupService {
       ...this.currentSession,
       rootPath,
       scanMode: 'ntfs-fast',
-      scanModeReason: null,
+      scanModeReason: NTFS_FAST_SCAN_READING_REASON,
       isPartial: true,
       error: null
     }
@@ -401,41 +403,6 @@ export class SpaceCleanupService {
     }
     this.activeNtfsFastScanRun = run
     void this.attachNtfsFastScanRun(rootPath, run)
-    return { success: true, data: this.currentSession }
-
-    void run.done.then(() => {
-      if (this.currentSession.status !== 'scanning') {
-        return
-      }
-
-      this.currentSession = {
-        ...this.currentSession,
-        status: 'completed',
-        finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString(),
-        isPartial: shouldKeepNtfsSessionPartial(this.currentSession),
-        error: null
-      }
-      this.emit('space-cleanup-complete', this.currentSession)
-    }).catch((error) => {
-      const message = normalizeNtfsFastScanFailureMessage(getErrorMessage(error))
-      if (this.cancelled || this.currentSession.status === 'cancelled' || /cancelled/i.test(message)) {
-        this.currentSession = {
-          ...this.currentSession,
-          status: 'cancelled',
-          finishedAt: this.currentSession.finishedAt ?? new Date(this.now()).toISOString()
-        }
-        this.emit('space-cleanup-complete', this.currentSession)
-        return
-      }
-
-      logger.warn('SpaceCleanup: ntfs-fast scan failed after start, falling back to filesystem scan', error)
-      void this.startFilesystemScan(rootPath, `NTFS 极速扫描失败，已回退到普通扫描：${message}`)
-    }).finally(() => {
-      if (this.activeNtfsFastScanRun === run) {
-        this.activeNtfsFastScanRun = null
-      }
-    })
-
     return { success: true, data: this.currentSession }
   }
 
@@ -462,6 +429,11 @@ export class SpaceCleanupService {
     }
 
     this.activeNtfsFastScanRun = run
+    this.currentSession = {
+      ...this.currentSession,
+      scanModeReason: NTFS_FAST_SCAN_ELEVATED_READING_REASON
+    }
+    this.emit('space-cleanup-progress', this.currentSession)
     void this.attachNtfsFastScanRun(rootPath, run)
     return { success: true, data: this.currentSession }
   }
@@ -512,12 +484,19 @@ export class SpaceCleanupService {
   private handleNtfsFastScanEvent(event: NtfsFastScannerBridgeEvent) {
     const nextSession: SpaceCleanupSession = { ...this.currentSession }
 
+    if (event.type === 'scan-progress') {
+      if (typeof event.message === 'string' && event.message.trim()) {
+        nextSession.scanModeReason = event.message
+      } else if (typeof event.stage === 'string' && event.stage.trim()) {
+        nextSession.scanModeReason = `正在执行 NTFS 极速扫描：${event.stage}`
+      }
+    }
+
     if (event.type === 'volume-info') {
       if (typeof event.rootPath === 'string') {
         nextSession.rootPath = event.rootPath
       }
       nextSession.scanMode = event.mode === 'ntfs-fast' ? 'ntfs-fast' : nextSession.scanMode
-      nextSession.scanModeReason = null
     }
 
     if (Array.isArray(event.largestFiles)) {

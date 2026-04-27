@@ -206,6 +206,23 @@ test('buildSpaceCleanupViewModel marks ntfs-fast sessions explicitly', () => {
   assert.equal(viewModel.partialLabel, null)
 })
 
+test('buildSpaceCleanupViewModel exposes an active scan label for pending ntfs-fast scans', () => {
+  const viewModel = buildSpaceCleanupViewModel({
+    session: {
+      ...createIdleSpaceCleanupSession(),
+      status: 'scanning',
+      scanMode: 'ntfs-fast',
+      scanModeReason: '正在读取 NTFS 元数据并筛选大文件',
+      isPartial: true
+    },
+    selectedPath: null
+  })
+
+  assert.equal(viewModel.isScanning, true)
+  assert.equal(viewModel.activityLabel, '正在读取 NTFS 元数据并筛选大文件')
+  assert.equal(viewModel.emptyTreeLabel, 'NTFS 极速扫描正在读取文件记录，完成后会立即显示目录树和大文件列表。')
+})
+
 test('buildSpaceCleanupViewModel falls back to largest-file metadata when the compact tree omits a deep file node', () => {
   const viewModel = buildSpaceCleanupViewModel({
     session: {

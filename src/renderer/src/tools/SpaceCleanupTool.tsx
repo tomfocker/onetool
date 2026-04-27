@@ -397,7 +397,24 @@ export default function SpaceCleanupTool() {
             {session.finishedAt ? <Badge variant="outline">完成：{new Date(session.finishedAt).toLocaleString('zh-CN')}</Badge> : null}
           </div>
 
-          {viewModel.modeReason ? (
+          {viewModel.isScanning && viewModel.activityLabel ? (
+            <div className="overflow-hidden rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-100">
+              <div className="flex items-center gap-3">
+                <RefreshCw className="h-4 w-4 animate-spin text-sky-500" />
+                <div>
+                  <div className="font-semibold">{viewModel.activityLabel}</div>
+                  <div className="mt-1 text-xs text-sky-700/80 dark:text-sky-200/80">
+                    扫描器正在后台工作，结果会自动刷新到目录树和大文件列表。
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-sky-200/70 dark:bg-sky-900">
+                <div className="h-full w-1/3 animate-pulse rounded-full bg-gradient-to-r from-sky-400 via-indigo-500 to-cyan-400" />
+              </div>
+            </div>
+          ) : null}
+
+          {viewModel.modeReason && !viewModel.isScanning ? (
             <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               {viewModel.modeReason}
             </div>
@@ -472,7 +489,7 @@ export default function SpaceCleanupTool() {
               />
             ) : (
               <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-muted-foreground dark:border-zinc-700">
-                扫描完成后会在这里显示目录树。
+                {viewModel.emptyTreeLabel}
               </div>
             )}
           </CardContent>
@@ -566,7 +583,7 @@ export default function SpaceCleanupTool() {
                     })
                   ) : (
                     <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-muted-foreground dark:border-zinc-700">
-                      当前没有可用的目录分布数据。
+                      {viewModel.isScanning ? '扫描进行中，目录分布会在结果返回后自动生成。' : '当前没有可用的目录分布数据。'}
                     </div>
                   )}
                 </div>
@@ -607,7 +624,7 @@ export default function SpaceCleanupTool() {
                 ))
               ) : (
                 <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-muted-foreground dark:border-zinc-700">
-                  扫描完成后会在这里显示最大的文件占比。
+                  {viewModel.isScanning ? '正在筛选大文件，扫描结果返回后会优先展示最大文件。' : '扫描完成后会在这里显示最大的文件占比。'}
                 </div>
               )}
             </CardContent>

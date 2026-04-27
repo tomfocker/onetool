@@ -206,6 +206,57 @@ test('startScan uses ntfs-fast mode for eligible NTFS root volumes', async () =>
   assert.equal(finalSession.data.tree.path, 'D:\\')
 })
 
+test('startScan exposes an immediate ntfs-fast progress reason while native scan is pending', async () => {
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start() {
+        return {
+          done: new Promise(() => {}),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 4300, createId: () => 'session-fast-pending-1' })
+  const result = await service.startScan('D:\\')
+  const activeSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.status, 'scanning')
+  assert.equal(result.data.scanMode, 'ntfs-fast')
+  assert.match(result.data.scanModeReason, /读取 NTFS/)
+  assert.equal(activeSession.data.scanModeReason, result.data.scanModeReason)
+})
+
+test('startScan updates the ntfs-fast progress reason from native stage events', async () => {
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
+    fastBridge: {
+      start(_rootPath, onEvent) {
+        onEvent({
+          type: 'scan-progress',
+          stage: 'aggregating',
+          message: '正在整理目录占用和大文件列表'
+        })
+        return {
+          done: new Promise(() => {}),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 4400, createId: () => 'session-fast-progress-1' })
+  const result = await service.startScan('D:\\')
+  const activeSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(activeSession.data.status, 'scanning')
+  assert.equal(activeSession.data.scanModeReason, '正在整理目录占用和大文件列表')
+})
+
 test('startScan keeps ntfs-fast sessions partial when native complete reports skipped entries', async () => {
   const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
     fastEligibility: async () => ({ mode: 'ntfs-fast', reason: null }),
