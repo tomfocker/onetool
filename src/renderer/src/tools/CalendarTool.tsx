@@ -6,6 +6,7 @@ import {
   Clock,
   Edit3,
   MapPin,
+  Monitor,
   Plus,
   Search,
   Send,
@@ -41,6 +42,7 @@ import {
   layoutCalendarEventsForDay,
   type CalendarEventLayoutItem
 } from './calendarEventLayout'
+import { syncCalendarEventsToNativeBridge } from './calendarNativeSync'
 import type { LlmCalendarAssistantResult } from '../../../shared/llm'
 
 type CalendarName = '个人' | '工作' | '家庭' | '重要'
@@ -197,6 +199,7 @@ export default function CalendarTool(): React.JSX.Element {
 
   useEffect(() => {
     window.localStorage.setItem(CALENDAR_STORAGE_KEY, JSON.stringify(events))
+    void syncCalendarEventsToNativeBridge(events)
   }, [events])
 
   useEffect(() => {
@@ -265,6 +268,11 @@ export default function CalendarTool(): React.JSX.Element {
   const activeEvent = events.find((event) => event.id === activeEventId) ?? null
 
   const showToast = (message: string) => setToast(message)
+
+  const openDesktopWidget = () => {
+    void window.electron?.calendar?.showWidget()
+    showToast('常驻桌面日历已打开')
+  }
 
   const describeConflictToast = (message: string, conflicts: CalendarEvent[]) => (
     conflicts.length > 0 ? `${message}，与 ${conflicts.length} 个日程重叠，已并排显示` : message
@@ -928,15 +936,25 @@ export default function CalendarTool(): React.JSX.Element {
               <p className="mt-1 text-xs font-black uppercase tracking-[0.24em] text-white/55">Mountain Focus Calendar</p>
             </div>
           </div>
-          <label className="relative block w-full lg:max-w-xl">
-            <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/70" />
-            <input
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="搜索日程、地点或参与者..."
-              className="h-12 w-full rounded-2xl border border-white/20 bg-white/10 pl-12 pr-4 text-sm font-bold text-white outline-none backdrop-blur-xl placeholder:text-white/45 focus:border-blue-300/80 2xl:h-14"
-            />
-          </label>
+          <div className="flex w-full flex-col gap-3 sm:flex-row lg:max-w-3xl">
+            <button
+              type="button"
+              onClick={openDesktopWidget}
+              className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-2xl border border-emerald-200/30 bg-emerald-400/20 px-4 text-sm font-black text-emerald-50 shadow-lg shadow-emerald-950/15 transition hover:-translate-y-0.5 hover:bg-emerald-400/30 2xl:h-14"
+            >
+              <Monitor size={18} />
+              常驻桌面
+            </button>
+            <label className="relative block min-w-0 flex-1">
+              <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-white/70" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="搜索日程、地点或参与者..."
+                className="h-12 w-full rounded-2xl border border-white/20 bg-white/10 pl-12 pr-4 text-sm font-bold text-white outline-none backdrop-blur-xl placeholder:text-white/45 focus:border-blue-300/80 2xl:h-14"
+              />
+            </label>
+          </div>
         </header>
 
         <div className="grid gap-4 lg:grid-cols-[236px_minmax(0,1fr)] 2xl:grid-cols-[264px_minmax(0,1fr)] 2xl:gap-5">

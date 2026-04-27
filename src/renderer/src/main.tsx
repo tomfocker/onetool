@@ -2,6 +2,7 @@ import './index.css'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { resolveBootstrapRoute } from './bootstrapRoute'
+import { syncStoredCalendarEventsToNativeBridge } from './tools/calendarNativeSync'
 
 const hash = window.location.hash
 const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement)
@@ -16,6 +17,10 @@ function applyTransparentWindowBackground() {
 }
 
 async function bootstrap() {
+  if (bootstrapRoute === 'app' || bootstrapRoute === 'calendar-widget') {
+    void syncStoredCalendarEventsToNativeBridge(window.localStorage)
+  }
+
   if (bootstrapRoute === 'floatball') {
     applyTransparentWindowBackground()
     const { FileDropover } = await import('./components/FileDropover')
@@ -68,6 +73,17 @@ async function bootstrap() {
     root.render(
       <React.StrictMode>
         <module.ScreenshotSelectionOverlay />
+      </React.StrictMode>
+    )
+    return
+  }
+
+  if (bootstrapRoute === 'calendar-widget') {
+    applyTransparentWindowBackground()
+    const { DesktopCalendarWidget } = await import('./components/DesktopCalendarWidget')
+    root.render(
+      <React.StrictMode>
+        <DesktopCalendarWidget />
       </React.StrictMode>
     )
     return
