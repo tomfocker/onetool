@@ -75,6 +75,14 @@ function resolveSpaceScanResource(pathModule: typeof path, resourceName: string)
   return pathModule.join(resourcesPath, 'space-scan', resourceName)
 }
 
+async function assertFileExists(fsPromises: typeof fs, filePath: string, label: string): Promise<void> {
+  try {
+    await fsPromises.access(filePath)
+  } catch {
+    throw new Error(`${label}不存在：${filePath}`)
+  }
+}
+
 async function defaultLaunchElevated(manifestPath: string, helperScriptPath: string): Promise<ElevatedLaunchResult> {
   const command = [
     "$ErrorActionPreference = 'Stop'",
@@ -149,6 +157,9 @@ export class ElevatedNtfsScanRunner {
     rootPath: string,
     onEvent: (event: NtfsFastScannerBridgeEvent) => void
   ): Promise<NtfsFastScannerRunHandle> {
+    await assertFileExists(this.fsPromises, this.scannerPath, 'NTFS 极速扫描器')
+    await assertFileExists(this.fsPromises, this.helperScriptPath, 'NTFS 极速扫描提权脚本')
+
     const workDir = await this.fsPromises.mkdtemp(this.pathModule.join(this.osModule.tmpdir(), 'space-cleanup-fast-scan-'))
     const eventsPath = this.pathModule.join(workDir, 'events.jsonl')
     const stderrPath = this.pathModule.join(workDir, 'stderr.log')

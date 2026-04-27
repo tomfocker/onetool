@@ -73,9 +73,20 @@ function loadElevatedNtfsScanRunnerModule(overrides = {}) {
   return module.exports
 }
 
+async function createScannerResources(tempRoot) {
+  const scannerPath = path.join(tempRoot, 'ntfs-fast-scan.exe')
+  const helperScriptPath = path.join(tempRoot, 'run-elevated-ntfs-fast-scan.ps1')
+
+  await fs.promises.writeFile(scannerPath, '', 'utf8')
+  await fs.promises.writeFile(helperScriptPath, '', 'utf8')
+
+  return { scannerPath, helperScriptPath }
+}
+
 test('start creates manifest and requests elevated helper launch', async () => {
   const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-test-'))
   const launches = []
+  const resources = await createScannerResources(tempRoot)
   const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
 
   const runner = new ElevatedNtfsScanRunner({
@@ -83,8 +94,8 @@ test('start creates manifest and requests elevated helper launch', async () => {
       ...os,
       tmpdir: () => tempRoot
     },
-    scannerPath: 'C:\\native\\ntfs-fast-scan.exe',
-    helperScriptPath: 'C:\\helpers\\run-elevated-ntfs-fast-scan.ps1',
+    scannerPath: resources.scannerPath,
+    helperScriptPath: resources.helperScriptPath,
     launchElevated: async (manifestPath, helperScriptPath) => {
       launches.push({ manifestPath, helperScriptPath })
       await fs.promises.writeFile(path.join(path.dirname(manifestPath), 'exit-code.txt'), '0', 'utf8')
@@ -97,17 +108,47 @@ test('start creates manifest and requests elevated helper launch', async () => {
 
   assert.equal(launches.length, 1)
   assert.match(launches[0].manifestPath, /space-cleanup-fast-scan-/)
-  assert.equal(launches[0].helperScriptPath, 'C:\\helpers\\run-elevated-ntfs-fast-scan.ps1')
+  assert.equal(launches[0].helperScriptPath, resources.helperScriptPath)
 
   const manifest = JSON.parse(await fs.promises.readFile(launches[0].manifestPath, 'utf8'))
   assert.equal(manifest.rootPath, 'D:\\')
-  assert.equal(manifest.scannerPath, 'C:\\native\\ntfs-fast-scan.exe')
+  assert.equal(manifest.scannerPath, resources.scannerPath)
+
+  await fs.promises.rm(tempRoot, { recursive: true, force: true })
+})
+
+test('start rejects before requesting elevation when scanner binary is missing', async () => {
+  const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-missing-scanner-'))
+  const launches = []
+  const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
+  const missingScannerPath = path.join(tempRoot, 'missing', 'ntfs-fast-scan.exe')
+
+  const runner = new ElevatedNtfsScanRunner({
+    osModule: {
+      ...os,
+      tmpdir: () => tempRoot
+    },
+    scannerPath: missingScannerPath,
+    helperScriptPath: 'C:\\helpers\\run-elevated-ntfs-fast-scan.ps1',
+    launchElevated: async (manifestPath, helperScriptPath) => {
+      launches.push({ manifestPath, helperScriptPath })
+      await fs.promises.writeFile(path.join(path.dirname(manifestPath), 'exit-code.txt'), '0', 'utf8')
+      return { pid: 1234 }
+    }
+  })
+
+  await assert.rejects(
+    () => runner.start('D:\\', () => {}),
+    /NTFS 极速扫描器不存在/
+  )
+  assert.equal(launches.length, 0)
 
   await fs.promises.rm(tempRoot, { recursive: true, force: true })
 })
 
 test('start replays JSON lines from the elevated helper events file', async () => {
   const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-events-'))
+  const resources = await createScannerResources(tempRoot)
   const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
 
   const runner = new ElevatedNtfsScanRunner({
@@ -115,6 +156,8 @@ test('start replays JSON lines from the elevated helper events file', async () =
       ...os,
       tmpdir: () => tempRoot
     },
+    scannerPath: resources.scannerPath,
+    helperScriptPath: resources.helperScriptPath,
     launchElevated: async (manifestPath) => {
       const workDir = path.dirname(manifestPath)
       await fs.promises.writeFile(
@@ -139,6 +182,7 @@ test('start replays JSON lines from the elevated helper events file', async () =
 
 test('start retries when the elevated helper events file is briefly locked', async () => {
   const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-busy-'))
+  const resources = await createScannerResources(tempRoot)
   const intervalHandlers = []
   const events = []
   const realFsPromises = fs.promises
@@ -150,6 +194,8 @@ test('start retries when the elevated helper events file is briefly locked', asy
       ...os,
       tmpdir: () => tempRoot
     },
+    scannerPath: resources.scannerPath,
+    helperScriptPath: resources.helperScriptPath,
     fsPromises: {
       ...realFsPromises,
       readFile: async (targetPath, encoding) => {
@@ -199,6 +245,7 @@ test('start retries when the elevated helper events file is briefly locked', asy
 
 test('start rejects with scanner stderr when elevated helper reports a non-zero exit code', async () => {
   const tempRoot = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'elevated-ntfs-runner-fail-'))
+  const resources = await createScannerResources(tempRoot)
   const { ElevatedNtfsScanRunner } = loadElevatedNtfsScanRunnerModule()
 
   const runner = new ElevatedNtfsScanRunner({
@@ -206,6 +253,8 @@ test('start rejects with scanner stderr when elevated helper reports a non-zero 
       ...os,
       tmpdir: () => tempRoot
     },
+    scannerPath: resources.scannerPath,
+    helperScriptPath: resources.helperScriptPath,
     launchElevated: async (manifestPath) => {
       const workDir = path.dirname(manifestPath)
       await fs.promises.writeFile(path.join(workDir, 'stderr.log'), 'access denied', 'utf8')
