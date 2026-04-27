@@ -8,7 +8,12 @@ import type {
   CalendarEvent,
   CalendarWidgetBackgroundMode,
   CalendarWidgetBounds,
+  CalendarWidgetGlassSettings,
   CalendarWidgetState
+} from '../../shared/calendar'
+import {
+  normalizeCalendarWidgetGlassBlur,
+  normalizeCalendarWidgetGlassOpacity
 } from '../../shared/calendar'
 import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 import { settingsService as defaultSettingsService } from './SettingsService'
@@ -35,6 +40,8 @@ type CalendarWidgetSettingsKey =
   | 'calendarWidgetBounds'
   | 'calendarWidgetAlwaysOnTop'
   | 'calendarWidgetBackgroundMode'
+  | 'calendarWidgetGlassOpacity'
+  | 'calendarWidgetGlassBlur'
 
 type CalendarWidgetSettingsService = {
   getSettings(): Pick<AppSettings, CalendarWidgetSettingsKey>
@@ -308,14 +315,26 @@ export class WindowManagerService {
     return mode === 'glass' ? 'glass' : 'solid'
   }
 
+  private getCalendarWidgetGlassSettings(
+    settings: Pick<AppSettings, CalendarWidgetSettingsKey>,
+    overrides: Partial<CalendarWidgetGlassSettings> = {}
+  ): CalendarWidgetGlassSettings {
+    return {
+      opacity: normalizeCalendarWidgetGlassOpacity(overrides.opacity ?? settings.calendarWidgetGlassOpacity),
+      blur: normalizeCalendarWidgetGlassBlur(overrides.blur ?? settings.calendarWidgetGlassBlur)
+    }
+  }
+
   private getCalendarWidgetStateData(
     enabledOverride?: boolean,
     alwaysOnTopOverride?: boolean,
-    backgroundModeOverride?: CalendarWidgetBackgroundMode
+    backgroundModeOverride?: CalendarWidgetBackgroundMode,
+    glassSettingsOverride?: Partial<CalendarWidgetGlassSettings>
   ): CalendarWidgetState {
     const exists = Boolean(this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed())
     const visible = Boolean(exists && this.calendarWidgetWindow?.isVisible())
     const settings = this.settingsService.getSettings()
+    const glassSettings = this.getCalendarWidgetGlassSettings(settings, glassSettingsOverride)
     return {
       exists,
       visible,
@@ -323,6 +342,8 @@ export class WindowManagerService {
       alwaysOnTop: alwaysOnTopOverride ?? Boolean(settings.calendarWidgetAlwaysOnTop),
       backgroundMode: backgroundModeOverride ??
         this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode),
+      glassOpacity: glassSettings.opacity,
+      glassBlur: glassSettings.blur,
       bounds: exists
         ? this.calendarWidgetWindow!.getBounds()
         : settings.calendarWidgetBounds
@@ -343,6 +364,18 @@ export class WindowManagerService {
     }
 
     this.calendarWidgetWindow.setAlwaysOnTop(false)
+  }
+
+  private applyCalendarWidgetBackgroundMaterial(backgroundMode: CalendarWidgetBackgroundMode): void {
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      return
+    }
+
+    if (process.platform !== 'win32' || typeof this.calendarWidgetWindow.setBackgroundMaterial !== 'function') {
+      return
+    }
+
+    this.calendarWidgetWindow.setBackgroundMaterial(backgroundMode === 'glass' ? 'acrylic' : 'none')
   }
 
   private rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
@@ -774,7 +807,9 @@ export class WindowManagerService {
     }
 
     const bounds = this.getInitialCalendarWidgetBounds()
-    const initialAlwaysOnTop = Boolean(this.settingsService.getSettings().calendarWidgetAlwaysOnTop)
+    const settings = this.settingsService.getSettings()
+    const initialAlwaysOnTop = Boolean(settings.calendarWidgetAlwaysOnTop)
+    const initialBackgroundMode = this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode)
     this.calendarWidgetWindow = new BrowserWindow({
       ...bounds,
       show: false,
@@ -783,6 +818,7 @@ export class WindowManagerService {
       transparent: true,
       hasShadow: true,
       backgroundColor: '#00000000',
+      backgroundMaterial: initialBackgroundMode === 'glass' ? 'acrylic' : 'none',
       alwaysOnTop: initialAlwaysOnTop,
       resizable: true,
       minWidth: this.calendarWidgetMinBounds.width,
@@ -795,6 +831,7 @@ export class WindowManagerService {
     if (initialAlwaysOnTop) {
       this.applyCalendarWidgetAlwaysOnTop(true)
     }
+    this.applyCalendarWidgetBackgroundMaterial(initialBackgroundMode)
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.calendarWidgetWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/calendar-widget`)
@@ -845,8 +882,11 @@ export class WindowManagerService {
     }
 
     const nextBounds = this.normalizeCalendarWidgetBounds(this.calendarWidgetWindow.getBounds())
-    const alwaysOnTop = Boolean(this.settingsService.getSettings().calendarWidgetAlwaysOnTop)
+    const settings = this.settingsService.getSettings()
+    const alwaysOnTop = Boolean(settings.calendarWidgetAlwaysOnTop)
+    const backgroundMode = this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode)
     this.calendarWidgetWindow.setBounds(nextBounds)
+    this.applyCalendarWidgetBackgroundMaterial(backgroundMode)
     this.calendarWidgetWindow.showInactive()
     if (alwaysOnTop) {
       this.applyCalendarWidgetAlwaysOnTop(true)
@@ -918,10 +958,23 @@ export class WindowManagerService {
 
   setCalendarWidgetBackgroundMode(mode: CalendarWidgetBackgroundMode): IpcResponse<CalendarWidgetState> {
     const backgroundMode = this.normalizeCalendarWidgetBackgroundMode(mode)
+    this.applyCalendarWidgetBackgroundMaterial(backgroundMode)
     void this.settingsService.updateSettings({ calendarWidgetBackgroundMode: backgroundMode })
     return {
       success: true,
       data: this.getCalendarWidgetStateData(undefined, undefined, backgroundMode)
+    }
+  }
+
+  setCalendarWidgetGlassSettings(settings: Partial<CalendarWidgetGlassSettings>): IpcResponse<CalendarWidgetState> {
+    const glassSettings = this.getCalendarWidgetGlassSettings(this.settingsService.getSettings(), settings)
+    void this.settingsService.updateSettings({
+      calendarWidgetGlassOpacity: glassSettings.opacity,
+      calendarWidgetGlassBlur: glassSettings.blur
+    })
+    return {
+      success: true,
+      data: this.getCalendarWidgetStateData(undefined, undefined, undefined, glassSettings)
     }
   }
 

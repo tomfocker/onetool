@@ -10,16 +10,28 @@ import {
   PanelTop,
   Pin,
   PinOff,
+  SlidersHorizontal,
   X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { CalendarEvent, CalendarWidgetBackgroundMode } from '../../../shared/calendar'
+import {
+  DEFAULT_CALENDAR_WIDGET_GLASS_BLUR,
+  DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY,
+  normalizeCalendarWidgetGlassBlur,
+  normalizeCalendarWidgetGlassOpacity
+} from '../../../shared/calendar'
+import type {
+  CalendarEvent,
+  CalendarWidgetBackgroundMode,
+  CalendarWidgetGlassSettings
+} from '../../../shared/calendar'
 import { CALENDAR_STORAGE_KEY, loadCalendarEvents } from '../tools/calendarStorage'
 import { buildDesktopCalendarWidgetModel } from '../tools/desktopCalendarWidgetModel'
 import { syncCalendarEventsToNativeBridge } from '../tools/calendarNativeSync'
 
 const dragRegionStyle = { WebkitAppRegion: 'drag' } as React.CSSProperties
 const noDragStyle = { WebkitAppRegion: 'no-drag' } as React.CSSProperties
+type GlassStyle = React.CSSProperties & { WebkitBackdropFilter?: string }
 
 export function DesktopCalendarWidget(): React.JSX.Element {
   const [events, setEvents] = useState<CalendarEvent[]>(() => loadCalendarEvents(window.localStorage) as CalendarEvent[])
@@ -27,6 +39,9 @@ export function DesktopCalendarWidget(): React.JSX.Element {
   const [now, setNow] = useState(() => new Date())
   const [alwaysOnTop, setAlwaysOnTop] = useState(false)
   const [backgroundMode, setBackgroundMode] = useState<CalendarWidgetBackgroundMode>('solid')
+  const [glassOpacity, setGlassOpacity] = useState(DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY)
+  const [glassBlur, setGlassBlur] = useState(DEFAULT_CALENDAR_WIDGET_GLASS_BLUR)
+  const [glassControlsOpen, setGlassControlsOpen] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -38,7 +53,11 @@ export function DesktopCalendarWidget(): React.JSX.Element {
       }
 
       setAlwaysOnTop(Boolean(result.data.alwaysOnTop))
-      setBackgroundMode(result.data.backgroundMode === 'glass' ? 'glass' : 'solid')
+      const nextMode = result.data.backgroundMode === 'glass' ? 'glass' : 'solid'
+      setBackgroundMode(nextMode)
+      setGlassControlsOpen(nextMode === 'glass')
+      setGlassOpacity(normalizeCalendarWidgetGlassOpacity(result.data.glassOpacity))
+      setGlassBlur(normalizeCalendarWidgetGlassBlur(result.data.glassBlur))
     }
 
     void showWidget()
@@ -103,15 +122,36 @@ export function DesktopCalendarWidget(): React.JSX.Element {
   const toggleBackgroundMode = () => {
     const nextMode: CalendarWidgetBackgroundMode = backgroundMode === 'glass' ? 'solid' : 'glass'
     setBackgroundMode(nextMode)
+    setGlassControlsOpen(nextMode === 'glass')
     void window.electron?.calendar?.setWidgetBackgroundMode(nextMode).then((result) => {
       if (result?.success && result.data) {
-        setBackgroundMode(result.data.backgroundMode === 'glass' ? 'glass' : 'solid')
+        const resolvedMode = result.data.backgroundMode === 'glass' ? 'glass' : 'solid'
+        setBackgroundMode(resolvedMode)
+        setGlassControlsOpen(resolvedMode === 'glass')
         return
       }
       setBackgroundMode(nextMode === 'glass' ? 'solid' : 'glass')
+      setGlassControlsOpen(nextMode !== 'glass')
     }).catch(() => {
       setBackgroundMode(nextMode === 'glass' ? 'solid' : 'glass')
+      setGlassControlsOpen(nextMode !== 'glass')
     })
+  }
+
+  const updateGlassSettings = (updates: Partial<CalendarWidgetGlassSettings>) => {
+    const nextSettings = {
+      opacity: normalizeCalendarWidgetGlassOpacity(updates.opacity ?? glassOpacity),
+      blur: normalizeCalendarWidgetGlassBlur(updates.blur ?? glassBlur)
+    }
+
+    setGlassOpacity(nextSettings.opacity)
+    setGlassBlur(nextSettings.blur)
+    void window.electron?.calendar?.setWidgetGlassSettings(nextSettings).then((result) => {
+      if (result?.success && result.data) {
+        setGlassOpacity(normalizeCalendarWidgetGlassOpacity(result.data.glassOpacity))
+        setGlassBlur(normalizeCalendarWidgetGlassBlur(result.data.glassBlur))
+      }
+    }).catch(() => undefined)
   }
 
   const isGlassBackground = backgroundMode === 'glass'
@@ -128,19 +168,35 @@ export function DesktopCalendarWidget(): React.JSX.Element {
     ? 'bg-slate-50/[0.60] ring-white/80 shadow-inner shadow-white/70 backdrop-blur-xl'
     : 'bg-white ring-slate-200'
   const controlButtonClass = 'grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950'
+  const glassFilter = `blur(${glassBlur}px) saturate(180%)`
+  const glassSurfaceStyle: GlassStyle | undefined = isGlassBackground
+    ? {
+        backgroundColor: `rgba(255, 255, 255, ${glassOpacity / 100})`,
+        backdropFilter: `blur(${glassBlur}px) saturate(180%)`,
+        WebkitBackdropFilter: glassFilter
+      }
+    : undefined
+  const glassPanelStyle: GlassStyle | undefined = isGlassBackground
+    ? {
+        backgroundColor: `rgba(248, 250, 252, ${glassOpacity / 100})`,
+        backdropFilter: `blur(${glassBlur}px) saturate(180%)`,
+        WebkitBackdropFilter: glassFilter
+      }
+    : undefined
+  const headerStyle = isGlassBackground ? { ...dragRegionStyle, ...glassSurfaceStyle } : dragRegionStyle
 
   return (
     <main className="h-screen w-screen overflow-hidden bg-transparent p-2 text-slate-950">
       <section className={cn(
-        'calendar-widget-shell h-full w-full overflow-hidden rounded-lg border',
+        'calendar-widget-shell relative h-full w-full overflow-hidden rounded-lg border',
         calendarWidgetSurfaceClass
-      )}>
+      )} style={glassSurfaceStyle}>
         <header
           className={cn(
             'calendar-widget-drag-region grid grid-cols-[1fr_auto] items-center gap-2 border-b px-3 py-2',
             calendarWidgetHeaderClass
           )}
-          style={dragRegionStyle}
+          style={headerStyle}
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
@@ -161,6 +217,20 @@ export function DesktopCalendarWidget(): React.JSX.Element {
               )}
             >
               {isGlassBackground ? <PanelTop size={15} /> : <GlassWater size={15} />}
+            </button>
+            <button
+              type="button"
+              aria-label={glassControlsOpen ? '隐藏毛玻璃参数' : '毛玻璃参数'}
+              title={glassControlsOpen ? '隐藏毛玻璃参数' : '毛玻璃参数'}
+              onClick={() => setGlassControlsOpen((open) => !open)}
+              disabled={!isGlassBackground}
+              className={cn(
+                controlButtonClass,
+                isGlassBackground && glassControlsOpen && 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800',
+                !isGlassBackground && 'opacity-40'
+              )}
+            >
+              <SlidersHorizontal size={15} />
             </button>
             <button
               type="button"
@@ -204,8 +274,48 @@ export function DesktopCalendarWidget(): React.JSX.Element {
           </div>
         </header>
 
+        {isGlassBackground && glassControlsOpen && (
+          <section
+            className="absolute right-3 top-[58px] z-20 grid w-[260px] gap-3 rounded-lg border border-white/70 p-3 shadow-2xl shadow-slate-950/15 ring-1 ring-white/60"
+            style={{ ...noDragStyle, ...glassPanelStyle }}
+          >
+            <label className="grid gap-1">
+              <span className="flex items-center justify-between text-[10px] font-black text-slate-600">
+                <span>透明度</span>
+                <span>{glassOpacity}%</span>
+              </span>
+              <input
+                aria-label="毛玻璃透明度"
+                type="range"
+                min={20}
+                max={95}
+                step={1}
+                value={glassOpacity}
+                onChange={(event) => updateGlassSettings({ opacity: Number(event.currentTarget.value) })}
+                className="h-2 w-full accent-emerald-600"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="flex items-center justify-between text-[10px] font-black text-slate-600">
+                <span>模糊</span>
+                <span>{glassBlur}px</span>
+              </span>
+              <input
+                aria-label="毛玻璃模糊强度"
+                type="range"
+                min={0}
+                max={64}
+                step={1}
+                value={glassBlur}
+                onChange={(event) => updateGlassSettings({ blur: Number(event.currentTarget.value) })}
+                className="h-2 w-full accent-emerald-600"
+              />
+            </label>
+          </section>
+        )}
+
         <div className="grid h-[calc(100%-49px)] grid-rows-[auto_1fr] gap-2 p-3">
-          <section className={cn('rounded-lg p-2 ring-1', calendarWidgetMonthClass)}>
+          <section className={cn('rounded-lg p-2 ring-1', calendarWidgetMonthClass)} style={glassPanelStyle}>
             <div className="grid grid-cols-7 gap-1 pb-1 text-center text-[10px] font-black text-slate-400">
               {['日', '一', '二', '三', '四', '五', '六'].map((label) => <span key={label}>{label}</span>)}
             </div>
@@ -236,7 +346,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
             </div>
           </section>
 
-          <section className={cn('min-h-0 overflow-hidden rounded-lg ring-1', calendarWidgetEventsClass)}>
+          <section className={cn('min-h-0 overflow-hidden rounded-lg ring-1', calendarWidgetEventsClass)} style={glassPanelStyle}>
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <div className="flex items-center gap-2 text-xs font-black text-slate-700">
                 <Bell size={14} className="text-amber-600" />

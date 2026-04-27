@@ -136,6 +136,7 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.calendar.setWidgetBounds, 'function')
   assert.equal(typeof bridge.calendar.setWidgetAlwaysOnTop, 'function')
   assert.equal(typeof bridge.calendar.setWidgetBackgroundMode, 'function')
+  assert.equal(typeof bridge.calendar.setWidgetGlassSettings, 'function')
   assert.equal(typeof bridge.calendar.replaceEvents, 'function')
   assert.equal(typeof bridge.calendar.onEventsUpdated, 'function')
   assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
@@ -183,6 +184,7 @@ test('createElectronBridge maps calendar widget helpers and event subscriptions'
   await bridge.calendar.setWidgetBounds({ x: 12, y: 24, width: 320, height: 420 })
   await bridge.calendar.setWidgetAlwaysOnTop(true)
   await bridge.calendar.setWidgetBackgroundMode('glass')
+  await bridge.calendar.setWidgetGlassSettings({ opacity: 62, blur: 36 })
   await bridge.calendar.replaceEvents([{ id: 'event-1', title: '客户电话' }])
   mocks.listeners.get('calendar-events-updated')({}, [{ id: 'event-2', title: '复盘' }])
   unsubscribe()
@@ -195,6 +197,7 @@ test('createElectronBridge maps calendar widget helpers and event subscriptions'
     ['calendar-widget-set-bounds', { x: 12, y: 24, width: 320, height: 420 }],
     ['calendar-widget-set-always-on-top', true],
     ['calendar-widget-set-background-mode', 'glass'],
+    ['calendar-widget-set-glass-settings', { opacity: 62, blur: 36 }],
     ['calendar-events-replace', [{ id: 'event-1', title: '客户电话' }]]
   ])
   assert.deepEqual(pushedEvents, [{ id: 'event-2', title: '复盘' }])

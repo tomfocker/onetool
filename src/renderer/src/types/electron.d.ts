@@ -57,6 +57,7 @@ import type {
   CalendarEvent,
   CalendarWidgetBackgroundMode,
   CalendarWidgetBounds,
+  CalendarWidgetGlassSettings,
   CalendarWidgetState
 } from '../../../shared/calendar'
 
@@ -326,6 +327,7 @@ declare global {
         setWidgetBounds: (bounds: CalendarWidgetBounds) => Promise<IpcResponse<CalendarWidgetState>>
         setWidgetAlwaysOnTop: (alwaysOnTop: boolean) => Promise<IpcResponse<CalendarWidgetState>>
         setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetGlassSettings: (settings: CalendarWidgetGlassSettings) => Promise<IpcResponse<CalendarWidgetState>>
         replaceEvents: (events: CalendarEvent[]) => Promise<IpcResponse<CalendarEvent[]>>
         onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => () => void
       }

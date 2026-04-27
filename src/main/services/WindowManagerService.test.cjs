@@ -5,6 +5,33 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 
+function loadCalendarModule() {
+  const filePath = path.join(__dirname, '..', '..', 'shared', 'calendar.ts')
+  const source = fs.readFileSync(filePath, 'utf8')
+  const transpiled = ts.transpileModule(source, {
+    compilerOptions: {
+      module: ts.ModuleKind.CommonJS,
+      target: ts.ScriptTarget.ES2020,
+      esModuleInterop: true
+    },
+    fileName: filePath
+  }).outputText
+
+  const module = { exports: {} }
+  vm.runInNewContext(transpiled, {
+    module,
+    exports: module.exports,
+    require,
+    __dirname: path.dirname(filePath),
+    __filename: filePath,
+    console,
+    process,
+    Buffer
+  }, { filename: filePath })
+
+  return module.exports
+}
+
 function loadWindowManagerServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'WindowManagerService.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -18,6 +45,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
   }).outputText
 
   const module = { exports: {} }
+  const calendarModule = loadCalendarModule()
   const browserWindowInstances = []
   const trayInstances = []
   const settingsUpdates = []
@@ -26,7 +54,9 @@ function loadWindowManagerServiceModule(overrides = {}) {
       calendarWidgetEnabled: false,
       calendarWidgetBounds: null,
       calendarWidgetAlwaysOnTop: false,
-      calendarWidgetBackgroundMode: 'solid'
+      calendarWidgetBackgroundMode: 'solid',
+      calendarWidgetGlassOpacity: 60,
+      calendarWidgetGlassBlur: 32
     },
     getSettings() {
       return this.settings
@@ -52,6 +82,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
       this._boundsHistory = [{ ...this._bounds }]
       this._visible = Boolean(options.show)
       this._alwaysOnTopCalls = []
+      this._backgroundMaterialCalls = []
       this._moveTopCalls = 0
       this.webContents = {
         isLoading: () => false,
@@ -66,6 +97,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
     }
 
     setAlwaysOnTop(...args) { this._alwaysOnTopCalls.push(args) }
+    setBackgroundMaterial(material) { this._backgroundMaterialCalls.push(material) }
     setVisibleOnAllWorkspaces() {}
     loadURL(url) {
       this.loadedUrls.push(url)
@@ -147,6 +179,10 @@ function loadWindowManagerServiceModule(overrides = {}) {
 
     if (specifier === '../../shared/types') {
       return {}
+    }
+
+    if (specifier === '../../shared/calendar') {
+      return calendarModule
     }
 
     if (specifier === './SettingsService') {
@@ -558,9 +594,10 @@ test('setCalendarWidgetAlwaysOnTop toggles and persists the desktop calendar top
 })
 
 test('setCalendarWidgetBackgroundMode persists white and glass desktop calendar backgrounds', () => {
-  const { WindowManagerService, settingsUpdates } = loadWindowManagerServiceModule()
+  const { WindowManagerService, browserWindowInstances, settingsUpdates } = loadWindowManagerServiceModule()
   const service = new WindowManagerService()
 
+  service.showCalendarWidgetWindow()
   const glassResult = service.setCalendarWidgetBackgroundMode('glass')
   const solidResult = service.setCalendarWidgetBackgroundMode('solid')
 
@@ -568,10 +605,26 @@ test('setCalendarWidgetBackgroundMode persists white and glass desktop calendar 
   assert.equal(glassResult.data.backgroundMode, 'glass')
   assert.equal(solidResult.success, true)
   assert.equal(solidResult.data.backgroundMode, 'solid')
+  assert.deepEqual(browserWindowInstances[0]._backgroundMaterialCalls.slice(-2), ['acrylic', 'none'])
   assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.slice(-2))), [
     { calendarWidgetBackgroundMode: 'glass' },
     { calendarWidgetBackgroundMode: 'solid' }
   ])
+})
+
+test('setCalendarWidgetGlassSettings clamps and persists desktop calendar glass controls', () => {
+  const { WindowManagerService, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  const result = service.setCalendarWidgetGlassSettings({ opacity: 105, blur: 28.6 })
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.glassOpacity, 95)
+  assert.equal(result.data.glassBlur, 29)
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), {
+    calendarWidgetGlassOpacity: 95,
+    calendarWidgetGlassBlur: 29
+  })
 })
 
 test('hideCalendarWidgetWindow hides and disables the desktop calendar widget', () => {
@@ -612,7 +665,9 @@ test('calendar widget state reflects the persisted enabled flag when the window 
         calendarWidgetEnabled: true,
         calendarWidgetBounds: { x: 24, y: 32, width: 360, height: 440 },
         calendarWidgetAlwaysOnTop: true,
-        calendarWidgetBackgroundMode: 'glass'
+        calendarWidgetBackgroundMode: 'glass',
+        calendarWidgetGlassOpacity: 74,
+        calendarWidgetGlassBlur: 40
       },
       getSettings() {
         return this.settings
@@ -634,6 +689,8 @@ test('calendar widget state reflects the persisted enabled flag when the window 
     enabled: true,
     alwaysOnTop: true,
     backgroundMode: 'glass',
+    glassOpacity: 74,
+    glassBlur: 40,
     bounds: { x: 24, y: 32, width: 360, height: 440 }
   })
 })

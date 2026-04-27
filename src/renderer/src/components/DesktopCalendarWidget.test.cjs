@@ -25,6 +25,7 @@ test('DesktopCalendarWidget exposes a draggable desktop shell and native window 
   assert.match(source, /calendar\?\.showWidget\(\)/)
   assert.match(source, /setWidgetAlwaysOnTop/)
   assert.match(source, /setWidgetBackgroundMode/)
+  assert.match(source, /setWidgetGlassSettings/)
 })
 
 test('DesktopCalendarWidget defaults to an opaque white shell and offers a 60% glass option', () => {
@@ -38,4 +39,18 @@ test('DesktopCalendarWidget defaults to an opaque white shell and offers a 60% g
   assert.doesNotMatch(source, /bg-white\/90|bg-white\/92|bg-white\/\[0\.95\]|bg-white\/\[0\.98\]/)
   assert.doesNotMatch(source, /bg-white\/88/)
   assert.doesNotMatch(source, /bg-white\/72|bg-white\/76|bg-slate-50\/86/)
+})
+
+test('DesktopCalendarWidget exposes glass opacity and blur sliders with live backdrop styles', () => {
+  const source = readSource('DesktopCalendarWidget.tsx')
+
+  assert.match(source, /glassOpacity/)
+  assert.match(source, /glassBlur/)
+  assert.match(source, /backdropFilter: `blur\(\$\{glassBlur\}px\) saturate\(180%\)`/)
+  assert.match(source, /aria-label="毛玻璃透明度"/)
+  assert.match(source, /aria-label="毛玻璃模糊强度"/)
+  assert.match(source, /min=\{20\}/)
+  assert.match(source, /max=\{95\}/)
+  assert.match(source, /min=\{0\}/)
+  assert.match(source, /max=\{64\}/)
 })

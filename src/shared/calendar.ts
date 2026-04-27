@@ -20,16 +20,38 @@ export interface CalendarWidgetBounds {
 
 export type CalendarWidgetBackgroundMode = 'solid' | 'glass'
 
+export interface CalendarWidgetGlassSettings {
+  opacity: number
+  blur: number
+}
+
 export interface CalendarWidgetState {
   exists: boolean
   visible: boolean
   enabled: boolean
   alwaysOnTop: boolean
   backgroundMode: CalendarWidgetBackgroundMode
+  glassOpacity: number
+  glassBlur: number
   bounds: CalendarWidgetBounds | null
 }
 
 export const DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES = 10
+export const DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY = 60
+export const DEFAULT_CALENDAR_WIDGET_GLASS_BLUR = 32
+
+function clampRoundedNumber(value: unknown, fallback: number, min: number, max: number): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : fallback
+  return Math.min(max, Math.max(min, Math.round(numeric)))
+}
+
+export function normalizeCalendarWidgetGlassOpacity(value: unknown): number {
+  return clampRoundedNumber(value, DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY, 20, 95)
+}
+
+export function normalizeCalendarWidgetGlassBlur(value: unknown): number {
+  return clampRoundedNumber(value, DEFAULT_CALENDAR_WIDGET_GLASS_BLUR, 0, 64)
+}
 
 const REQUIRED_EVENT_KEYS: Array<keyof CalendarEvent> = [
   'id',

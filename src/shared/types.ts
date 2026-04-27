@@ -30,6 +30,8 @@ export interface AppSettings {
   calendarWidgetBounds: CalendarWidgetBounds | null
   calendarWidgetAlwaysOnTop: boolean
   calendarWidgetBackgroundMode: CalendarWidgetBackgroundMode
+  calendarWidgetGlassOpacity: number
+  calendarWidgetGlassBlur: number
   calendarReminderLeadMinutes: number
 }
 

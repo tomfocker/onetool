@@ -4,6 +4,8 @@ import type { AppSettings } from './types'
 
 export const SETTINGS_SCHEMA_VERSION = 1
 const DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES = 10
+const DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY = 60
+const DEFAULT_CALENDAR_WIDGET_GLASS_BLUR = 32
 
 const defaultTaskbarAppearanceSettings = createDefaultTaskbarAppearanceSettings()
 
@@ -29,6 +31,8 @@ export function createDefaultAppSettings(): AppSettings {
     calendarWidgetBounds: null,
     calendarWidgetAlwaysOnTop: false,
     calendarWidgetBackgroundMode: 'solid',
+    calendarWidgetGlassOpacity: DEFAULT_CALENDAR_WIDGET_GLASS_OPACITY,
+    calendarWidgetGlassBlur: DEFAULT_CALENDAR_WIDGET_GLASS_BLUR,
     calendarReminderLeadMinutes: DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES
   }
 }
@@ -59,6 +63,8 @@ const SettingsSchema = z.object({
   }).nullable(),
   calendarWidgetAlwaysOnTop: z.boolean(),
   calendarWidgetBackgroundMode: z.enum(['solid', 'glass']),
+  calendarWidgetGlassOpacity: z.number().int().min(20).max(95),
+  calendarWidgetGlassBlur: z.number().int().min(0).max(64),
   calendarReminderLeadMinutes: z.number().int().min(0).max(1440)
 })
 

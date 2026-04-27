@@ -144,6 +144,8 @@ test('migrateSettings adds desktop calendar widget defaults for older settings f
   assert.equal(migrated.calendarWidgetBounds, null)
   assert.equal(migrated.calendarWidgetAlwaysOnTop, false)
   assert.equal(migrated.calendarWidgetBackgroundMode, 'solid')
+  assert.equal(migrated.calendarWidgetGlassOpacity, 60)
+  assert.equal(migrated.calendarWidgetGlassBlur, 32)
   assert.equal(migrated.calendarReminderLeadMinutes, 10)
 })
 
@@ -171,9 +173,13 @@ test('migrateSettings preserves desktop calendar widget appearance choices', () 
     calendarWidgetBounds: null,
     calendarWidgetAlwaysOnTop: true,
     calendarWidgetBackgroundMode: 'glass',
+    calendarWidgetGlassOpacity: 72,
+    calendarWidgetGlassBlur: 44,
     calendarReminderLeadMinutes: 5
   })
 
   assert.equal(migrated.calendarWidgetAlwaysOnTop, true)
   assert.equal(migrated.calendarWidgetBackgroundMode, 'glass')
+  assert.equal(migrated.calendarWidgetGlassOpacity, 72)
+  assert.equal(migrated.calendarWidgetGlassBlur, 44)
 })

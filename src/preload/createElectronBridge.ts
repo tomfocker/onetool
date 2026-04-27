@@ -12,6 +12,7 @@ import type {
   CalendarEvent,
   CalendarWidgetBackgroundMode,
   CalendarWidgetBounds,
+  CalendarWidgetGlassSettings,
   CalendarWidgetState
 } from '../shared/calendar'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
@@ -278,6 +279,9 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     },
     setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => {
       return ipcRenderer.invoke('calendar-widget-set-background-mode', mode) as Promise<IpcResponse<CalendarWidgetState>>
+    },
+    setWidgetGlassSettings: (settings: CalendarWidgetGlassSettings) => {
+      return ipcRenderer.invoke('calendar-widget-set-glass-settings', settings) as Promise<IpcResponse<CalendarWidgetState>>
     },
     replaceEvents: (events: CalendarEvent[]) => {
       return ipcRenderer.invoke('calendar-events-replace', events) as Promise<IpcResponse<CalendarEvent[]>>

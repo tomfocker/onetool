@@ -107,3 +107,19 @@ test('createCalendarReminderKey changes when an event occurrence changes', () =>
   assert.equal(createCalendarReminderKey(base), 'event-1:2026-04-27:09:30')
   assert.equal(createCalendarReminderKey({ ...base, start: '10:30' }), 'event-1:2026-04-27:10:30')
 })
+
+test('normalizeCalendarWidgetGlassSettings clamps user-controlled glass parameters', () => {
+  const {
+    normalizeCalendarWidgetGlassBlur,
+    normalizeCalendarWidgetGlassOpacity
+  } = loadCalendarModule()
+
+  assert.equal(normalizeCalendarWidgetGlassOpacity(undefined), 60)
+  assert.equal(normalizeCalendarWidgetGlassOpacity(8), 20)
+  assert.equal(normalizeCalendarWidgetGlassOpacity(120), 95)
+  assert.equal(normalizeCalendarWidgetGlassOpacity(62.4), 62)
+  assert.equal(normalizeCalendarWidgetGlassBlur(undefined), 32)
+  assert.equal(normalizeCalendarWidgetGlassBlur(-4), 0)
+  assert.equal(normalizeCalendarWidgetGlassBlur(90), 64)
+  assert.equal(normalizeCalendarWidgetGlassBlur(28.6), 29)
+})

@@ -2,7 +2,8 @@ import { BrowserWindow, ipcMain } from 'electron'
 import {
   normalizeCalendarEvents,
   type CalendarWidgetBackgroundMode,
-  type CalendarWidgetBounds
+  type CalendarWidgetBounds,
+  type CalendarWidgetGlassSettings
 } from '../../shared/calendar'
 import { calendarReminderService } from '../services/CalendarReminderService'
 import { windowManagerService } from '../services/WindowManagerService'
@@ -35,6 +36,10 @@ export function registerCalendarIpc(_getMainWindow: () => BrowserWindow | null) 
   ipcMain.handle('calendar-widget-set-background-mode', (_event, mode: unknown) => {
     const backgroundMode: CalendarWidgetBackgroundMode = mode === 'glass' ? 'glass' : 'solid'
     return windowManagerService.setCalendarWidgetBackgroundMode(backgroundMode)
+  })
+
+  ipcMain.handle('calendar-widget-set-glass-settings', (_event, settings: Partial<CalendarWidgetGlassSettings>) => {
+    return windowManagerService.setCalendarWidgetGlassSettings(settings)
   })
 
   ipcMain.handle('calendar-events-replace', (_event, events: unknown) => {
