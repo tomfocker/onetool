@@ -545,6 +545,7 @@ test('createCalendarWidgetWindow creates a persistent transparent desktop calend
   assert.equal(widgetWindow.options.height, 420)
   assert.equal(widgetWindow.options.frame, false)
   assert.equal(widgetWindow.options.transparent, true)
+  assert.equal(widgetWindow.options.backgroundMaterial, 'none')
   assert.equal(widgetWindow.options.skipTaskbar, true)
   assert.equal(widgetWindow.options.resizable, true)
   assert.equal(widgetWindow.options.alwaysOnTop, false)
@@ -605,7 +606,8 @@ test('setCalendarWidgetBackgroundMode persists white and glass desktop calendar 
   assert.equal(glassResult.data.backgroundMode, 'glass')
   assert.equal(solidResult.success, true)
   assert.equal(solidResult.data.backgroundMode, 'solid')
-  assert.deepEqual(browserWindowInstances[0]._backgroundMaterialCalls.slice(-2), ['acrylic', 'none'])
+  assert.equal(browserWindowInstances[0].options.backgroundMaterial, 'none')
+  assert.equal(browserWindowInstances[0]._backgroundMaterialCalls.includes('acrylic'), false)
   assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.slice(-2))), [
     { calendarWidgetBackgroundMode: 'glass' },
     { calendarWidgetBackgroundMode: 'solid' }

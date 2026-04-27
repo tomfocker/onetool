@@ -366,18 +366,6 @@ export class WindowManagerService {
     this.calendarWidgetWindow.setAlwaysOnTop(false)
   }
 
-  private applyCalendarWidgetBackgroundMaterial(backgroundMode: CalendarWidgetBackgroundMode): void {
-    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
-      return
-    }
-
-    if (process.platform !== 'win32' || typeof this.calendarWidgetWindow.setBackgroundMaterial !== 'function') {
-      return
-    }
-
-    this.calendarWidgetWindow.setBackgroundMaterial(backgroundMode === 'glass' ? 'acrylic' : 'none')
-  }
-
   private rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
     return Math.max(startA, startB) < Math.min(endA, endB)
   }
@@ -809,7 +797,6 @@ export class WindowManagerService {
     const bounds = this.getInitialCalendarWidgetBounds()
     const settings = this.settingsService.getSettings()
     const initialAlwaysOnTop = Boolean(settings.calendarWidgetAlwaysOnTop)
-    const initialBackgroundMode = this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode)
     this.calendarWidgetWindow = new BrowserWindow({
       ...bounds,
       show: false,
@@ -818,7 +805,7 @@ export class WindowManagerService {
       transparent: true,
       hasShadow: true,
       backgroundColor: '#00000000',
-      backgroundMaterial: initialBackgroundMode === 'glass' ? 'acrylic' : 'none',
+      backgroundMaterial: 'none',
       alwaysOnTop: initialAlwaysOnTop,
       resizable: true,
       minWidth: this.calendarWidgetMinBounds.width,
@@ -831,7 +818,6 @@ export class WindowManagerService {
     if (initialAlwaysOnTop) {
       this.applyCalendarWidgetAlwaysOnTop(true)
     }
-    this.applyCalendarWidgetBackgroundMaterial(initialBackgroundMode)
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.calendarWidgetWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/calendar-widget`)
@@ -886,7 +872,6 @@ export class WindowManagerService {
     const alwaysOnTop = Boolean(settings.calendarWidgetAlwaysOnTop)
     const backgroundMode = this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode)
     this.calendarWidgetWindow.setBounds(nextBounds)
-    this.applyCalendarWidgetBackgroundMaterial(backgroundMode)
     this.calendarWidgetWindow.showInactive()
     if (alwaysOnTop) {
       this.applyCalendarWidgetAlwaysOnTop(true)
@@ -958,7 +943,6 @@ export class WindowManagerService {
 
   setCalendarWidgetBackgroundMode(mode: CalendarWidgetBackgroundMode): IpcResponse<CalendarWidgetState> {
     const backgroundMode = this.normalizeCalendarWidgetBackgroundMode(mode)
-    this.applyCalendarWidgetBackgroundMaterial(backgroundMode)
     void this.settingsService.updateSettings({ calendarWidgetBackgroundMode: backgroundMode })
     return {
       success: true,
