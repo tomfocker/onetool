@@ -1,6 +1,6 @@
 import type { DownloadOrganizerStoredState } from './downloadOrganizer'
 import type { TaskbarAppearancePreset } from './taskbarAppearance'
-import type { CalendarWidgetBounds } from './calendar'
+import type { CalendarWidgetBackgroundMode, CalendarWidgetBounds } from './calendar'
 
 /**
  * 应用全局设置
@@ -28,6 +28,8 @@ export interface AppSettings {
 
   calendarWidgetEnabled: boolean
   calendarWidgetBounds: CalendarWidgetBounds | null
+  calendarWidgetAlwaysOnTop: boolean
+  calendarWidgetBackgroundMode: CalendarWidgetBackgroundMode
   calendarReminderLeadMinutes: number
 }
 

@@ -8,7 +8,12 @@ import {
   WebActivatorShortcutSchema
 } from '../shared/ipc-schemas'
 import type { UpdateState } from '../shared/appUpdate'
-import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../shared/calendar'
+import type {
+  CalendarEvent,
+  CalendarWidgetBackgroundMode,
+  CalendarWidgetBounds,
+  CalendarWidgetState
+} from '../shared/calendar'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
 import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
@@ -267,6 +272,12 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     toggleWidget: () => ipcRenderer.invoke('calendar-widget-toggle') as Promise<IpcResponse<CalendarWidgetState>>,
     setWidgetBounds: (bounds: CalendarWidgetBounds) => {
       return ipcRenderer.invoke('calendar-widget-set-bounds', bounds) as Promise<IpcResponse<CalendarWidgetState>>
+    },
+    setWidgetAlwaysOnTop: (alwaysOnTop: boolean) => {
+      return ipcRenderer.invoke('calendar-widget-set-always-on-top', alwaysOnTop) as Promise<IpcResponse<CalendarWidgetState>>
+    },
+    setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => {
+      return ipcRenderer.invoke('calendar-widget-set-background-mode', mode) as Promise<IpcResponse<CalendarWidgetState>>
     },
     replaceEvents: (events: CalendarEvent[]) => {
       return ipcRenderer.invoke('calendar-events-replace', events) as Promise<IpcResponse<CalendarEvent[]>>

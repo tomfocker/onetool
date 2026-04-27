@@ -27,6 +27,8 @@ export function createDefaultAppSettings(): AppSettings {
     taskbarAppearanceTint: defaultTaskbarAppearanceSettings.tintHex,
     calendarWidgetEnabled: false,
     calendarWidgetBounds: null,
+    calendarWidgetAlwaysOnTop: false,
+    calendarWidgetBackgroundMode: 'solid',
     calendarReminderLeadMinutes: DEFAULT_CALENDAR_REMINDER_LEAD_MINUTES
   }
 }
@@ -55,6 +57,8 @@ const SettingsSchema = z.object({
     width: z.number(),
     height: z.number()
   }).nullable(),
+  calendarWidgetAlwaysOnTop: z.boolean(),
+  calendarWidgetBackgroundMode: z.enum(['solid', 'glass']),
   calendarReminderLeadMinutes: z.number().int().min(0).max(1440)
 })
 

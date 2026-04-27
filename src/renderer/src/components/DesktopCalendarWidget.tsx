@@ -5,12 +5,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  GlassWater,
   MapPin,
-  Monitor,
+  PanelTop,
+  Pin,
+  PinOff,
   X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { CalendarEvent } from '../../../shared/calendar'
+import type { CalendarEvent, CalendarWidgetBackgroundMode } from '../../../shared/calendar'
 import { CALENDAR_STORAGE_KEY, loadCalendarEvents } from '../tools/calendarStorage'
 import { buildDesktopCalendarWidgetModel } from '../tools/desktopCalendarWidgetModel'
 import { syncCalendarEventsToNativeBridge } from '../tools/calendarNativeSync'
@@ -22,9 +25,27 @@ export function DesktopCalendarWidget(): React.JSX.Element {
   const [events, setEvents] = useState<CalendarEvent[]>(() => loadCalendarEvents(window.localStorage) as CalendarEvent[])
   const [selectedDate, setSelectedDate] = useState(() => formatLocalDate(new Date()))
   const [now, setNow] = useState(() => new Date())
+  const [alwaysOnTop, setAlwaysOnTop] = useState(false)
+  const [backgroundMode, setBackgroundMode] = useState<CalendarWidgetBackgroundMode>('solid')
 
   useEffect(() => {
-    void window.electron?.calendar?.showWidget()
+    let cancelled = false
+
+    const showWidget = async () => {
+      const result = await window.electron?.calendar?.showWidget()
+      if (cancelled || !result?.success || !result.data) {
+        return
+      }
+
+      setAlwaysOnTop(Boolean(result.data.alwaysOnTop))
+      setBackgroundMode(result.data.backgroundMode === 'glass' ? 'glass' : 'solid')
+    }
+
+    void showWidget()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
@@ -65,11 +86,60 @@ export function DesktopCalendarWidget(): React.JSX.Element {
     void window.electron?.calendar?.hideWidget()
   }
 
+  const toggleAlwaysOnTop = () => {
+    const nextAlwaysOnTop = !alwaysOnTop
+    setAlwaysOnTop(nextAlwaysOnTop)
+    void window.electron?.calendar?.setWidgetAlwaysOnTop(nextAlwaysOnTop).then((result) => {
+      if (result?.success && result.data) {
+        setAlwaysOnTop(Boolean(result.data.alwaysOnTop))
+        return
+      }
+      setAlwaysOnTop(!nextAlwaysOnTop)
+    }).catch(() => {
+      setAlwaysOnTop(!nextAlwaysOnTop)
+    })
+  }
+
+  const toggleBackgroundMode = () => {
+    const nextMode: CalendarWidgetBackgroundMode = backgroundMode === 'glass' ? 'solid' : 'glass'
+    setBackgroundMode(nextMode)
+    void window.electron?.calendar?.setWidgetBackgroundMode(nextMode).then((result) => {
+      if (result?.success && result.data) {
+        setBackgroundMode(result.data.backgroundMode === 'glass' ? 'glass' : 'solid')
+        return
+      }
+      setBackgroundMode(nextMode === 'glass' ? 'solid' : 'glass')
+    }).catch(() => {
+      setBackgroundMode(nextMode === 'glass' ? 'solid' : 'glass')
+    })
+  }
+
+  const isGlassBackground = backgroundMode === 'glass'
+  const calendarWidgetSurfaceClass = isGlassBackground
+    ? 'border-white/75 bg-white/92 shadow-2xl shadow-slate-950/20 backdrop-blur-2xl'
+    : 'border-slate-200 bg-white shadow-2xl shadow-slate-950/12'
+  const calendarWidgetHeaderClass = isGlassBackground
+    ? 'border-slate-200/80 bg-white/92 backdrop-blur-xl'
+    : 'border-slate-200 bg-white'
+  const calendarWidgetMonthClass = isGlassBackground
+    ? 'bg-white/90 ring-white/75 backdrop-blur-xl'
+    : 'bg-slate-50 ring-slate-200'
+  const calendarWidgetEventsClass = isGlassBackground
+    ? 'bg-white/90 ring-white/75 backdrop-blur-xl'
+    : 'bg-white ring-slate-200'
+  const controlButtonClass = 'grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950'
+
   return (
     <main className="h-screen w-screen overflow-hidden bg-transparent p-2 text-slate-950">
-      <section className="calendar-widget-shell h-full w-full overflow-hidden rounded-lg border border-white/70 bg-white/88 shadow-2xl shadow-slate-950/20 backdrop-blur-2xl">
+      <section className={cn(
+        'calendar-widget-shell h-full w-full overflow-hidden rounded-lg border',
+        calendarWidgetSurfaceClass
+      )}>
         <header
-          className="calendar-widget-drag-region grid grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-200/80 bg-white/72 px-3 py-2"
+          className={cn(
+            'calendar-widget-drag-region grid grid-cols-[1fr_auto] items-center gap-2 border-b px-3 py-2',
+            calendarWidgetHeaderClass
+          )}
           style={dragRegionStyle}
         >
           <div className="min-w-0">
@@ -82,10 +152,34 @@ export function DesktopCalendarWidget(): React.JSX.Element {
           <div className="flex items-center gap-1" style={noDragStyle}>
             <button
               type="button"
+              aria-label={isGlassBackground ? '切换到白底' : '切换到毛玻璃'}
+              title={isGlassBackground ? '切换到白底' : '切换到毛玻璃'}
+              onClick={toggleBackgroundMode}
+              className={cn(
+                controlButtonClass,
+                isGlassBackground && 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800'
+              )}
+            >
+              {isGlassBackground ? <PanelTop size={15} /> : <GlassWater size={15} />}
+            </button>
+            <button
+              type="button"
+              aria-label={alwaysOnTop ? '取消置顶' : '置顶'}
+              title={alwaysOnTop ? '取消置顶' : '置顶'}
+              onClick={toggleAlwaysOnTop}
+              className={cn(
+                controlButtonClass,
+                alwaysOnTop && 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800'
+              )}
+            >
+              {alwaysOnTop ? <PinOff size={15} /> : <Pin size={15} />}
+            </button>
+            <button
+              type="button"
               aria-label="上个月"
               title="上个月"
               onClick={() => moveMonth(-1)}
-              className="grid h-8 w-8 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+              className={controlButtonClass}
             >
               <ChevronLeft size={17} />
             </button>
@@ -94,7 +188,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
               aria-label="下个月"
               title="下个月"
               onClick={() => moveMonth(1)}
-              className="grid h-8 w-8 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950"
+              className={controlButtonClass}
             >
               <ChevronRight size={17} />
             </button>
@@ -103,7 +197,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
               aria-label="隐藏"
               title="隐藏"
               onClick={hideWidget}
-              className="grid h-8 w-8 place-items-center rounded-md text-slate-500 transition hover:bg-red-50 hover:text-red-600"
+              className="grid h-7 w-7 place-items-center rounded-md text-slate-500 transition hover:bg-red-50 hover:text-red-600"
             >
               <X size={16} />
             </button>
@@ -111,7 +205,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
         </header>
 
         <div className="grid h-[calc(100%-49px)] grid-rows-[auto_1fr] gap-2 p-3">
-          <section className="rounded-lg bg-slate-50/86 p-2 ring-1 ring-slate-200/80">
+          <section className={cn('rounded-lg p-2 ring-1', calendarWidgetMonthClass)}>
             <div className="grid grid-cols-7 gap-1 pb-1 text-center text-[10px] font-black text-slate-400">
               {['日', '一', '二', '三', '四', '五', '六'].map((label) => <span key={label}>{label}</span>)}
             </div>
@@ -142,7 +236,7 @@ export function DesktopCalendarWidget(): React.JSX.Element {
             </div>
           </section>
 
-          <section className="min-h-0 overflow-hidden rounded-lg bg-white/76 ring-1 ring-slate-200/80">
+          <section className={cn('min-h-0 overflow-hidden rounded-lg ring-1', calendarWidgetEventsClass)}>
             <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
               <div className="flex items-center gap-2 text-xs font-black text-slate-700">
                 <Bell size={14} className="text-amber-600" />

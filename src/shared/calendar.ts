@@ -18,10 +18,14 @@ export interface CalendarWidgetBounds {
   height: number
 }
 
+export type CalendarWidgetBackgroundMode = 'solid' | 'glass'
+
 export interface CalendarWidgetState {
   exists: boolean
   visible: boolean
   enabled: boolean
+  alwaysOnTop: boolean
+  backgroundMode: CalendarWidgetBackgroundMode
   bounds: CalendarWidgetBounds | null
 }
 

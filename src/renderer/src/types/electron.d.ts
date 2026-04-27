@@ -53,7 +53,12 @@ import type {
   LlmSpaceCleanupSuggestionRequest,
   LlmSystemAnalysisRequest
 } from '../../../shared/llm'
-import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../../../shared/calendar'
+import type {
+  CalendarEvent,
+  CalendarWidgetBackgroundMode,
+  CalendarWidgetBounds,
+  CalendarWidgetState
+} from '../../../shared/calendar'
 
 declare global {
   interface Window {
@@ -319,6 +324,8 @@ declare global {
         hideWidget: () => Promise<IpcResponse<CalendarWidgetState>>
         toggleWidget: () => Promise<IpcResponse<CalendarWidgetState>>
         setWidgetBounds: (bounds: CalendarWidgetBounds) => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetAlwaysOnTop: (alwaysOnTop: boolean) => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => Promise<IpcResponse<CalendarWidgetState>>
         replaceEvents: (events: CalendarEvent[]) => Promise<IpcResponse<CalendarEvent[]>>
         onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => () => void
       }

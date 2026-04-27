@@ -39,11 +39,13 @@ function loadCalendarIpcModule(overrides = {}) {
   const handlers = {}
   const calendarModule = loadCalendarModule()
   const windowManagerService = overrides.windowManagerService || {
-    getCalendarWidgetState: () => ({ success: true, data: { exists: false, visible: false, enabled: false, bounds: null } }),
-    showCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }),
-    hideCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: false, enabled: false, bounds: null } }),
-    toggleCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }),
-    setCalendarWidgetBounds: (bounds) => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds } }),
+    getCalendarWidgetState: () => ({ success: true, data: { exists: false, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+    showCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+    hideCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+    toggleCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+    setCalendarWidgetBounds: (bounds) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds } }),
+    setCalendarWidgetAlwaysOnTop: (alwaysOnTop) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop, backgroundMode: 'solid', bounds: null } }),
+    setCalendarWidgetBackgroundMode: (backgroundMode) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode, bounds: null } }),
     broadcastCalendarEvents: () => undefined
   }
   const calendarReminderService = overrides.calendarReminderService || {
@@ -97,23 +99,31 @@ test('registerCalendarIpc wires desktop calendar widget handlers', async () => {
     windowManagerService: {
       getCalendarWidgetState: () => {
         calls.push(['state'])
-        return { success: true, data: { exists: false, visible: false, enabled: false, bounds: null } }
+        return { success: true, data: { exists: false, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }
       },
       showCalendarWidgetWindow: () => {
         calls.push(['show'])
-        return { success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }
+        return { success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }
       },
       hideCalendarWidgetWindow: () => {
         calls.push(['hide'])
-        return { success: true, data: { exists: true, visible: false, enabled: false, bounds: null } }
+        return { success: true, data: { exists: true, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }
       },
       toggleCalendarWidgetWindow: () => {
         calls.push(['toggle'])
-        return { success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }
+        return { success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }
       },
       setCalendarWidgetBounds: (bounds) => {
         calls.push(['bounds', bounds])
-        return { success: true, data: { exists: true, visible: true, enabled: true, bounds } }
+        return { success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds } }
+      },
+      setCalendarWidgetAlwaysOnTop: (alwaysOnTop) => {
+        calls.push(['alwaysOnTop', alwaysOnTop])
+        return { success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop, backgroundMode: 'solid', bounds: null } }
+      },
+      setCalendarWidgetBackgroundMode: (backgroundMode) => {
+        calls.push(['backgroundMode', backgroundMode])
+        return { success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode, bounds: null } }
       },
       broadcastCalendarEvents: () => undefined
     }
@@ -126,13 +136,17 @@ test('registerCalendarIpc wires desktop calendar widget handlers', async () => {
   assert.equal((await handlers['calendar-widget-hide']()).data.visible, false)
   assert.equal((await handlers['calendar-widget-toggle']()).data.visible, true)
   await handlers['calendar-widget-set-bounds']({}, { x: 12, y: 24, width: 320, height: 420 })
+  assert.equal((await handlers['calendar-widget-set-always-on-top']({}, true)).data.alwaysOnTop, true)
+  assert.equal((await handlers['calendar-widget-set-background-mode']({}, 'glass')).data.backgroundMode, 'glass')
 
   assert.deepEqual(JSON.parse(JSON.stringify(calls)), [
     ['state'],
     ['show'],
     ['hide'],
     ['toggle'],
-    ['bounds', { x: 12, y: 24, width: 320, height: 420 }]
+    ['bounds', { x: 12, y: 24, width: 320, height: 420 }],
+    ['alwaysOnTop', true],
+    ['backgroundMode', 'glass']
   ])
 })
 
@@ -146,11 +160,13 @@ test('registerCalendarIpc normalizes calendar events for reminders and widget br
       }
     },
     windowManagerService: {
-      getCalendarWidgetState: () => ({ success: true, data: { exists: false, visible: false, enabled: false, bounds: null } }),
-      showCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }),
-      hideCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: false, enabled: false, bounds: null } }),
-      toggleCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds: null } }),
-      setCalendarWidgetBounds: (bounds) => ({ success: true, data: { exists: true, visible: true, enabled: true, bounds } }),
+      getCalendarWidgetState: () => ({ success: true, data: { exists: false, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+      showCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+      hideCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: false, enabled: false, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+      toggleCalendarWidgetWindow: () => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds: null } }),
+      setCalendarWidgetBounds: (bounds) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode: 'solid', bounds } }),
+      setCalendarWidgetAlwaysOnTop: (alwaysOnTop) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop, backgroundMode: 'solid', bounds: null } }),
+      setCalendarWidgetBackgroundMode: (backgroundMode) => ({ success: true, data: { exists: true, visible: true, enabled: true, alwaysOnTop: false, backgroundMode, bounds: null } }),
       broadcastCalendarEvents(events) {
         broadcastEvents.push(events)
       }

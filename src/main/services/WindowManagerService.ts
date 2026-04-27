@@ -4,7 +4,12 @@ import { is } from '@electron-toolkit/utils'
 import fs from 'fs'
 import { IpcResponse } from '../../shared/types'
 import type { AppSettings } from '../../shared/types'
-import type { CalendarEvent, CalendarWidgetBounds, CalendarWidgetState } from '../../shared/calendar'
+import type {
+  CalendarEvent,
+  CalendarWidgetBackgroundMode,
+  CalendarWidgetBounds,
+  CalendarWidgetState
+} from '../../shared/calendar'
 import { createIsolatedPreloadWebPreferences } from '../utils/windowSecurity'
 import { settingsService as defaultSettingsService } from './SettingsService'
 
@@ -25,9 +30,15 @@ type DisplayWorkArea = {
   height: number
 }
 
+type CalendarWidgetSettingsKey =
+  | 'calendarWidgetEnabled'
+  | 'calendarWidgetBounds'
+  | 'calendarWidgetAlwaysOnTop'
+  | 'calendarWidgetBackgroundMode'
+
 type CalendarWidgetSettingsService = {
-  getSettings(): Pick<AppSettings, 'calendarWidgetEnabled' | 'calendarWidgetBounds'>
-  updateSettings(updates: Partial<Pick<AppSettings, 'calendarWidgetEnabled' | 'calendarWidgetBounds'>>): Promise<IpcResponse> | IpcResponse
+  getSettings(): Pick<AppSettings, CalendarWidgetSettingsKey>
+  updateSettings(updates: Partial<Pick<AppSettings, CalendarWidgetSettingsKey>>): Promise<IpcResponse> | IpcResponse
 }
 
 export class WindowManagerService {
@@ -293,7 +304,15 @@ export class WindowManagerService {
     void this.settingsService.updateSettings({ calendarWidgetBounds: normalized })
   }
 
-  private getCalendarWidgetStateData(enabledOverride?: boolean): CalendarWidgetState {
+  private normalizeCalendarWidgetBackgroundMode(mode: unknown): CalendarWidgetBackgroundMode {
+    return mode === 'glass' ? 'glass' : 'solid'
+  }
+
+  private getCalendarWidgetStateData(
+    enabledOverride?: boolean,
+    alwaysOnTopOverride?: boolean,
+    backgroundModeOverride?: CalendarWidgetBackgroundMode
+  ): CalendarWidgetState {
     const exists = Boolean(this.calendarWidgetWindow && !this.calendarWidgetWindow.isDestroyed())
     const visible = Boolean(exists && this.calendarWidgetWindow?.isVisible())
     const settings = this.settingsService.getSettings()
@@ -301,10 +320,29 @@ export class WindowManagerService {
       exists,
       visible,
       enabled: enabledOverride ?? Boolean(settings.calendarWidgetEnabled),
+      alwaysOnTop: alwaysOnTopOverride ?? Boolean(settings.calendarWidgetAlwaysOnTop),
+      backgroundMode: backgroundModeOverride ??
+        this.normalizeCalendarWidgetBackgroundMode(settings.calendarWidgetBackgroundMode),
       bounds: exists
         ? this.calendarWidgetWindow!.getBounds()
         : settings.calendarWidgetBounds
     }
+  }
+
+  private applyCalendarWidgetAlwaysOnTop(alwaysOnTop: boolean): void {
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      return
+    }
+
+    if (alwaysOnTop) {
+      this.calendarWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
+      if (this.calendarWidgetWindow.isVisible()) {
+        this.calendarWidgetWindow.moveTop()
+      }
+      return
+    }
+
+    this.calendarWidgetWindow.setAlwaysOnTop(false)
   }
 
   private rangesOverlap(startA: number, endA: number, startB: number, endB: number) {
@@ -736,6 +774,7 @@ export class WindowManagerService {
     }
 
     const bounds = this.getInitialCalendarWidgetBounds()
+    const initialAlwaysOnTop = Boolean(this.settingsService.getSettings().calendarWidgetAlwaysOnTop)
     this.calendarWidgetWindow = new BrowserWindow({
       ...bounds,
       show: false,
@@ -744,7 +783,7 @@ export class WindowManagerService {
       transparent: true,
       hasShadow: true,
       backgroundColor: '#00000000',
-      alwaysOnTop: true,
+      alwaysOnTop: initialAlwaysOnTop,
       resizable: true,
       minWidth: this.calendarWidgetMinBounds.width,
       minHeight: this.calendarWidgetMinBounds.height,
@@ -753,8 +792,9 @@ export class WindowManagerService {
       webPreferences: createIsolatedPreloadWebPreferences(join(__dirname, '../preload/index.js'))
     })
 
-    this.calendarWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
-    this.calendarWidgetWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    if (initialAlwaysOnTop) {
+      this.applyCalendarWidgetAlwaysOnTop(true)
+    }
 
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
       this.calendarWidgetWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/calendar-widget`)
@@ -771,7 +811,9 @@ export class WindowManagerService {
         !this.calendarWidgetWindow.isDestroyed()
       ) {
         this.calendarWidgetWindow.showInactive()
-        this.calendarWidgetWindow.moveTop()
+        if (this.settingsService.getSettings().calendarWidgetAlwaysOnTop) {
+          this.calendarWidgetWindow.moveTop()
+        }
       }
     })
 
@@ -803,15 +845,17 @@ export class WindowManagerService {
     }
 
     const nextBounds = this.normalizeCalendarWidgetBounds(this.calendarWidgetWindow.getBounds())
+    const alwaysOnTop = Boolean(this.settingsService.getSettings().calendarWidgetAlwaysOnTop)
     this.calendarWidgetWindow.setBounds(nextBounds)
     this.calendarWidgetWindow.showInactive()
-    this.calendarWidgetWindow.setAlwaysOnTop(true, 'screen-saver')
-    this.calendarWidgetWindow.moveTop()
+    if (alwaysOnTop) {
+      this.applyCalendarWidgetAlwaysOnTop(true)
+    }
     void this.settingsService.updateSettings({ calendarWidgetEnabled: true })
     return {
       success: true,
       data: {
-        ...this.getCalendarWidgetStateData(true),
+        ...this.getCalendarWidgetStateData(true, alwaysOnTop),
         bounds: nextBounds
       }
     }
@@ -852,6 +896,32 @@ export class WindowManagerService {
         ...this.getCalendarWidgetStateData(),
         bounds: nextBounds
       }
+    }
+  }
+
+  setCalendarWidgetAlwaysOnTop(alwaysOnTop: boolean): IpcResponse<CalendarWidgetState> {
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      this.createCalendarWidgetWindow()
+    }
+
+    if (!this.calendarWidgetWindow || this.calendarWidgetWindow.isDestroyed()) {
+      return { success: false, error: '日历悬浮窗不存在' }
+    }
+
+    this.applyCalendarWidgetAlwaysOnTop(alwaysOnTop)
+    void this.settingsService.updateSettings({ calendarWidgetAlwaysOnTop: alwaysOnTop })
+    return {
+      success: true,
+      data: this.getCalendarWidgetStateData(undefined, alwaysOnTop)
+    }
+  }
+
+  setCalendarWidgetBackgroundMode(mode: CalendarWidgetBackgroundMode): IpcResponse<CalendarWidgetState> {
+    const backgroundMode = this.normalizeCalendarWidgetBackgroundMode(mode)
+    void this.settingsService.updateSettings({ calendarWidgetBackgroundMode: backgroundMode })
+    return {
+      success: true,
+      data: this.getCalendarWidgetStateData(undefined, undefined, backgroundMode)
     }
   }
 

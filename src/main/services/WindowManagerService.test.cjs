@@ -24,7 +24,9 @@ function loadWindowManagerServiceModule(overrides = {}) {
   const settingsService = overrides.settingsService || {
     settings: {
       calendarWidgetEnabled: false,
-      calendarWidgetBounds: null
+      calendarWidgetBounds: null,
+      calendarWidgetAlwaysOnTop: false,
+      calendarWidgetBackgroundMode: 'solid'
     },
     getSettings() {
       return this.settings
@@ -49,6 +51,8 @@ function loadWindowManagerServiceModule(overrides = {}) {
       }
       this._boundsHistory = [{ ...this._bounds }]
       this._visible = Boolean(options.show)
+      this._alwaysOnTopCalls = []
+      this._moveTopCalls = 0
       this.webContents = {
         isLoading: () => false,
         once() {},
@@ -61,7 +65,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
       browserWindowInstances.push(this)
     }
 
-    setAlwaysOnTop() {}
+    setAlwaysOnTop(...args) { this._alwaysOnTopCalls.push(args) }
     setVisibleOnAllWorkspaces() {}
     loadURL(url) {
       this.loadedUrls.push(url)
@@ -85,7 +89,7 @@ function loadWindowManagerServiceModule(overrides = {}) {
     isVisible() { return this._visible }
     showInactive() { this._visible = true }
     hide() { this._visible = false }
-    moveTop() {}
+    moveTop() { this._moveTopCalls += 1 }
     getBounds() { return this._bounds }
     setBounds(bounds) {
       this._bounds = { ...this._bounds, ...bounds }
@@ -507,7 +511,8 @@ test('createCalendarWidgetWindow creates a persistent transparent desktop calend
   assert.equal(widgetWindow.options.transparent, true)
   assert.equal(widgetWindow.options.skipTaskbar, true)
   assert.equal(widgetWindow.options.resizable, true)
-  assert.equal(widgetWindow.options.alwaysOnTop, true)
+  assert.equal(widgetWindow.options.alwaysOnTop, false)
+  assert.deepEqual(widgetWindow._alwaysOnTopCalls, [])
   assert.equal(widgetWindow.options.webPreferences.contextIsolation, true)
   assert.equal(widgetWindow.options.webPreferences.nodeIntegration, false)
   assert.equal(widgetWindow.options.webPreferences.sandbox, true)
@@ -523,8 +528,50 @@ test('showCalendarWidgetWindow creates, shows, and enables the desktop calendar 
   assert.equal(result.success, true)
   assert.equal(result.data.visible, true)
   assert.equal(result.data.enabled, true)
+  assert.equal(result.data.alwaysOnTop, false)
+  assert.equal(result.data.backgroundMode, 'solid')
   assert.equal(browserWindowInstances[0].isVisible(), true)
+  assert.deepEqual(browserWindowInstances[0]._alwaysOnTopCalls, [])
+  assert.equal(browserWindowInstances[0]._moveTopCalls, 0)
   assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), { calendarWidgetEnabled: true })
+})
+
+test('setCalendarWidgetAlwaysOnTop toggles and persists the desktop calendar topmost mode', () => {
+  const { WindowManagerService, browserWindowInstances, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  service.showCalendarWidgetWindow()
+  const enableResult = service.setCalendarWidgetAlwaysOnTop(true)
+  const disableResult = service.setCalendarWidgetAlwaysOnTop(false)
+
+  assert.equal(enableResult.success, true)
+  assert.equal(enableResult.data.alwaysOnTop, true)
+  assert.deepEqual(browserWindowInstances[0]._alwaysOnTopCalls.at(-2), [true, 'screen-saver'])
+  assert.equal(browserWindowInstances[0]._moveTopCalls, 1)
+  assert.equal(disableResult.success, true)
+  assert.equal(disableResult.data.alwaysOnTop, false)
+  assert.deepEqual(browserWindowInstances[0]._alwaysOnTopCalls.at(-1), [false])
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.slice(-2))), [
+    { calendarWidgetAlwaysOnTop: true },
+    { calendarWidgetAlwaysOnTop: false }
+  ])
+})
+
+test('setCalendarWidgetBackgroundMode persists white and glass desktop calendar backgrounds', () => {
+  const { WindowManagerService, settingsUpdates } = loadWindowManagerServiceModule()
+  const service = new WindowManagerService()
+
+  const glassResult = service.setCalendarWidgetBackgroundMode('glass')
+  const solidResult = service.setCalendarWidgetBackgroundMode('solid')
+
+  assert.equal(glassResult.success, true)
+  assert.equal(glassResult.data.backgroundMode, 'glass')
+  assert.equal(solidResult.success, true)
+  assert.equal(solidResult.data.backgroundMode, 'solid')
+  assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.slice(-2))), [
+    { calendarWidgetBackgroundMode: 'glass' },
+    { calendarWidgetBackgroundMode: 'solid' }
+  ])
 })
 
 test('hideCalendarWidgetWindow hides and disables the desktop calendar widget', () => {
@@ -537,6 +584,8 @@ test('hideCalendarWidgetWindow hides and disables the desktop calendar widget', 
   assert.equal(result.success, true)
   assert.equal(result.data.visible, false)
   assert.equal(result.data.enabled, false)
+  assert.equal(result.data.alwaysOnTop, false)
+  assert.equal(result.data.backgroundMode, 'solid')
   assert.equal(browserWindowInstances[0].isVisible(), false)
   assert.deepEqual(JSON.parse(JSON.stringify(settingsUpdates.at(-1))), { calendarWidgetEnabled: false })
 })
@@ -561,7 +610,9 @@ test('calendar widget state reflects the persisted enabled flag when the window 
     settingsService: {
       settings: {
         calendarWidgetEnabled: true,
-        calendarWidgetBounds: { x: 24, y: 32, width: 360, height: 440 }
+        calendarWidgetBounds: { x: 24, y: 32, width: 360, height: 440 },
+        calendarWidgetAlwaysOnTop: true,
+        calendarWidgetBackgroundMode: 'glass'
       },
       getSettings() {
         return this.settings
@@ -581,6 +632,8 @@ test('calendar widget state reflects the persisted enabled flag when the window 
     exists: false,
     visible: false,
     enabled: true,
+    alwaysOnTop: true,
+    backgroundMode: 'glass',
     bounds: { x: 24, y: 32, width: 360, height: 440 }
   })
 })

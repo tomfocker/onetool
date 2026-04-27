@@ -23,4 +23,17 @@ test('DesktopCalendarWidget exposes a draggable desktop shell and native window 
   assert.match(source, /WebkitAppRegion: 'drag'/)
   assert.match(source, /calendar\?\.hideWidget\(\)/)
   assert.match(source, /calendar\?\.showWidget\(\)/)
+  assert.match(source, /setWidgetAlwaysOnTop/)
+  assert.match(source, /setWidgetBackgroundMode/)
+})
+
+test('DesktopCalendarWidget defaults to an opaque white shell and offers a thicker glass option', () => {
+  const source = readSource('DesktopCalendarWidget.tsx')
+
+  assert.match(source, /calendarWidgetSurfaceClass/)
+  assert.match(source, /'border-slate-200 bg-white shadow-2xl/)
+  assert.match(source, /'border-white\/75 bg-white\/92 shadow-2xl/)
+  assert.match(source, /backdrop-blur-2xl/)
+  assert.doesNotMatch(source, /bg-white\/88/)
+  assert.doesNotMatch(source, /bg-white\/72|bg-white\/76|bg-slate-50\/86/)
 })
