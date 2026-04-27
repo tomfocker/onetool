@@ -34,7 +34,11 @@ const FILE_RECORD_BUFFER_SIZE: usize = 64 * 1024;
 #[cfg(windows)]
 const FILE_RECORD_SEGMENT_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 #[cfg(windows)]
-const PROGRESS_RECORD_INTERVAL: usize = 2048;
+const PROGRESS_RECORD_INTERVAL: usize = 32_768;
+#[cfg(windows)]
+const PROGRESS_MAX_ROOT_CHILDREN: usize = 16;
+#[cfg(windows)]
+const PROGRESS_MAX_CHILDREN_PER_DIRECTORY: usize = 8;
 
 #[cfg(windows)]
 #[allow(
@@ -598,7 +602,6 @@ struct PartialNodeState {
     name: String,
     kind: EntryKind,
     path: String,
-    depth: usize,
     size_bytes: u64,
     children_count: u64,
     skipped_children: u64,
@@ -610,8 +613,10 @@ struct TopLevelProgressBuilder {
     root_path: String,
     filesystem: String,
     root_reference: FileReference,
+    root_children_count: u64,
     records: HashMap<FileReference, RawRecordDescriptor>,
     states: HashMap<FileReference, PartialNodeState>,
+    children_by_parent: HashMap<FileReference, Vec<FileReference>>,
     files_scanned: u64,
     skipped_entries: u64,
     total_bytes: u64,
@@ -764,7 +769,6 @@ impl TopLevelProgressBuilder {
                     name: record.name.clone(),
                     kind: record.kind.clone(),
                     path,
-                    depth,
                     size_bytes: 0,
                     children_count: *child_counts.get(&record.id).unwrap_or(&0),
                     skipped_children: 0,
@@ -772,12 +776,22 @@ impl TopLevelProgressBuilder {
             );
         }
 
+        let mut children_by_parent = HashMap::<FileReference, Vec<FileReference>>::new();
+        for state in states.values() {
+            children_by_parent
+                .entry(state.parent_id)
+                .or_default()
+                .push(state.id);
+        }
+
         Self {
             root_path: root_path.to_owned(),
             filesystem: filesystem.to_owned(),
             root_reference,
+            root_children_count: *child_counts.get(&root_reference).unwrap_or(&0),
             records,
             states,
+            children_by_parent,
             files_scanned: 0,
             skipped_entries: 0,
             total_bytes: 0,
@@ -818,18 +832,7 @@ impl TopLevelProgressBuilder {
     }
 
     fn to_snapshot(&self) -> ScanSnapshot {
-        let mut root_children = self
-            .states
-            .values()
-            .filter(|state| state.depth == 1)
-            .map(|state| self.to_scan_entry(state))
-            .collect::<Vec<_>>();
-        root_children.sort_by(|left, right| {
-            right
-                .size_bytes
-                .cmp(&left.size_bytes)
-                .then_with(|| left.path.cmp(&right.path))
-        });
+        let root_children = self.to_child_entries(self.root_reference, PROGRESS_MAX_ROOT_CHILDREN);
 
         ScanSnapshot {
             root_path: self.root_path.clone(),
@@ -842,7 +845,10 @@ impl TopLevelProgressBuilder {
                 skipped_children: root_children
                     .iter()
                     .map(|child| child.skipped_children)
-                    .sum(),
+                    .sum::<u64>()
+                    + self
+                        .root_children_count
+                        .saturating_sub(root_children.len() as u64),
                 children: root_children,
             },
             files_scanned: self.files_scanned,
@@ -850,22 +856,34 @@ impl TopLevelProgressBuilder {
         }
     }
 
-    fn to_scan_entry(&self, state: &PartialNodeState) -> ScanEntry {
-        let mut children = if state.kind == EntryKind::Directory {
-            self.states
-                .values()
-                .filter(|child| child.depth == state.depth + 1 && child.parent_id == state.id)
-                .map(|child| self.to_scan_entry(child))
-                .collect::<Vec<_>>()
-        } else {
-            Vec::new()
-        };
-        children.sort_by(|left, right| {
+    fn to_child_entries(&self, parent_id: FileReference, limit: usize) -> Vec<ScanEntry> {
+        let mut child_states = self
+            .children_by_parent
+            .get(&parent_id)
+            .into_iter()
+            .flat_map(|child_ids| child_ids.iter())
+            .filter_map(|child_id| self.states.get(child_id))
+            .collect::<Vec<_>>();
+        child_states.sort_by(|left, right| {
             right
                 .size_bytes
                 .cmp(&left.size_bytes)
                 .then_with(|| left.path.cmp(&right.path))
         });
+
+        child_states
+            .into_iter()
+            .take(limit)
+            .map(|state| self.to_scan_entry(state))
+            .collect()
+    }
+
+    fn to_scan_entry(&self, state: &PartialNodeState) -> ScanEntry {
+        let children = if state.kind == EntryKind::Directory {
+            self.to_child_entries(state.id, PROGRESS_MAX_CHILDREN_PER_DIRECTORY)
+        } else {
+            Vec::new()
+        };
 
         let skipped_children = state.skipped_children
             + children
@@ -1680,6 +1698,38 @@ mod tests {
             .find(|entry| entry.path == r"C:\pagefile.sys")
             .expect("root file entry");
         assert_eq!(pagefile_entry.size_bytes, 50);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn progress_builder_caps_streamed_tree_preview() {
+        let root = FileReference::from_u64(5);
+        let records = (0..(PROGRESS_MAX_ROOT_CHILDREN + 3))
+            .map(|index| RawRecord {
+                id: FileReference::from_u64(100 + index as u64),
+                parent_id: root,
+                name: format!("file-{index:02}.bin"),
+                kind: EntryKind::File,
+                file_reference_number: 100 + index as u64,
+            })
+            .collect::<Vec<_>>();
+        let mut builder = TopLevelProgressBuilder::new(r"C:\", "NTFS", root, &records);
+
+        for (index, record) in records.iter().enumerate() {
+            builder.observe(record, Some((index + 1) as u64));
+        }
+
+        let snapshot = builder.to_snapshot();
+        assert_eq!(snapshot.files_scanned, records.len() as u64);
+        assert_eq!(snapshot.root.children.len(), PROGRESS_MAX_ROOT_CHILDREN);
+        assert_eq!(
+            snapshot.root.skipped_children,
+            (records.len() - PROGRESS_MAX_ROOT_CHILDREN) as u64
+        );
+        assert_eq!(
+            snapshot.root.children[0].path, r"C:\file-18.bin",
+            "the preview should keep the largest visible children"
+        );
     }
 
     #[cfg(windows)]
