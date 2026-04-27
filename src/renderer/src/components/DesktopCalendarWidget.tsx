@@ -116,16 +116,16 @@ export function DesktopCalendarWidget(): React.JSX.Element {
 
   const isGlassBackground = backgroundMode === 'glass'
   const calendarWidgetSurfaceClass = isGlassBackground
-    ? 'border-white/80 bg-white/[0.95] shadow-2xl shadow-slate-950/20 backdrop-blur-2xl'
+    ? 'border-white/80 bg-white/[0.60] shadow-2xl shadow-slate-950/20 backdrop-blur-2xl'
     : 'border-slate-200 bg-white shadow-2xl shadow-slate-950/12'
   const calendarWidgetHeaderClass = isGlassBackground
-    ? 'border-slate-200/80 bg-white/[0.95] backdrop-blur-xl'
+    ? 'border-slate-200/80 bg-white/[0.60] backdrop-blur-xl'
     : 'border-slate-200 bg-white'
   const calendarWidgetMonthClass = isGlassBackground
-    ? 'bg-slate-50/[0.94] ring-white/80 shadow-inner shadow-white/70 backdrop-blur-xl'
+    ? 'bg-slate-50/[0.60] ring-white/80 shadow-inner shadow-white/70 backdrop-blur-xl'
     : 'bg-slate-50 ring-slate-200'
   const calendarWidgetEventsClass = isGlassBackground
-    ? 'bg-slate-50/[0.94] ring-white/80 shadow-inner shadow-white/70 backdrop-blur-xl'
+    ? 'bg-slate-50/[0.60] ring-white/80 shadow-inner shadow-white/70 backdrop-blur-xl'
     : 'bg-white ring-slate-200'
   const controlButtonClass = 'grid h-7 w-7 place-items-center rounded-md text-slate-600 transition hover:bg-slate-100 hover:text-slate-950'
 
