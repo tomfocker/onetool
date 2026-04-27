@@ -32,10 +32,10 @@ test('DesktopCalendarWidget defaults to an opaque white shell and offers a thick
 
   assert.match(source, /calendarWidgetSurfaceClass/)
   assert.match(source, /'border-slate-200 bg-white shadow-2xl/)
-  assert.match(source, /'border-white\/80 bg-white\/\[0\.98\] shadow-2xl/)
-  assert.match(source, /bg-slate-50\/\[0\.97\]/)
+  assert.match(source, /'border-white\/80 bg-white\/\[0\.95\] shadow-2xl/)
+  assert.match(source, /bg-slate-50\/\[0\.94\]/)
   assert.match(source, /backdrop-blur-2xl/)
-  assert.doesNotMatch(source, /bg-white\/90|bg-white\/92/)
+  assert.doesNotMatch(source, /bg-white\/90|bg-white\/92|bg-white\/\[0\.98\]/)
   assert.doesNotMatch(source, /bg-white\/88/)
   assert.doesNotMatch(source, /bg-white\/72|bg-white\/76|bg-slate-50\/86/)
 })
