@@ -169,14 +169,18 @@ export class LocalProxyService {
   private valuesMatchTarget(
     values: Array<string | null | undefined>,
     target: ProxyDoctorTarget,
-    expected: 'env' | 'wininet' = 'env'
+    expected: 'env' | 'wininet' = 'env',
+    requireEveryValue = false
   ): ProxyDoctorLayerStatus['state'] {
-    const filled = values
-      .map((value) => (value || '').trim())
-      .filter((value) => value.length > 0 && value.toLowerCase() !== 'null')
+    const normalized = values.map((value) => (value || '').trim())
+    const filled = normalized.filter((value) => value.length > 0 && value.toLowerCase() !== 'null')
 
     if (filled.length === 0) {
       return 'off'
+    }
+
+    if (requireEveryValue && filled.length !== normalized.length) {
+      return 'conflict'
     }
 
     const targetValue = expected === 'wininet' ? target.winInetServer : target.envValue
@@ -300,7 +304,7 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
   private async buildEnvLayer(target: ProxyDoctorTarget): Promise<ProxyDoctorLayerStatus> {
     const env = await this.readUserProxyEnv()
     const values = PROXY_DOCTOR_PROXY_KEYS.map((key) => env[key])
-    const state = this.valuesMatchTarget(values, target)
+    const state = this.valuesMatchTarget(values, target, 'env', true)
     const currentValue = PROXY_DOCTOR_PROXY_KEYS
       .filter((key) => env[key])
       .map((key) => `${key}=${env[key]}`)
@@ -337,7 +341,7 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
       .filter((item) => item.value && item.value.toLowerCase() !== 'null')
       .map((item) => `${item.key}=${item.value}`)
       .join('; ')
-    const state = this.valuesMatchTarget(values, target)
+    const state = this.valuesMatchTarget(values, target, 'env', true)
 
     return this.makeLayer(id, state, currentValue, '')
   }

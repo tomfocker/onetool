@@ -152,6 +152,15 @@ function readAuthorityPort(source: string): number | null {
   return Number(match[1])
 }
 
+function assertSafeProxyHost(host: string): void {
+  const isBracketedIpv6 = /^\[[0-9a-f:.]+\]$/i.test(host)
+  const isDnsOrIpv4Host = /^[a-z0-9._-]+$/i.test(host)
+
+  if (!host || (!isBracketedIpv6 && !isDnsOrIpv4Host)) {
+    throw new Error('代理主机名包含不安全字符')
+  }
+}
+
 export function normalizeProxyDoctorTarget(input: string): ProxyDoctorTarget {
   const trimmed = input.trim()
   if (!trimmed) {
@@ -204,6 +213,8 @@ export function normalizeProxyDoctorTarget(input: string): ProxyDoctorTarget {
   assertValidPort(explicitPort)
 
   const host = parsed.hostname
+  assertSafeProxyHost(host)
+
   const url = `${protocol}://${host}:${explicitPort}`
   const server = `${host}:${explicitPort}`
 

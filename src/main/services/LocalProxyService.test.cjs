@@ -261,6 +261,98 @@ test('doctorScan reports stale Git value when paired key is missing', async () =
   assert.match(gitLayer.currentValue, /http\.proxy=http:\/\/127\.0\.0\.1:1080/)
 })
 
+test('doctorScan reports Git and npm conflict when a paired key is missing', async () => {
+  const winInetJson = {
+    enabled: true,
+    server: 'http=127.0.0.1:7897;https=127.0.0.1:7897',
+    override: '',
+    autoConfigUrl: null
+  }
+  const envJson = {
+    HTTP_PROXY: 'http://127.0.0.1:7897',
+    HTTPS_PROXY: 'http://127.0.0.1:7897',
+    ALL_PROXY: 'http://127.0.0.1:7897',
+    http_proxy: 'http://127.0.0.1:7897',
+    https_proxy: 'http://127.0.0.1:7897',
+    all_proxy: 'http://127.0.0.1:7897'
+  }
+
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      if (script.includes('LOCAL_PROXY_ENV_JSON_START')) {
+        return `---LOCAL_PROXY_ENV_JSON_START---\n${JSON.stringify(envJson)}\n---LOCAL_PROXY_ENV_JSON_END---`
+      }
+
+      return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+    },
+    execCommand: async (command) => {
+      const outputs = {
+        'netsh winhttp show proxy': 'Proxy Server(s) :  http=127.0.0.1:7897;https=127.0.0.1:7897',
+        'git config --global --get http.proxy': 'http://127.0.0.1:7897',
+        'git config --global --get https.proxy': '',
+        'npm config get proxy': 'http://127.0.0.1:7897',
+        'npm config get https-proxy': 'null'
+      }
+      return outputs[command] || ''
+    },
+    connectToPort: async () => true,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorScan('7897')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.summary, 'conflict')
+  assert.equal(result.data.layers.find((layer) => layer.id === 'git').state, 'conflict')
+  assert.equal(result.data.layers.find((layer) => layer.id === 'npm').state, 'conflict')
+})
+
+test('doctorScan reports environment conflict when managed proxy keys are incomplete', async () => {
+  const winInetJson = {
+    enabled: true,
+    server: 'http=127.0.0.1:7897;https=127.0.0.1:7897',
+    override: '',
+    autoConfigUrl: null
+  }
+  const envJson = {
+    HTTP_PROXY: 'http://127.0.0.1:7897'
+  }
+
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      if (script.includes('LOCAL_PROXY_ENV_JSON_START')) {
+        return `---LOCAL_PROXY_ENV_JSON_START---\n${JSON.stringify(envJson)}\n---LOCAL_PROXY_ENV_JSON_END---`
+      }
+
+      return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+    },
+    execCommand: async (command) => {
+      const outputs = {
+        'netsh winhttp show proxy': 'Proxy Server(s) :  http=127.0.0.1:7897;https=127.0.0.1:7897',
+        'git config --global --get http.proxy': 'http://127.0.0.1:7897',
+        'git config --global --get https.proxy': 'http://127.0.0.1:7897',
+        'npm config get proxy': 'http://127.0.0.1:7897',
+        'npm config get https-proxy': 'http://127.0.0.1:7897'
+      }
+      return outputs[command] || ''
+    },
+    connectToPort: async () => true,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorScan('7897')
+  const envLayer = result.data.layers.find((layer) => layer.id === 'env')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.summary, 'conflict')
+  assert.equal(envLayer.state, 'conflict')
+  assert.match(envLayer.currentValue, /HTTP_PROXY=http:\/\/127\.0\.0\.1:7897/)
+})
+
 test('doctorScan accepts Windows fallback proxy server syntax', async () => {
   const winInetJson = {
     enabled: true,
@@ -417,6 +509,25 @@ test('doctorFixLayer returns failure when Git apply command returns failure text
   assert.equal(result.success, false)
   assert.match(result.error, /not recognized/)
   assert.deepEqual(commands, ['git config --global http.proxy http://127.0.0.1:7897'])
+})
+
+test('doctorFixLayer rejects unsafe target hosts before shell commands run', async () => {
+  const commands = []
+  const deps = {
+    execCommand: async (command) => {
+      commands.push(command)
+      return 'ok'
+    },
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorFixLayer('git', 'evil.com%26whoami:7897')
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /不安全字符/)
+  assert.deepEqual(commands, [])
 })
 
 test('doctorClearLayer treats absent Git proxy keys as already clear', async () => {

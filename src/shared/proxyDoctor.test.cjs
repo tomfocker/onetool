@@ -101,6 +101,18 @@ test('normalizeProxyDoctorTarget rejects port-like values outside the URL author
   assert.throws(() => normalizeProxyDoctorTarget('http://localhost#port:7897'), /代理端口必须在 1-65535 之间/)
 })
 
+test('normalizeProxyDoctorTarget rejects unsafe shell metacharacters in hosts', () => {
+  for (const input of [
+    'host&whoami:7897',
+    'evil.com%26whoami:7897',
+    'host`whoami:7897',
+    'host;whoami:7897',
+    'host"whoami:7897'
+  ]) {
+    assert.throws(() => normalizeProxyDoctorTarget(input), /代理主机名包含不安全字符/)
+  }
+})
+
 test('summarizeProxyDoctorLayers reports unified, off, conflict, and error states', () => {
   assert.equal(summarizeProxyDoctorLayers([
     createLayer('wininet', 'ok'),
