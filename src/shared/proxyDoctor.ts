@@ -13,6 +13,22 @@ export interface ProxyDoctorTarget {
   envValue: string
 }
 
+export interface ProxyDoctorProbeCheck {
+  ok: boolean
+  latencyMs: number | null
+  statusCode?: number | null
+  error?: string
+  skipped?: boolean
+}
+
+export interface ProxyDoctorProbeResult {
+  target: ProxyDoctorTarget
+  generatedAt: string
+  testUrl: string
+  port: ProxyDoctorProbeCheck
+  proxy: ProxyDoctorProbeCheck
+}
+
 export interface ProxyDoctorLayerStatus {
   id: ProxyDoctorLayerId
   state: ProxyDoctorLayerState

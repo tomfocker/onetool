@@ -1,16 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, ExternalLink, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { Copy, ExternalLink, Gauge, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useGlobalStore } from '@/store'
-import type { ProxyDoctorLayerStatus, ProxyDoctorSnapshot } from '../../../shared/proxyDoctor'
+import type { ProxyDoctorLayerStatus, ProxyDoctorProbeCheck, ProxyDoctorProbeResult, ProxyDoctorSnapshot } from '../../../shared/proxyDoctor'
 import {
   DEFAULT_PROXY_DOCTOR_BYPASS,
   DEFAULT_PROXY_DOCTOR_TARGET,
   createProxyDoctorApplyRequest,
+  getFirstProxyTargetCandidate,
   getLayerLampCopy,
   getLayerStateLabel,
   getSummaryCopy
@@ -36,9 +37,57 @@ const portToneClassNames = {
   muted: 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500'
 }
 
+const probeCheckToneClassNames = {
+  success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  danger: 'border-red-500/20 bg-red-500/10 text-red-700 dark:text-red-300'
+}
+
 function getPortTone(snapshot: ProxyDoctorSnapshot | null): keyof typeof portToneClassNames {
   if (!snapshot) return 'muted'
   return snapshot.portOpen ? 'success' : 'warning'
+}
+
+function makeProbeKey(label: string, input: string): string {
+  return `${label}:${input.trim()}`
+}
+
+function formatProbeLatency(latencyMs: number | null): string {
+  return latencyMs == null ? '-' : `${latencyMs}ms`
+}
+
+function getProbeCheckTone(check: ProxyDoctorProbeCheck): keyof typeof probeCheckToneClassNames {
+  if (check.ok) return 'success'
+  if (check.skipped) return 'warning'
+  return 'danger'
+}
+
+function getProbeCheckStatus(check: ProxyDoctorProbeCheck): string {
+  if (check.ok) return '可用'
+  if (check.skipped) return '已跳过'
+  return '失败'
+}
+
+function formatProbeCheckDetail(check: ProxyDoctorProbeCheck): string {
+  const parts = [getProbeCheckStatus(check)]
+  if (check.latencyMs != null) {
+    parts.push(formatProbeLatency(check.latencyMs))
+  }
+  if (check.statusCode != null) {
+    parts.push(`HTTP ${check.statusCode}`)
+  }
+  if (check.error) {
+    parts.push(check.error)
+  }
+  return parts.join(' · ')
+}
+
+function normalizeComparableProxyValue(value: string): string {
+  const trimmed = value.trim().replace(/^(?:https?|socks5):\/\//i, '')
+  if (/^\d+$/.test(trimmed)) {
+    return `127.0.0.1:${trimmed}`
+  }
+  return trimmed.toLowerCase()
 }
 
 function needsLayerAction(layer: ProxyDoctorLayerStatus): boolean {
@@ -63,6 +112,8 @@ export default function LocalProxyManagerTool() {
   const [bypass, setBypass] = useState(DEFAULT_PROXY_DOCTOR_BYPASS.join(';'))
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [log, setLog] = useState<string[]>([])
+  const [probeResult, setProbeResult] = useState<{ label: string; input: string; data: ProxyDoctorProbeResult } | null>(null)
+  const [probeLoadingKey, setProbeLoadingKey] = useState<string | null>(null)
 
   const appendLog = useCallback((message: string) => {
     setLog((previous) => [message, ...previous].slice(0, 12))
@@ -100,6 +151,47 @@ export default function LocalProxyManagerTool() {
   useEffect(() => {
     void scanTarget(DEFAULT_PROXY_DOCTOR_TARGET)
   }, [scanTarget])
+
+  const handleProbeTarget = useCallback(
+    async (targetValue: string, label: string) => {
+      const input = targetValue.trim()
+      if (!input) {
+        showNotification({
+          type: 'warning',
+          title: '代理地址为空',
+          message: '请先填写要测试的代理地址。'
+        })
+        return
+      }
+
+      const loadingKey = makeProbeKey(label, input)
+      setProbeLoadingKey(loadingKey)
+
+      try {
+        const result = await window.electron.localProxy.doctorProbe(input)
+        if (result.success && result.data) {
+          setProbeResult({ label, input, data: result.data })
+          appendLog(`测试完成: ${label} ${result.data.target.url}`)
+          return
+        }
+
+        showNotification({
+          type: 'error',
+          title: '代理测试失败',
+          message: result.error || '未能完成代理可用性测试。'
+        })
+      } catch (error) {
+        showNotification({
+          type: 'error',
+          title: '代理测试失败',
+          message: error instanceof Error ? error.message : '未能完成代理可用性测试。'
+        })
+      } finally {
+        setProbeLoadingKey((current) => (current === loadingKey ? null : current))
+      }
+    },
+    [appendLog, showNotification]
+  )
 
   const handleOpenSettings = async () => {
     const result = await window.electron.localProxy.openSystemSettings()
@@ -258,6 +350,9 @@ export default function LocalProxyManagerTool() {
   const portTone = getPortTone(snapshot)
   const problemLayerCount = useMemo(() => snapshot?.layers.filter(needsLayerAction).length || 0, [snapshot])
   const reportText = useMemo(() => snapshot?.reportText || log.join('\n') || '暂无诊断日志。', [log, snapshot])
+  const targetProbeKey = makeProbeKey('目标代理', target)
+  const targetProbeLoading = probeLoadingKey === targetProbeKey
+  const targetComparable = normalizeComparableProxyValue(target)
 
   return (
     <div className="space-y-6 pb-20">
@@ -309,12 +404,23 @@ export default function LocalProxyManagerTool() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.72fr_1.28fr]">
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
-                <Input
-                  value={target}
-                  onChange={(event) => setTarget(event.target.value)}
-                  className="h-12 rounded-2xl font-bold"
-                  placeholder="127.0.0.1:7897"
-                />
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <Input
+                    value={target}
+                    onChange={(event) => setTarget(event.target.value)}
+                    className="h-12 rounded-2xl font-bold"
+                    placeholder="127.0.0.1:7897"
+                  />
+                  <Button
+                    variant="outline"
+                    className="h-12 rounded-2xl px-4"
+                    onClick={() => void handleProbeTarget(target, '目标代理')}
+                    disabled={loading || Boolean(probeLoadingKey)}
+                  >
+                    <Gauge size={16} className={cn(targetProbeLoading && 'animate-pulse')} />
+                    {targetProbeLoading ? '测试中' : '测试目标代理'}
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">旁路规则</label>
@@ -327,6 +433,41 @@ export default function LocalProxyManagerTool() {
               </div>
             </div>
           </div>
+
+          {probeResult && (
+            <div className="grid gap-3 rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-3 dark:border-white/10 dark:bg-white/5 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,1.4fr)]">
+              <div className="min-w-0">
+                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">
+                  最近测试 · {probeResult.label}
+                </div>
+                <div className="truncate font-mono text-xs font-bold text-foreground" title={probeResult.data.target.url}>
+                  {probeResult.data.target.url}
+                </div>
+              </div>
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
+                <div
+                  className={cn(
+                    'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
+                    probeCheckToneClassNames[getProbeCheckTone(probeResult.data.port)]
+                  )}
+                  title={formatProbeCheckDetail(probeResult.data.port)}
+                >
+                  <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">端口连通</div>
+                  <div className="truncate">{formatProbeCheckDetail(probeResult.data.port)}</div>
+                </div>
+                <div
+                  className={cn(
+                    'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
+                    probeCheckToneClassNames[getProbeCheckTone(probeResult.data.proxy)]
+                  )}
+                  title={formatProbeCheckDetail(probeResult.data.proxy)}
+                >
+                  <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">代理请求</div>
+                  <div className="truncate">{formatProbeCheckDetail(probeResult.data.proxy)}</div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-3">
             <Button
@@ -358,20 +499,28 @@ export default function LocalProxyManagerTool() {
         <CardContent className="space-y-4">
           {snapshot ? (
             <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white/50 dark:border-white/10 dark:bg-white/5">
-              <div className="grid grid-cols-[minmax(9rem,0.9fr)_7rem_minmax(10rem,1fr)_minmax(15rem,1.35fr)] gap-3 border-b border-zinc-200/70 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
+              <div className="grid grid-cols-[minmax(8rem,0.9fr)_6.5rem_minmax(13rem,1.1fr)_minmax(8rem,0.9fr)] gap-3 border-b border-zinc-200/70 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
                 <span>环境</span>
                 <span>代理状态</span>
-                <span>当前配置</span>
                 <span>建议与操作</span>
+                <span>当前配置</span>
               </div>
               <div className="divide-y divide-zinc-200/70 dark:divide-white/10">
                 {snapshot.layers.map((layer) => {
                   const lamp = getLayerLampCopy(layer, snapshot?.portOpen)
                   const hasAction = needsLayerAction(layer)
+                  const currentTargetCandidate = getFirstProxyTargetCandidate(layer.currentValue)
+                  const currentProbeLabel = `${layer.title} 当前值`
+                  const currentProbeKey = currentTargetCandidate ? makeProbeKey(currentProbeLabel, currentTargetCandidate) : ''
+                  const currentProbeLoading = probeLoadingKey === currentProbeKey
+                  const shouldProbeCurrentValue = Boolean(
+                    currentTargetCandidate &&
+                    normalizeComparableProxyValue(currentTargetCandidate) !== targetComparable
+                  )
                   return (
                     <div
                       key={layer.id}
-                      className="environment-status-row grid grid-cols-[minmax(9rem,0.9fr)_7rem_minmax(10rem,1fr)_minmax(15rem,1.35fr)] items-center gap-3 px-4 py-4 text-sm"
+                      className="environment-status-row grid grid-cols-[minmax(8rem,0.9fr)_6.5rem_minmax(13rem,1.1fr)_minmax(8rem,0.9fr)] items-center gap-3 px-4 py-4 text-sm"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span
@@ -390,14 +539,23 @@ export default function LocalProxyManagerTool() {
                         <div className={cn('truncate font-black', layerTextToneClassNames[lamp.tone])}>{lamp.stateLabel}</div>
                         <div className="truncate text-xs font-bold text-muted-foreground">{lamp.reachabilityLabel}</div>
                       </div>
-                      <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
-                        {layer.currentValue || '未设置'}
-                      </div>
-                      <div className="environment-action-cell flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-                        <div className={cn('min-w-0 text-xs font-bold leading-relaxed', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
+                      <div className="environment-action-cell flex min-w-0 flex-wrap items-center gap-2">
+                        <div className={cn('min-w-[9rem] flex-1 text-xs font-bold leading-relaxed', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
                           {getLayerActionHint(layer)}
                         </div>
-                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                        <div className="flex min-w-0 flex-wrap gap-2">
+                          {shouldProbeCurrentValue && currentTargetCandidate && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 rounded-xl px-3"
+                              onClick={() => void handleProbeTarget(currentTargetCandidate, currentProbeLabel)}
+                              disabled={loading || Boolean(probeLoadingKey)}
+                            >
+                              <Gauge size={14} className={cn(currentProbeLoading && 'animate-pulse')} />
+                              {currentProbeLoading ? '测试中' : '测试当前值'}
+                            </Button>
+                          )}
                           {hasAction ? (
                             <>
                               {layer.canFix && (
@@ -415,6 +573,9 @@ export default function LocalProxyManagerTool() {
                             <span className="text-xs font-black text-muted-foreground">无需处理</span>
                           )}
                         </div>
+                      </div>
+                      <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
+                        {layer.currentValue || '未设置'}
                       </div>
                     </div>
                   )

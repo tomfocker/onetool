@@ -55,6 +55,7 @@ import type {
   LocalProxyConfig,
   ProxyDoctorApplyRequest,
   ProxyDoctorLayerId,
+  ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   WslBackupFormat,
   WslRestoreMode
@@ -346,6 +347,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     disable: () => ipcRenderer.invoke('local-proxy:disable'),
     openSystemSettings: () => ipcRenderer.invoke('local-proxy:open-system-settings'),
     doctorScan: (target: string) => ipcRenderer.invoke('local-proxy:doctor-scan', target) as Promise<IpcResponse<ProxyDoctorSnapshot>>,
+    doctorProbe: (target: string) => ipcRenderer.invoke('local-proxy:doctor-probe', target) as Promise<IpcResponse<ProxyDoctorProbeResult>>,
     doctorApplyAll: (request: ProxyDoctorApplyRequest) => {
       return ipcRenderer.invoke('local-proxy:doctor-apply-all', request) as Promise<IpcResponse<ProxyDoctorSnapshot>>
     },

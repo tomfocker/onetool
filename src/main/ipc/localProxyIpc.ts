@@ -23,6 +23,10 @@ export function registerLocalProxyIpc() {
     return localProxyService.doctorScan(target)
   })
 
+  ipcMain.handle('local-proxy:doctor-probe', async (_event, target: string) => {
+    return localProxyService.doctorProbe(target)
+  })
+
   ipcMain.handle('local-proxy:doctor-apply-all', async (_event, request: ProxyDoctorApplyRequest) => {
     return localProxyService.doctorApplyAll(request)
   })

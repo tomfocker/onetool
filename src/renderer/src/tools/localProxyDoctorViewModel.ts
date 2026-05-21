@@ -45,6 +45,21 @@ export function createProxyDoctorApplyRequest(target: string, bypass: string): P
   }
 }
 
+export function getFirstProxyTargetCandidate(value: string): string | null {
+  const normalized = value.trim()
+  if (!normalized || normalized === '未设置') {
+    return null
+  }
+
+  const urlMatch = normalized.match(/\b(?:https?|socks5):\/\/(?:\[[0-9a-f:.]+\]|[a-z0-9._-]+):\d{1,5}\b/i)
+  if (urlMatch) {
+    return urlMatch[0]
+  }
+
+  const hostPortMatch = normalized.match(/(?:^|[=;\s])((?:\[[0-9a-f:.]+\]|[a-z0-9._-]+):\d{1,5})(?=$|[;\s,])/i)
+  return hostPortMatch?.[1] || null
+}
+
 export function getSummaryCopy(summary: ProxyDoctorSummary) {
   if (summary === 'unified') {
     return {

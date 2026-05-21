@@ -20,6 +20,8 @@ function loadLocalProxyServiceModule(overrides = {}) {
   const execPowerShellEncoded = overrides.execPowerShellEncoded || (async () => 'ok')
   const execCommand = overrides.execCommand || (async () => '')
   const connectToPort = overrides.connectToPort || (async () => false)
+  const measurePortLatency = overrides.measurePortLatency
+  const probeProxyRequest = overrides.probeProxyRequest
   const processEnv = overrides.processEnv || {}
   const spawn = overrides.spawn || (() => ({ unref() {} }))
   const logger = overrides.logger || {
@@ -687,6 +689,49 @@ test('doctorApplyAll rejects unsafe bypass before enabling WinINET', async () =>
     false
   )
   assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
+})
+
+test('doctorProbe measures port and proxy request latency for a target', async () => {
+  const calls = []
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService({
+    measurePortLatency: async (host, port) => {
+      calls.push(['port', host, port])
+      return { ok: true, latencyMs: 6 }
+    },
+    probeProxyRequest: async (target) => {
+      calls.push(['proxy', target.url])
+      return { ok: true, latencyMs: 138, statusCode: 204 }
+    }
+  })
+
+  const result = await service.doctorProbe('7897')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.target.url, 'http://127.0.0.1:7897')
+  assert.deepEqual(result.data.port, { ok: true, latencyMs: 6 })
+  assert.equal(result.data.proxy.ok, true)
+  assert.equal(result.data.proxy.latencyMs, 138)
+  assert.equal(result.data.proxy.statusCode, 204)
+  assert.deepEqual(calls, [
+    ['port', '127.0.0.1', 7897],
+    ['proxy', 'http://127.0.0.1:7897']
+  ])
+})
+
+test('doctorProbe reports proxy request errors without losing port latency', async () => {
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService({
+    measurePortLatency: async () => ({ ok: true, latencyMs: 5 }),
+    probeProxyRequest: async () => ({ ok: false, latencyMs: null, error: '代理请求失败' })
+  })
+
+  const result = await service.doctorProbe('127.0.0.1:7897')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.port.ok, true)
+  assert.equal(result.data.proxy.ok, false)
+  assert.match(result.data.proxy.error, /代理请求失败/)
 })
 
 test('disable returns a failure when the proxy disable script resolves empty output', async () => {

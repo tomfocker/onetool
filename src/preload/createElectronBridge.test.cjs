@@ -744,6 +744,7 @@ test('createElectronBridge maps proxy doctor IPC channels', async () => {
 
   await bridge.localProxy.doctorScan('7897')
   await bridge.localProxy.doctorApplyAll({ target: '7897', bypass: ['localhost'] })
+  await bridge.localProxy.doctorProbe('7897')
   await bridge.localProxy.doctorClearAll()
   await bridge.localProxy.doctorFixLayer('git', '7897', ['localhost'])
   await bridge.localProxy.doctorClearLayer('npm')
@@ -751,6 +752,7 @@ test('createElectronBridge maps proxy doctor IPC channels', async () => {
   assert.deepEqual(normalizeForAssertion(mocks.invokeCalls), [
     ['local-proxy:doctor-scan', '7897'],
     ['local-proxy:doctor-apply-all', { target: '7897', bypass: ['localhost'] }],
+    ['local-proxy:doctor-probe', '7897'],
     ['local-proxy:doctor-clear-all'],
     ['local-proxy:doctor-fix-layer', { layerId: 'git', target: '7897', bypass: ['localhost'] }],
     ['local-proxy:doctor-clear-layer', 'npm']

@@ -181,6 +181,8 @@ export type {
   ProxyDoctorLayerId,
   ProxyDoctorLayerState,
   ProxyDoctorLayerStatus,
+  ProxyDoctorProbeCheck,
+  ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   ProxyDoctorSummary,
   ProxyDoctorTarget

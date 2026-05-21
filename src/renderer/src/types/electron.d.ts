@@ -13,6 +13,7 @@ import {
   LocalProxyStatus,
   ProxyDoctorApplyRequest,
   ProxyDoctorLayerId,
+  ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   WslBackupFormat,
   WslBackupInfo,
@@ -218,6 +219,7 @@ declare global {
         disable: () => Promise<IpcResponse<LocalProxyStatus>>
         openSystemSettings: () => Promise<IpcResponse>
         doctorScan: (target: string) => Promise<IpcResponse<ProxyDoctorSnapshot>>
+        doctorProbe: (target: string) => Promise<IpcResponse<ProxyDoctorProbeResult>>
         doctorApplyAll: (request: ProxyDoctorApplyRequest) => Promise<IpcResponse<ProxyDoctorSnapshot>>
         doctorClearAll: () => Promise<IpcResponse>
         doctorFixLayer: (layerId: ProxyDoctorLayerId, target: string, bypass: string[]) => Promise<IpcResponse>

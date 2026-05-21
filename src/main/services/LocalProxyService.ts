@@ -10,6 +10,8 @@ import {
   PROXY_DOCTOR_PROXY_KEYS,
   ProxyDoctorLayerId,
   ProxyDoctorLayerStatus,
+  ProxyDoctorProbeCheck,
+  ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   ProxyDoctorTarget,
   buildProxyDoctorReport,
@@ -22,11 +24,15 @@ const LOCAL_PROXY_JSON_START = '---LOCAL_PROXY_JSON_START---'
 const LOCAL_PROXY_JSON_END = '---LOCAL_PROXY_JSON_END---'
 const LOCAL_PROXY_ENV_JSON_START = '---LOCAL_PROXY_ENV_JSON_START---'
 const LOCAL_PROXY_ENV_JSON_END = '---LOCAL_PROXY_ENV_JSON_END---'
+const PROXY_DOCTOR_TEST_URL = 'http://www.msftconnecttest.com/connecttest.txt'
+const PROXY_DOCTOR_TEST_HOST = 'www.msftconnecttest.com'
 
 type LocalProxyServiceDependencies = {
   execPowerShellEncoded: (script: string, timeoutMs?: number) => Promise<string>
   execCommand: (command: string, timeoutMs?: number) => Promise<string>
   connectToPort: (host: string, port: number, timeoutMs?: number) => Promise<boolean>
+  measurePortLatency: (host: string, port: number, timeoutMs?: number) => Promise<ProxyDoctorProbeCheck>
+  probeProxyRequest: (target: ProxyDoctorTarget, timeoutMs?: number) => Promise<ProxyDoctorProbeCheck>
   processEnv: NodeJS.ProcessEnv
   spawn: typeof spawn
 }
@@ -98,10 +104,105 @@ function testPortConnection(host: string, port: number, timeoutMs = 2500): Promi
   })
 }
 
+function measurePortLatency(host: string, port: number, timeoutMs = 2500): Promise<ProxyDoctorProbeCheck> {
+  return new Promise((resolve) => {
+    const startedAt = Date.now()
+    const socket = net.createConnection({ host, port })
+    let settled = false
+
+    const finish = (ok: boolean, error?: string) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      const latencyMs = ok ? Math.max(1, Date.now() - startedAt) : null
+      socket.destroy()
+      resolve(error ? { ok, latencyMs, error } : { ok, latencyMs })
+    }
+
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false, '连接超时'))
+    socket.once('error', (error) => finish(false, error.message))
+  })
+}
+
+function probeHttpProxyRequest(target: ProxyDoctorTarget, timeoutMs = 5000): Promise<ProxyDoctorProbeCheck> {
+  if (target.protocol !== 'http') {
+    return Promise.resolve({
+      ok: false,
+      latencyMs: null,
+      skipped: true,
+      error: `${target.protocol.toUpperCase()} 代理暂只测试端口连通`
+    })
+  }
+
+  return new Promise((resolve) => {
+    const startedAt = Date.now()
+    const socket = net.createConnection({ host: target.host, port: target.port })
+    let settled = false
+    let response = ''
+
+    const finish = (check: ProxyDoctorProbeCheck) => {
+      if (settled) {
+        return
+      }
+
+      settled = true
+      socket.destroy()
+      resolve(check)
+    }
+
+    const parseStatus = () => {
+      const firstLine = response.split(/\r?\n/, 1)[0] || ''
+      const match = firstLine.match(/^HTTP\/\d(?:\.\d)?\s+(\d{3})/)
+      if (!match) {
+        return false
+      }
+
+      const statusCode = Number(match[1])
+      const ok = statusCode >= 200 && statusCode < 400
+      finish({
+        ok,
+        latencyMs: Math.max(1, Date.now() - startedAt),
+        statusCode,
+        error: ok ? undefined : statusCode === 407 ? '代理需要认证' : `代理返回 HTTP ${statusCode}`
+      })
+      return true
+    }
+
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => {
+      socket.write([
+        `GET ${PROXY_DOCTOR_TEST_URL} HTTP/1.1`,
+        `Host: ${PROXY_DOCTOR_TEST_HOST}`,
+        'User-Agent: OneToolProxyDoctor/1.0',
+        'Connection: close',
+        '',
+        ''
+      ].join('\r\n'))
+    })
+    socket.on('data', (chunk) => {
+      response += chunk.toString('latin1')
+      parseStatus()
+    })
+    socket.once('end', () => {
+      if (!parseStatus()) {
+        finish({ ok: false, latencyMs: null, error: '代理没有返回有效 HTTP 响应' })
+      }
+    })
+    socket.once('timeout', () => finish({ ok: false, latencyMs: null, error: '代理请求超时' }))
+    socket.once('error', (error) => finish({ ok: false, latencyMs: null, error: error.message }))
+  })
+}
+
 const defaultDeps: LocalProxyServiceDependencies = {
   execPowerShellEncoded,
   execCommand,
   connectToPort: testPortConnection,
+  measurePortLatency,
+  probeProxyRequest: probeHttpProxyRequest,
   processEnv: process.env,
   spawn
 }
@@ -610,6 +711,30 @@ Write-Output 'ok'
       return { success: true, data: snapshot }
     } catch (error) {
       logger.error('[LocalProxyService] doctorScan failed', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  async doctorProbe(targetInput: string): Promise<IpcResponse<ProxyDoctorProbeResult>> {
+    try {
+      const target = normalizeProxyDoctorTarget(targetInput)
+      const [port, proxy] = await Promise.all([
+        this.deps.measurePortLatency(target.host, target.port),
+        this.deps.probeProxyRequest(target)
+      ])
+
+      return {
+        success: true,
+        data: {
+          target,
+          generatedAt: new Date().toISOString(),
+          testUrl: PROXY_DOCTOR_TEST_URL,
+          port,
+          proxy
+        }
+      }
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorProbe failed', error)
       return { success: false, error: (error as Error).message }
     }
   }

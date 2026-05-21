@@ -33,6 +33,7 @@ function loadViewModelModule() {
 const {
   DEFAULT_PROXY_DOCTOR_BYPASS,
   createProxyDoctorApplyRequest,
+  getFirstProxyTargetCandidate,
   getLayerLampCopy,
   getLayerStateTone,
   getSummaryCopy,
@@ -48,6 +49,12 @@ test('createProxyDoctorApplyRequest normalizes target and bypass fields', () => 
     target: '7897',
     bypass: ['localhost', '127.*']
   })
+})
+
+test('getFirstProxyTargetCandidate extracts comparable proxy values from layered config text', () => {
+  assert.equal(getFirstProxyTargetCandidate('HTTP_PROXY=http://100.64.0.6:20172; HTTPS_PROXY=http://100.64.0.6:20172'), 'http://100.64.0.6:20172')
+  assert.equal(getFirstProxyTargetCandidate('http=127.0.0.1:7897;https=127.0.0.1:7897'), '127.0.0.1:7897')
+  assert.equal(getFirstProxyTargetCandidate('未设置'), null)
 })
 
 test('summary and layer state labels stay user-facing', () => {
