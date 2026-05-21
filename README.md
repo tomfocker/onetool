@@ -2,9 +2,9 @@
 
 Windows 本地高频小工具箱。
 
-`v0.3.0` 准备发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
+`v0.3.2` 准备发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
 
-![Version](https://img.shields.io/badge/version-v0.3.0-2563eb.svg)
+![Version](https://img.shields.io/badge/version-v0.3.2-2563eb.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-0f172a.svg)
 ![License](https://img.shields.io/badge/license-MIT-16a34a.svg)
 
@@ -54,15 +54,15 @@ Windows 本地高频小工具箱。
 
 当前发布页提供两种 Windows 包：
 
-- 安装版：`onetool-0.3.0-win-x64-setup.exe`
-- 便携版：`onetool-0.3.0-win-x64-portable.exe`
+- 安装版：`onetool-0.3.2-win-x64-setup.exe`
+- 便携版：`onetool-0.3.2-win-x64-portable.exe`
 
 选择建议：
 
 - 长期使用，优先安装版
 - 临时试用、随身携带或不想安装，使用便携版
 
-当前 `v0.3.0` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
+当前 `v0.3.2` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
 
 更新行为：
 
@@ -71,12 +71,12 @@ Windows 本地高频小工具箱。
 
 ## 当前版本定位
 
-`v0.3.0` 在 `v0.2.0` 的基础能力之上，当前发布重点是：
+`v0.3.2` 在 `v0.3.1` 的基础能力之上，当前发布重点是：
 
-- 新增日历应用，支持本地日程管理、拖拽创建/调整和本地 LLM 自然语言创建日程
-- 新增表格识别工具，支持图片表格本地识别并导出 Excel
-- 强化 Windows 启动链路，非默认安装路径或渲染器加载异常时不再静默无响应
-- 保持 Windows 安装版更新链路与 GitHub Release 对齐
+- 新增和完善代理医生，统一诊断 Windows 系统代理、WinHTTP、命令行环境变量、Git、npm 与进程代理状态
+- 新增代理可用性测试，区分端口连通和标准代理请求成功，减少“端口能连但不能当系统代理”的误判
+- 新增代理启动器，可选择单个 `.exe` 或 `.com` 程序并为新进程注入代理环境变量
+- 优化代理医生状态灯和诊断表格布局，让冲突项、当前配置和操作按钮更容易扫读
 
 暂不承诺：
 
