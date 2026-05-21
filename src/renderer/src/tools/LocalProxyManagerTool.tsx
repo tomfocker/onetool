@@ -168,7 +168,22 @@ export default function LocalProxyManagerTool() {
       setProbeLoadingKey(loadingKey)
 
       try {
-        const result = await window.electron.localProxy.doctorProbe(input)
+        const proxyApi = window.electron?.localProxy as
+          | (typeof window.electron.localProxy & {
+              doctorProbe?: (target: string) => Promise<{ success: boolean; data?: ProxyDoctorProbeResult; error?: string }>
+            })
+          | undefined
+
+        if (typeof proxyApi?.doctorProbe !== 'function') {
+          showNotification({
+            type: 'warning',
+            title: '需要重启预览',
+            message: '当前预览窗口还没有加载新的代理测试接口，请重启 OneTool 预览后再试。'
+          })
+          return
+        }
+
+        const result = await proxyApi.doctorProbe(input)
         if (result.success && result.data) {
           setProbeResult({ label, input, data: result.data })
           appendLog(`测试完成: ${label} ${result.data.target.url}`)
