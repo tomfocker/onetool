@@ -19,7 +19,8 @@ import {
   summarizeProxyDoctorLayers
 } from '../../shared/proxyDoctor'
 
-const INTERNET_SETTINGS_PATH = 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
+const INTERNET_SETTINGS_PATH =
+  'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings'
 const LOCAL_PROXY_JSON_START = '---LOCAL_PROXY_JSON_START---'
 const LOCAL_PROXY_JSON_END = '---LOCAL_PROXY_JSON_END---'
 const LOCAL_PROXY_ENV_JSON_START = '---LOCAL_PROXY_ENV_JSON_START---'
@@ -31,8 +32,15 @@ type LocalProxyServiceDependencies = {
   execPowerShellEncoded: (script: string, timeoutMs?: number) => Promise<string>
   execCommand: (command: string, timeoutMs?: number) => Promise<string>
   connectToPort: (host: string, port: number, timeoutMs?: number) => Promise<boolean>
-  measurePortLatency: (host: string, port: number, timeoutMs?: number) => Promise<ProxyDoctorProbeCheck>
-  probeProxyRequest: (target: ProxyDoctorTarget, timeoutMs?: number) => Promise<ProxyDoctorProbeCheck>
+  measurePortLatency: (
+    host: string,
+    port: number,
+    timeoutMs?: number
+  ) => Promise<ProxyDoctorProbeCheck>
+  probeProxyRequest: (
+    target: ProxyDoctorTarget,
+    timeoutMs?: number
+  ) => Promise<ProxyDoctorProbeCheck>
   processEnv: NodeJS.ProcessEnv
   spawn: typeof spawn
 }
@@ -59,7 +67,9 @@ public static extern bool InternetSetOption(System.IntPtr hInternet, int dwOptio
 }
 
 function commandOutputLooksFailed(output: string): boolean {
-  return /is not recognized|not found|fatal:|error:|错误|找不到|不是内部或外部命令|invalid|the syntax of this command is/i.test(output)
+  return /is not recognized|not found|fatal:|error:|错误|找不到|不是内部或外部命令|invalid|the syntax of this command is/i.test(
+    output
+  )
 }
 
 function isAbsentGitConfigError(error: unknown): boolean {
@@ -104,7 +114,11 @@ function testPortConnection(host: string, port: number, timeoutMs = 2500): Promi
   })
 }
 
-function measurePortLatency(host: string, port: number, timeoutMs = 2500): Promise<ProxyDoctorProbeCheck> {
+function measurePortLatency(
+  host: string,
+  port: number,
+  timeoutMs = 2500
+): Promise<ProxyDoctorProbeCheck> {
   return new Promise((resolve) => {
     const startedAt = Date.now()
     const socket = net.createConnection({ host, port })
@@ -128,7 +142,10 @@ function measurePortLatency(host: string, port: number, timeoutMs = 2500): Promi
   })
 }
 
-function probeHttpProxyRequest(target: ProxyDoctorTarget, timeoutMs = 5000): Promise<ProxyDoctorProbeCheck> {
+function probeHttpProxyRequest(
+  target: ProxyDoctorTarget,
+  timeoutMs = 5000
+): Promise<ProxyDoctorProbeCheck> {
   if (target.protocol !== 'http') {
     return Promise.resolve({
       ok: false,
@@ -174,14 +191,16 @@ function probeHttpProxyRequest(target: ProxyDoctorTarget, timeoutMs = 5000): Pro
 
     socket.setTimeout(timeoutMs)
     socket.once('connect', () => {
-      socket.write([
-        `GET ${PROXY_DOCTOR_TEST_URL} HTTP/1.1`,
-        `Host: ${PROXY_DOCTOR_TEST_HOST}`,
-        'User-Agent: OneToolProxyDoctor/1.0',
-        'Connection: close',
-        '',
-        ''
-      ].join('\r\n'))
+      socket.write(
+        [
+          `GET ${PROXY_DOCTOR_TEST_URL} HTTP/1.1`,
+          `Host: ${PROXY_DOCTOR_TEST_HOST}`,
+          'User-Agent: OneToolProxyDoctor/1.0',
+          'Connection: close',
+          '',
+          ''
+        ].join('\r\n')
+      )
     })
     socket.on('data', (chunk) => {
       response += chunk.toString('latin1')
@@ -189,10 +208,16 @@ function probeHttpProxyRequest(target: ProxyDoctorTarget, timeoutMs = 5000): Pro
     })
     socket.once('end', () => {
       if (!parseStatus()) {
-        finish({ ok: false, latencyMs: null, error: '代理没有返回有效 HTTP 响应' })
+        finish({ ok: false, latencyMs: null, error: '端口有响应，但不是标准 HTTP 代理响应' })
       }
     })
-    socket.once('timeout', () => finish({ ok: false, latencyMs: null, error: '代理请求超时' }))
+    socket.once('timeout', () =>
+      finish({
+        ok: false,
+        latencyMs: null,
+        error: '标准代理请求无响应，端口可能不是可直接使用的 HTTP 代理入口'
+      })
+    )
     socket.once('error', (error) => finish({ ok: false, latencyMs: null, error: error.message }))
   })
 }
@@ -296,10 +321,14 @@ export class LocalProxyService {
 
     const targetValue = expected === 'wininet' ? target.winInetServer : target.envValue
     if (expected === 'wininet') {
-      return filled.every((value) => this.windowsProxyMatchesTarget(value, target)) ? 'ok' : 'conflict'
+      return filled.every((value) => this.windowsProxyMatchesTarget(value, target))
+        ? 'ok'
+        : 'conflict'
     }
 
-    return filled.every((value) => value.toLowerCase() === targetValue.toLowerCase()) ? 'ok' : 'conflict'
+    return filled.every((value) => value.toLowerCase() === targetValue.toLowerCase())
+      ? 'ok'
+      : 'conflict'
   }
 
   private windowsProxyMatchesTarget(server: string, target: ProxyDoctorTarget): boolean {
@@ -321,7 +350,10 @@ export class LocalProxyService {
     if (entries.length === 1) {
       const fallbackMatch = entries[0].match(/^(.+):(\d+)$/)
       if (fallbackMatch && !entries[0].includes('=')) {
-        return target.protocol !== 'socks5' && `${fallbackMatch[1]}:${fallbackMatch[2]}`.toLowerCase() === expectedServer
+        return (
+          target.protocol !== 'socks5' &&
+          `${fallbackMatch[1]}:${fallbackMatch[2]}`.toLowerCase() === expectedServer
+        )
       }
     }
 
@@ -329,7 +361,10 @@ export class LocalProxyService {
     for (const entry of entries) {
       const typedMatch = entry.match(/^(http|https|socks)=(.+):(\d+)$/i)
       if (typedMatch) {
-        typedEntries.set(typedMatch[1].toLowerCase(), `${typedMatch[2]}:${typedMatch[3]}`.toLowerCase())
+        typedEntries.set(
+          typedMatch[1].toLowerCase(),
+          `${typedMatch[2]}:${typedMatch[3]}`.toLowerCase()
+        )
       }
     }
 
@@ -337,7 +372,9 @@ export class LocalProxyService {
       return typedEntries.get('socks') === expectedServer
     }
 
-    return typedEntries.get('http') === expectedServer && typedEntries.get('https') === expectedServer
+    return (
+      typedEntries.get('http') === expectedServer && typedEntries.get('https') === expectedServer
+    )
   }
 
   private parseJsonBetweenMarkers<T>(text: string, start: string, end: string): T | null {
@@ -355,7 +392,9 @@ export class LocalProxyService {
   }
 
   private parseWinHttpProxy(output: string): WinHttpProxy {
-    const directAccess = /direct access|no proxy server|直接访问|没有代理服务器|无代理/i.test(output)
+    const directAccess = /direct access|no proxy server|直接访问|没有代理服务器|无代理/i.test(
+      output
+    )
     if (directAccess) {
       return { enabled: false, server: '', bypass: '' }
     }
@@ -379,7 +418,13 @@ $result | ConvertTo-Json -Compress
 Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
 `
     const raw = await this.deps.execPowerShellEncoded(script)
-    return this.parseJsonBetweenMarkers<Record<string, string>>(raw, LOCAL_PROXY_ENV_JSON_START, LOCAL_PROXY_ENV_JSON_END) || {}
+    return (
+      this.parseJsonBetweenMarkers<Record<string, string>>(
+        raw,
+        LOCAL_PROXY_ENV_JSON_START,
+        LOCAL_PROXY_ENV_JSON_END
+      ) || {}
+    )
   }
 
   private async buildWinInetLayer(target: ProxyDoctorTarget): Promise<ProxyDoctorLayerStatus> {
@@ -389,7 +434,12 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
     }
 
     if (!status.data.enabled) {
-      return this.makeLayer('wininet', 'off', '', status.data.autoConfigUrl ? `PAC: ${status.data.autoConfigUrl}` : '')
+      return this.makeLayer(
+        'wininet',
+        'off',
+        '',
+        status.data.autoConfigUrl ? `PAC: ${status.data.autoConfigUrl}` : ''
+      )
     }
 
     const state = this.valuesMatchTarget([status.data.server], target, 'wininet')
@@ -406,7 +456,12 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
       }
 
       const state = this.valuesMatchTarget([parsed.server], target, 'wininet')
-      return this.makeLayer('winhttp', state, parsed.server, parsed.bypass ? `绕过: ${parsed.bypass}` : '')
+      return this.makeLayer(
+        'winhttp',
+        state,
+        parsed.server,
+        parsed.bypass ? `绕过: ${parsed.bypass}` : ''
+      )
     } catch (error) {
       return this.makeLayer('winhttp', 'error', '', (error as Error).message)
     }
@@ -416,37 +471,49 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
     const env = await this.readUserProxyEnv()
     const values = PROXY_DOCTOR_PROXY_KEYS.map((key) => env[key])
     const state = this.valuesMatchTarget(values, target, 'env', true)
-    const currentValue = PROXY_DOCTOR_PROXY_KEYS
-      .filter((key) => env[key])
+    const currentValue = PROXY_DOCTOR_PROXY_KEYS.filter((key) => env[key])
       .map((key) => `${key}=${env[key]}`)
       .join('; ')
-    const noProxy = PROXY_DOCTOR_NO_PROXY_KEYS
-      .filter((key) => env[key])
+    const noProxy = PROXY_DOCTOR_NO_PROXY_KEYS.filter((key) => env[key])
       .map((key) => `${key}=${env[key]}`)
       .join('; ')
 
     return this.makeLayer('env', state, currentValue, noProxy)
   }
 
-  private async buildToolLayer(id: 'git' | 'npm', target: ProxyDoctorTarget): Promise<ProxyDoctorLayerStatus> {
-    const commands = id === 'git'
-      ? ['git config --global --get http.proxy', 'git config --global --get https.proxy']
-      : ['npm config get proxy', 'npm config get https-proxy']
+  private async buildToolLayer(
+    id: 'git' | 'npm',
+    target: ProxyDoctorTarget
+  ): Promise<ProxyDoctorLayerStatus> {
+    const commands =
+      id === 'git'
+        ? ['git config --global --get http.proxy', 'git config --global --get https.proxy']
+        : ['npm config get proxy', 'npm config get https-proxy']
 
-    const results = await Promise.all(commands.map(async (command) => {
-      try {
-        return { value: await this.deps.execCommand(command), error: null as Error | null }
-      } catch (error) {
-        if (id === 'git' && isAbsentGitGetConfigError(error)) {
-          return { value: '', error: null }
+    const results = await Promise.all(
+      commands.map(async (command) => {
+        try {
+          return { value: await this.deps.execCommand(command), error: null as Error | null }
+        } catch (error) {
+          if (id === 'git' && isAbsentGitGetConfigError(error)) {
+            return { value: '', error: null }
+          }
+
+          return { value: '', error: error as Error }
         }
-
-        return { value: '', error: error as Error }
-      }
-    }))
+      })
+    )
 
     if (results.every((result) => result.error)) {
-      return this.makeLayer(id, 'unavailable', '', results.map((result) => result.error?.message).filter(Boolean).join('; '))
+      return this.makeLayer(
+        id,
+        'unavailable',
+        '',
+        results
+          .map((result) => result.error?.message)
+          .filter(Boolean)
+          .join('; ')
+      )
     }
 
     const values = results.map((result) => result.value)
@@ -464,12 +531,16 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
   private buildCurrentProcessLayer(target: ProxyDoctorTarget): ProxyDoctorLayerStatus {
     const values = PROXY_DOCTOR_PROXY_KEYS.map((key) => this.deps.processEnv[key])
     const state = this.valuesMatchTarget(values, target)
-    const currentValue = PROXY_DOCTOR_PROXY_KEYS
-      .filter((key) => this.deps.processEnv[key])
+    const currentValue = PROXY_DOCTOR_PROXY_KEYS.filter((key) => this.deps.processEnv[key])
       .map((key) => `${key}=${this.deps.processEnv[key]}`)
       .join('; ')
 
-    return this.makeLayer('process', state, currentValue, '当前 OneTool 进程可见的环境变量，仅用于诊断参考')
+    return this.makeLayer(
+      'process',
+      state,
+      currentValue,
+      '当前 OneTool 进程可见的环境变量，仅用于诊断参考'
+    )
   }
 
   private buildCodexLayer(): ProxyDoctorLayerStatus {
@@ -495,7 +566,9 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
   private async setWinHttpProxy(target: ProxyDoctorTarget, bypass: string[]) {
     this.validateBypassEntries(bypass)
     const bypassList = bypass.filter(Boolean).join(';')
-    return this.execMutatingCommand(`netsh winhttp set proxy proxy-server="${target.winInetServer}" bypass-list="${bypassList}"`)
+    return this.execMutatingCommand(
+      `netsh winhttp set proxy proxy-server="${target.winInetServer}" bypass-list="${bypassList}"`
+    )
   }
 
   private async resetWinHttpProxy() {
@@ -574,7 +647,11 @@ Write-Output '${LOCAL_PROXY_JSON_END}'
         server: string
         override: string
         autoConfigUrl: string | null
-      }>(await this.deps.execPowerShellEncoded(script), LOCAL_PROXY_JSON_START, LOCAL_PROXY_JSON_END)
+      }>(
+        await this.deps.execPowerShellEncoded(script),
+        LOCAL_PROXY_JSON_START,
+        LOCAL_PROXY_JSON_END
+      )
       if (!parsed) {
         return { success: false, error: '无法读取系统代理状态' }
       }
@@ -590,7 +667,10 @@ Write-Output '${LOCAL_PROXY_JSON_END}'
           host: normalized.host,
           port: normalized.port,
           protocol: normalized.protocol,
-          bypass: (parsed.override || '').split(';').map((item) => item.trim()).filter(Boolean),
+          bypass: (parsed.override || '')
+            .split(';')
+            .map((item) => item.trim())
+            .filter(Boolean),
           autoConfigUrl: parsed.autoConfigUrl || null
         }
       }
@@ -739,7 +819,10 @@ Write-Output 'ok'
     }
   }
 
-  async doctorApplyAll(request: { target: string; bypass: string[] }): Promise<IpcResponse<ProxyDoctorSnapshot>> {
+  async doctorApplyAll(request: {
+    target: string
+    bypass: string[]
+  }): Promise<IpcResponse<ProxyDoctorSnapshot>> {
     try {
       const target = normalizeProxyDoctorTarget(request.target)
       const bypass = request.bypass || []
@@ -785,7 +868,11 @@ Write-Output 'ok'
     }
   }
 
-  async doctorFixLayer(layerId: ProxyDoctorLayerId, targetInput: string, bypass: string[] = []): Promise<IpcResponse> {
+  async doctorFixLayer(
+    layerId: ProxyDoctorLayerId,
+    targetInput: string,
+    bypass: string[] = []
+  ): Promise<IpcResponse> {
     try {
       const target = normalizeProxyDoctorTarget(targetInput)
       if (layerId === 'wininet') {

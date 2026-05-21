@@ -19,10 +19,22 @@ test('LocalProxyManagerTool presents Proxy Doctor language and actions', () => {
 
 test('LocalProxyManagerTool renders a compact status lamp matrix instead of per-layer cards', () => {
   assert.match(source, /状态灯总览/)
-  assert.match(source, /建议与操作/)
+  assert.match(source, /当前配置/)
+  assert.match(source, /操作/)
   assert.match(source, /environment-action-cell/)
+  assert.match(source, /environment-config-cell/)
   assert.match(source, /environment-status-row/)
+  assert.match(source, /environment-status-grid/)
   assert.match(source, /getLayerLampCopy\(layer, snapshot\?\.portOpen/)
+  assert.match(source, /getProbeResultGuidance/)
+  assert.match(source, /overflow-x-hidden/)
+  assert.match(source, /\[overflow-wrap:anywhere\]/)
+  assert.doesNotMatch(source, /建议与操作/)
+  assert.doesNotMatch(source, /getLayerActionHint/)
+  assert.doesNotMatch(source, /(?:^|\s)xl:grid-cols-\[0\.82fr_1\.18fr\]/)
+  assert.doesNotMatch(source, /(?:^|\s)xl:grid-cols-\[0\.72fr_1\.28fr\]/)
+  assert.doesNotMatch(source, /(?:^|\s)xl:grid-cols-2/)
+  assert.doesNotMatch(source, /lg:grid-cols-\[minmax\(12rem,0\.75fr\)_minmax\(0,1\.25fr\)\]/)
   assert.doesNotMatch(source, /<Card key=\{layer\.id\}/)
   assert.doesNotMatch(source, /待处理项/)
   assert.doesNotMatch(source, /overflow-x-auto/)
@@ -43,7 +55,10 @@ test('failed proxy doctor mutations refresh the diagnosis snapshot', () => {
 })
 
 test('target input changes do not trigger diagnosis scans', () => {
-  assert.match(source, /const scanTarget = useCallback\(\s*async \(targetValue: string, silent = false\)/)
+  assert.match(
+    source,
+    /const scanTarget = useCallback\(\s*async \(targetValue: string, silent = false\)/
+  )
   assert.match(source, /doctorScan\(targetValue\)/)
   assert.match(source, /onChange=\{\(event\) => setTarget\(event\.target\.value\)\}/)
   assert.doesNotMatch(source, /doctorScan\(target\)/)
@@ -51,6 +66,9 @@ test('target input changes do not trigger diagnosis scans', () => {
 })
 
 test('mount and refresh explicitly choose when to scan', () => {
-  assert.match(source, /useEffect\(\(\) => \{\s*void scanTarget\(DEFAULT_PROXY_DOCTOR_TARGET\)\s*\}, \[scanTarget\]\)/)
+  assert.match(
+    source,
+    /useEffect\(\(\) => \{\s*void scanTarget\(DEFAULT_PROXY_DOCTOR_TARGET\)\s*\}, \[scanTarget\]\)/
+  )
   assert.match(source, /onClick=\{\(\) => void scanTarget\(target\)\}/)
 })

@@ -6,7 +6,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useGlobalStore } from '@/store'
-import type { ProxyDoctorLayerStatus, ProxyDoctorProbeCheck, ProxyDoctorProbeResult, ProxyDoctorSnapshot } from '../../../shared/proxyDoctor'
+import type {
+  ProxyDoctorLayerStatus,
+  ProxyDoctorProbeCheck,
+  ProxyDoctorProbeResult,
+  ProxyDoctorSnapshot
+} from '../../../shared/proxyDoctor'
 import {
   DEFAULT_PROXY_DOCTOR_BYPASS,
   DEFAULT_PROXY_DOCTOR_TARGET,
@@ -82,6 +87,18 @@ function formatProbeCheckDetail(check: ProxyDoctorProbeCheck): string {
   return parts.join(' · ')
 }
 
+function getProbeResultGuidance(result: ProxyDoctorProbeResult): string | null {
+  if (result.proxy.ok) {
+    return null
+  }
+
+  if (result.port.ok) {
+    return '端口能连，但标准代理请求没有成功。它可能是 Clash 的上游节点或中转入口，不适合作为系统、命令行和 Git 的直接代理地址。'
+  }
+
+  return '端口还没有连通，请先确认代理软件、地址和网络链路。'
+}
+
 function normalizeComparableProxyValue(value: string): string {
   const trimmed = value.trim().replace(/^(?:https?|socks5):\/\//i, '')
   if (/^\d+$/.test(trimmed)) {
@@ -94,16 +111,6 @@ function needsLayerAction(layer: ProxyDoctorLayerStatus): boolean {
   return layer.state === 'conflict' || layer.state === 'error' || layer.state === 'off'
 }
 
-function getLayerActionHint(layer: ProxyDoctorLayerStatus): string {
-  if (needsLayerAction(layer)) {
-    return layer.actionHint
-  }
-  if (layer.state === 'unavailable') {
-    return '当前环境不可用，已跳过。'
-  }
-  return '配置已和目标一致。'
-}
-
 export default function LocalProxyManagerTool() {
   const showNotification = useGlobalStore((state) => state.showNotification)
   const [snapshot, setSnapshot] = useState<ProxyDoctorSnapshot | null>(null)
@@ -112,7 +119,11 @@ export default function LocalProxyManagerTool() {
   const [bypass, setBypass] = useState(DEFAULT_PROXY_DOCTOR_BYPASS.join(';'))
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [log, setLog] = useState<string[]>([])
-  const [probeResult, setProbeResult] = useState<{ label: string; input: string; data: ProxyDoctorProbeResult } | null>(null)
+  const [probeResult, setProbeResult] = useState<{
+    label: string
+    input: string
+    data: ProxyDoctorProbeResult
+  } | null>(null)
   const [probeLoadingKey, setProbeLoadingKey] = useState<string | null>(null)
 
   const appendLog = useCallback((message: string) => {
@@ -170,7 +181,9 @@ export default function LocalProxyManagerTool() {
       try {
         const proxyApi = window.electron?.localProxy as
           | (typeof window.electron.localProxy & {
-              doctorProbe?: (target: string) => Promise<{ success: boolean; data?: ProxyDoctorProbeResult; error?: string }>
+              doctorProbe?: (
+                target: string
+              ) => Promise<{ success: boolean; data?: ProxyDoctorProbeResult; error?: string }>
             })
           | undefined
 
@@ -301,7 +314,11 @@ export default function LocalProxyManagerTool() {
     }
 
     setLoading(true)
-    const result = await window.electron.localProxy.doctorFixLayer(layer.id, request.target, request.bypass)
+    const result = await window.electron.localProxy.doctorFixLayer(
+      layer.id,
+      request.target,
+      request.bypass
+    )
     setLoading(false)
 
     if (result.success) {
@@ -363,14 +380,20 @@ export default function LocalProxyManagerTool() {
   const summaryCopy = snapshot ? getSummaryCopy(snapshot.summary) : getSummaryCopy('off')
   const portStatus = snapshot ? (snapshot.portOpen ? '端口已开放' : '端口未响应') : '等待诊断'
   const portTone = getPortTone(snapshot)
-  const problemLayerCount = useMemo(() => snapshot?.layers.filter(needsLayerAction).length || 0, [snapshot])
-  const reportText = useMemo(() => snapshot?.reportText || log.join('\n') || '暂无诊断日志。', [log, snapshot])
+  const problemLayerCount = useMemo(
+    () => snapshot?.layers.filter(needsLayerAction).length || 0,
+    [snapshot]
+  )
+  const reportText = useMemo(
+    () => snapshot?.reportText || log.join('\n') || '暂无诊断日志。',
+    [log, snapshot]
+  )
   const targetProbeKey = makeProbeKey('目标代理', target)
   const targetProbeLoading = probeLoadingKey === targetProbeKey
   const targetComparable = normalizeComparableProxyValue(target)
 
   return (
-    <div className="space-y-6 pb-20">
+    <div className="min-w-0 max-w-full space-y-6 overflow-x-hidden pb-20">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
           <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight">
@@ -383,47 +406,66 @@ export default function LocalProxyManagerTool() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" className="rounded-2xl" onClick={() => void scanTarget(target)} disabled={loading}>
+          <Button
+            variant="outline"
+            className="rounded-2xl"
+            onClick={() => void scanTarget(target)}
+            disabled={loading}
+          >
             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
             刷新诊断
           </Button>
-          <Button variant="outline" className="rounded-2xl" onClick={() => void handleOpenSettings()}>
+          <Button
+            variant="outline"
+            className="rounded-2xl"
+            onClick={() => void handleOpenSettings()}
+          >
             <ExternalLink size={16} />
             系统设置
           </Button>
         </div>
       </div>
 
-      <Card className="overflow-hidden border-none">
-        <CardContent className="space-y-5 p-5">
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.82fr_1.18fr]">
-            <div className="space-y-4">
+      <Card className="max-w-full overflow-hidden border-none">
+        <CardContent className="min-w-0 space-y-5 p-5">
+          <div className="grid min-w-0 grid-cols-1 gap-5 2xl:grid-cols-[0.82fr_1.18fr]">
+            <div className="min-w-0 space-y-4">
               <div className="space-y-2">
                 <CardDescription>诊断摘要</CardDescription>
                 <CardTitle className="text-2xl font-black">{summaryCopy.title}</CardTitle>
-                <p className="max-w-2xl text-sm font-bold text-muted-foreground">{summaryCopy.description}</p>
+                <p className="max-w-2xl text-sm font-bold text-muted-foreground">
+                  {summaryCopy.description}
+                </p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge
                   variant="outline"
-                  className={cn('px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]', portToneClassNames[portTone])}
+                  className={cn(
+                    'px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]',
+                    portToneClassNames[portTone]
+                  )}
                 >
                   {portStatus}
                 </Badge>
-                <Badge variant="outline" className="px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
+                <Badge
+                  variant="outline"
+                  className="max-w-full truncate px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]"
+                >
                   {snapshot?.target.url || target}
                 </Badge>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.72fr_1.28fr]">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid min-w-0 grid-cols-1 gap-4 2xl:grid-cols-[0.72fr_1.28fr]">
+              <div className="min-w-0 space-y-2">
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+                  代理地址
+                </label>
+                <div className="grid grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
                   <Input
                     value={target}
                     onChange={(event) => setTarget(event.target.value)}
-                    className="h-12 rounded-2xl font-bold"
+                    className="h-12 min-w-0 rounded-2xl font-bold"
                     placeholder="127.0.0.1:7897"
                   />
                   <Button
@@ -437,12 +479,15 @@ export default function LocalProxyManagerTool() {
                   </Button>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">旁路规则</label>
+              <div className="min-w-0 space-y-2">
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">
+                  旁路规则
+                </label>
                 <textarea
                   value={bypass}
                   onChange={(event) => setBypass(event.target.value)}
-                  className="min-h-20 w-full rounded-3xl border border-white/20 bg-white/50 px-5 py-3 text-sm font-medium shadow-soft-sm backdrop-blur-sm transition-all duration-300 ease-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:border-white/10 dark:bg-white/10"
+                  wrap="soft"
+                  className="min-h-20 min-w-0 w-full break-all rounded-3xl border border-white/20 bg-white/50 px-5 py-3 text-sm font-medium shadow-soft-sm backdrop-blur-sm transition-all duration-300 ease-apple [overflow-wrap:anywhere] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:border-white/10 dark:bg-white/10"
                   placeholder="localhost;127.*;<local>"
                 />
               </div>
@@ -450,36 +495,54 @@ export default function LocalProxyManagerTool() {
           </div>
 
           {probeResult && (
-            <div className="grid gap-3 rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-3 dark:border-white/10 dark:bg-white/5 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,1.4fr)]">
+            <div className="space-y-3 rounded-2xl border border-zinc-200/70 bg-zinc-50/70 p-3 dark:border-white/10 dark:bg-white/5">
               <div className="min-w-0">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground">
                   最近测试 · {probeResult.label}
                 </div>
-                <div className="truncate font-mono text-xs font-bold text-foreground" title={probeResult.data.target.url}>
+                <div
+                  className="truncate font-mono text-xs font-bold text-foreground"
+                  title={probeResult.data.target.url}
+                >
                   {probeResult.data.target.url}
                 </div>
               </div>
-              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
-                <div
-                  className={cn(
-                    'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
-                    probeCheckToneClassNames[getProbeCheckTone(probeResult.data.port)]
-                  )}
-                  title={formatProbeCheckDetail(probeResult.data.port)}
-                >
-                  <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">端口连通</div>
-                  <div className="truncate">{formatProbeCheckDetail(probeResult.data.port)}</div>
+              <div className="min-w-0 space-y-2">
+                <div className="grid min-w-0 grid-cols-1 gap-2 2xl:grid-cols-2">
+                  <div
+                    className={cn(
+                      'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
+                      probeCheckToneClassNames[getProbeCheckTone(probeResult.data.port)]
+                    )}
+                    title={formatProbeCheckDetail(probeResult.data.port)}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">
+                      端口连通
+                    </div>
+                    <div className="break-all [overflow-wrap:anywhere]">
+                      {formatProbeCheckDetail(probeResult.data.port)}
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
+                      probeCheckToneClassNames[getProbeCheckTone(probeResult.data.proxy)]
+                    )}
+                    title={formatProbeCheckDetail(probeResult.data.proxy)}
+                  >
+                    <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">
+                      代理请求
+                    </div>
+                    <div className="break-all [overflow-wrap:anywhere]">
+                      {formatProbeCheckDetail(probeResult.data.proxy)}
+                    </div>
+                  </div>
                 </div>
-                <div
-                  className={cn(
-                    'min-w-0 rounded-xl border px-3 py-2 text-xs font-black',
-                    probeCheckToneClassNames[getProbeCheckTone(probeResult.data.proxy)]
-                  )}
-                  title={formatProbeCheckDetail(probeResult.data.proxy)}
-                >
-                  <div className="text-[10px] uppercase tracking-[0.16em] opacity-70">代理请求</div>
-                  <div className="truncate">{formatProbeCheckDetail(probeResult.data.proxy)}</div>
-                </div>
+                {getProbeResultGuidance(probeResult.data) && (
+                  <div className="break-all rounded-xl border border-amber-500/15 bg-amber-500/5 px-3 py-2 text-xs font-bold leading-relaxed text-amber-700 [overflow-wrap:anywhere] dark:text-amber-300">
+                    {getProbeResultGuidance(probeResult.data)}
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -493,7 +556,12 @@ export default function LocalProxyManagerTool() {
               <Wrench size={16} />
               一键修复开发代理
             </Button>
-            <Button variant="destructive" className="rounded-2xl" onClick={() => void handleClearAll()} disabled={loading}>
+            <Button
+              variant="destructive"
+              className="rounded-2xl"
+              onClick={() => void handleClearAll()}
+              disabled={loading}
+            >
               <Power size={16} />
               清除开发代理
             </Button>
@@ -507,18 +575,21 @@ export default function LocalProxyManagerTool() {
             <CardDescription>状态灯总览</CardDescription>
             <CardTitle className="text-xl font-black">环境代理与连通性</CardTitle>
           </div>
-          <Badge variant="outline" className="w-fit px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
+          <Badge
+            variant="outline"
+            className="w-fit px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]"
+          >
             {problemLayerCount > 0 ? `${problemLayerCount} 项需要关注` : '全部正常'}
           </Badge>
         </CardHeader>
         <CardContent className="space-y-4">
           {snapshot ? (
             <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white/50 dark:border-white/10 dark:bg-white/5">
-              <div className="grid grid-cols-[minmax(8rem,0.9fr)_6.5rem_minmax(13rem,1.1fr)_minmax(8rem,0.9fr)] gap-3 border-b border-zinc-200/70 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
+              <div className="environment-status-grid grid grid-cols-[minmax(7rem,0.9fr)_5.25rem_minmax(7rem,1fr)_minmax(6rem,0.72fr)] gap-2 border-b border-zinc-200/70 px-3 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
                 <span>环境</span>
                 <span>代理状态</span>
-                <span>建议与操作</span>
                 <span>当前配置</span>
+                <span>操作</span>
               </div>
               <div className="divide-y divide-zinc-200/70 dark:divide-white/10">
                 {snapshot.layers.map((layer) => {
@@ -526,7 +597,9 @@ export default function LocalProxyManagerTool() {
                   const hasAction = needsLayerAction(layer)
                   const currentTargetCandidate = getFirstProxyTargetCandidate(layer.currentValue)
                   const currentProbeLabel = `${layer.title} 当前值`
-                  const currentProbeKey = currentTargetCandidate ? makeProbeKey(currentProbeLabel, currentTargetCandidate) : ''
+                  const currentProbeKey = currentTargetCandidate
+                    ? makeProbeKey(currentProbeLabel, currentTargetCandidate)
+                    : ''
                   const currentProbeLoading = probeLoadingKey === currentProbeKey
                   const shouldProbeCurrentValue = Boolean(
                     currentTargetCandidate &&
@@ -535,7 +608,7 @@ export default function LocalProxyManagerTool() {
                   return (
                     <div
                       key={layer.id}
-                      className="environment-status-row grid grid-cols-[minmax(8rem,0.9fr)_6.5rem_minmax(13rem,1.1fr)_minmax(8rem,0.9fr)] items-center gap-3 px-4 py-4 text-sm"
+                      className="environment-status-row environment-status-grid grid grid-cols-[minmax(7rem,0.9fr)_5.25rem_minmax(7rem,1fr)_minmax(6rem,0.72fr)] items-center gap-2 px-3 py-4 text-sm"
                     >
                       <div className="flex min-w-0 items-center gap-3">
                         <span
@@ -547,50 +620,79 @@ export default function LocalProxyManagerTool() {
                         />
                         <div className="min-w-0">
                           <div className="truncate font-black text-foreground">{layer.title}</div>
-                          <div className="text-xs font-bold text-muted-foreground">{getLayerStateLabel(layer.state)}</div>
+                          <div className="text-xs font-bold text-muted-foreground">
+                            {getLayerStateLabel(layer.state)}
+                          </div>
                         </div>
                       </div>
                       <div className="min-w-0">
-                        <div className={cn('truncate font-black', layerTextToneClassNames[lamp.tone])}>{lamp.stateLabel}</div>
-                        <div className="truncate text-xs font-bold text-muted-foreground">{lamp.reachabilityLabel}</div>
+                        <div
+                          className={cn('truncate font-black', layerTextToneClassNames[lamp.tone])}
+                        >
+                          {lamp.stateLabel}
+                        </div>
+                        <div className="truncate text-xs font-bold text-muted-foreground">
+                          {lamp.reachabilityLabel}
+                        </div>
+                      </div>
+                      <div
+                        className={cn(
+                          'environment-config-cell min-w-0 truncate rounded-xl border px-3 py-2 font-mono text-xs font-bold',
+                          layer.currentValue
+                            ? 'border-zinc-200/70 bg-zinc-50/80 text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200'
+                            : 'border-transparent bg-transparent text-muted-foreground'
+                        )}
+                        title={layer.currentValue || '未设置'}
+                      >
+                        {layer.currentValue || '未设置'}
                       </div>
                       <div className="environment-action-cell flex min-w-0 flex-wrap items-center gap-2">
-                        <div className={cn('min-w-[9rem] flex-1 text-xs font-bold leading-relaxed', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
-                          {getLayerActionHint(layer)}
-                        </div>
-                        <div className="flex min-w-0 flex-wrap gap-2">
-                          {shouldProbeCurrentValue && currentTargetCandidate && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 rounded-xl px-3"
-                              onClick={() => void handleProbeTarget(currentTargetCandidate, currentProbeLabel)}
-                              disabled={loading || Boolean(probeLoadingKey)}
-                            >
-                              <Gauge size={14} className={cn(currentProbeLoading && 'animate-pulse')} />
-                              {currentProbeLoading ? '测试中' : '测试当前值'}
-                            </Button>
-                          )}
-                          {hasAction ? (
-                            <>
-                              {layer.canFix && (
-                                <Button variant="outline" size="sm" className="h-8 rounded-xl px-3" onClick={() => void handleFixLayer(layer)} disabled={loading}>
-                                  修复
-                                </Button>
-                              )}
-                              {layer.canClear && layer.currentValue.trim().length > 0 && (
-                                <Button variant="outline" size="sm" className="h-8 rounded-xl px-3" onClick={() => void handleClearLayer(layer)} disabled={loading}>
-                                  清除
-                                </Button>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-xs font-black text-muted-foreground">无需处理</span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
-                        {layer.currentValue || '未设置'}
+                        {shouldProbeCurrentValue && currentTargetCandidate && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 rounded-xl px-2.5 text-xs"
+                            aria-label={`测试 ${layer.title} 当前值`}
+                            onClick={() =>
+                              void handleProbeTarget(currentTargetCandidate, currentProbeLabel)
+                            }
+                            disabled={loading || Boolean(probeLoadingKey)}
+                          >
+                            <Gauge
+                              size={14}
+                              className={cn(currentProbeLoading && 'animate-pulse')}
+                            />
+                            {currentProbeLoading ? '测试中' : '测试当前值'}
+                          </Button>
+                        )}
+                        {hasAction ? (
+                          <>
+                            {layer.canFix && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-xl px-2.5 text-xs"
+                                onClick={() => void handleFixLayer(layer)}
+                                disabled={loading}
+                              >
+                                修复
+                              </Button>
+                            )}
+                            {layer.canClear && layer.currentValue.trim().length > 0 && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-8 rounded-xl px-2.5 text-xs"
+                                onClick={() => void handleClearLayer(layer)}
+                                disabled={loading}
+                              >
+                                清除
+                              </Button>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-xs font-black text-muted-foreground">无需处理</span>
+                        )}
                       </div>
                     </div>
                   )
@@ -612,10 +714,21 @@ export default function LocalProxyManagerTool() {
             <CardDescription>查看可复制的诊断文本和近期操作记录。</CardDescription>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setAdvancedOpen((open) => !open)}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={() => setAdvancedOpen((open) => !open)}
+            >
               {advancedOpen ? '收起' : '展开'}
             </Button>
-            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleCopyReport()} disabled={!snapshot && log.length === 0}>
+            <Button
+              variant="outline"
+              size="sm"
+              className="rounded-xl"
+              onClick={() => void handleCopyReport()}
+              disabled={!snapshot && log.length === 0}
+            >
               <Copy size={14} />
               复制诊断报告
             </Button>

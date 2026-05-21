@@ -7,14 +7,15 @@ const ts = require('typescript')
 
 function loadLocalProxyServiceModule(overrides = {}) {
   const filePath = path.join(__dirname, 'LocalProxyService.ts')
-  const transpile = (sourcePath) => ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-      esModuleInterop: true
-    },
-    fileName: sourcePath
-  }).outputText
+  const transpile = (sourcePath) =>
+    ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), {
+      compilerOptions: {
+        module: ts.ModuleKind.CommonJS,
+        target: ts.ScriptTarget.ES2020,
+        esModuleInterop: true
+      },
+      fileName: sourcePath
+    }).outputText
 
   const module = { exports: {} }
   const execPowerShellEncoded = overrides.execPowerShellEncoded || (async () => 'ok')
@@ -32,19 +33,23 @@ function loadLocalProxyServiceModule(overrides = {}) {
   const loadSharedProxyDoctor = () => {
     const sharedPath = path.resolve(__dirname, '../../shared/proxyDoctor.ts')
     const sharedModule = { exports: {} }
-    vm.runInNewContext(transpile(sharedPath), {
-      module: sharedModule,
-      exports: sharedModule.exports,
-      require,
-      __dirname: path.dirname(sharedPath),
-      __filename: sharedPath,
-      console,
-      process,
-      URL,
-      Buffer,
-      setTimeout,
-      clearTimeout
-    }, { filename: sharedPath })
+    vm.runInNewContext(
+      transpile(sharedPath),
+      {
+        module: sharedModule,
+        exports: sharedModule.exports,
+        require,
+        __dirname: path.dirname(sharedPath),
+        __filename: sharedPath,
+        console,
+        process,
+        URL,
+        Buffer,
+        setTimeout,
+        clearTimeout
+      },
+      { filename: sharedPath }
+    )
     return sharedModule.exports
   }
 
@@ -76,19 +81,23 @@ function loadLocalProxyServiceModule(overrides = {}) {
     return require(specifier)
   }
 
-  vm.runInNewContext(transpile(filePath), {
-    module,
-    exports: module.exports,
-    require: customRequire,
-    __dirname,
-    __filename: filePath,
-    console,
-    process: { ...process, env: processEnv },
-    URL,
-    Buffer,
-    setTimeout,
-    clearTimeout
-  }, { filename: filePath })
+  vm.runInNewContext(
+    transpile(filePath),
+    {
+      module,
+      exports: module.exports,
+      require: customRequire,
+      __dirname,
+      __filename: filePath,
+      console,
+      process: { ...process, env: processEnv },
+      URL,
+      Buffer,
+      setTimeout,
+      clearTimeout
+    },
+    { filename: filePath }
+  )
 
   return module.exports
 }
@@ -140,7 +149,8 @@ test('doctorScan returns layered Windows proxy diagnostics', async () => {
     execCommand: async (command) => {
       commands.push(command)
       const outputs = {
-        'netsh winhttp show proxy': 'Proxy Server(s) :  http=127.0.0.1:7897;https=127.0.0.1:7897\r\nBypass List     :  localhost;127.*',
+        'netsh winhttp show proxy':
+          'Proxy Server(s) :  http=127.0.0.1:7897;https=127.0.0.1:7897\r\nBypass List     :  localhost;127.*',
         'git config --global --get http.proxy': 'http://127.0.0.1:7897',
         'git config --global --get https.proxy': 'http://127.0.0.1:7897',
         'npm config get proxy': 'http://127.0.0.1:7897',
@@ -492,7 +502,11 @@ test('doctorApplyAll writes every managed proxy layer', async () => {
         return `Proxy Server(s) :  ${targetServer}\r\nBypass List     :  localhost;127.*`
       }
 
-      if (command.includes('--get') || command.includes('get proxy') || command.includes('get https-proxy')) {
+      if (
+        command.includes('--get') ||
+        command.includes('get proxy') ||
+        command.includes('get https-proxy')
+      ) {
         return targetEnvValue
       }
 
@@ -508,15 +522,21 @@ test('doctorApplyAll writes every managed proxy layer', async () => {
 
   assert.equal(result.success, true)
   assert.equal(
-    powershellScripts.some((script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')),
+    powershellScripts.some(
+      (script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')
+    ),
     true
   )
   assert.equal(
-    powershellScripts.some((script) => script.includes("SetEnvironmentVariable('HTTP_PROXY', 'http://127.0.0.1:7897', 'User')")),
+    powershellScripts.some((script) =>
+      script.includes("SetEnvironmentVariable('HTTP_PROXY', 'http://127.0.0.1:7897', 'User')")
+    ),
     true
   )
   assert.equal(
-    commands.includes('netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="localhost;127.*"'),
+    commands.includes(
+      'netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="localhost;127.*"'
+    ),
     true
   )
   assert.equal(commands.includes('git config --global http.proxy http://127.0.0.1:7897'), true)
@@ -628,7 +648,10 @@ test('doctorFixLayer rejects unsafe WinHTTP bypass entries before running netsh 
 
   assert.equal(result.success, false)
   assert.match(result.error, /bypass/i)
-  assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
+  assert.equal(
+    commands.some((command) => command.startsWith('netsh winhttp set proxy')),
+    false
+  )
 })
 
 test('doctorFixLayer allows the Windows local WinHTTP bypass token', async () => {
@@ -647,7 +670,9 @@ test('doctorFixLayer allows the Windows local WinHTTP bypass token', async () =>
 
   assert.equal(result.success, true)
   assert.equal(
-    commands.includes('netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="<local>"'),
+    commands.includes(
+      'netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="<local>"'
+    ),
     true
   )
 })
@@ -685,10 +710,15 @@ test('doctorApplyAll rejects unsafe bypass before enabling WinINET', async () =>
   assert.equal(result.success, false)
   assert.match(result.error, /bypass/i)
   assert.equal(
-    powershellScripts.some((script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')),
+    powershellScripts.some(
+      (script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')
+    ),
     false
   )
-  assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
+  assert.equal(
+    commands.some((command) => command.startsWith('netsh winhttp set proxy')),
+    false
+  )
 })
 
 test('doctorProbe measures port and proxy request latency for a target', async () => {
@@ -732,6 +762,13 @@ test('doctorProbe reports proxy request errors without losing port latency', asy
   assert.equal(result.data.port.ok, true)
   assert.equal(result.data.proxy.ok, false)
   assert.match(result.data.proxy.error, /代理请求失败/)
+})
+
+test('default proxy probe timeout explains endpoints that are not direct HTTP proxies', () => {
+  const serviceSource = fs.readFileSync(path.join(__dirname, 'LocalProxyService.ts'), 'utf8')
+
+  assert.match(serviceSource, /标准代理请求无响应/)
+  assert.doesNotMatch(serviceSource, /error: '代理请求超时'/)
 })
 
 test('disable returns a failure when the proxy disable script resolves empty output', async () => {
