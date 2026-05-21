@@ -33,6 +33,7 @@ function loadViewModelModule() {
 const {
   DEFAULT_PROXY_DOCTOR_BYPASS,
   createProxyDoctorApplyRequest,
+  getLayerLampCopy,
   getLayerStateTone,
   getSummaryCopy,
   splitProxyDoctorBypass
@@ -56,4 +57,26 @@ test('summary and layer state labels stay user-facing', () => {
   assert.equal(getLayerStateTone('ok'), 'success')
   assert.equal(getLayerStateTone('conflict'), 'warning')
   assert.ok(DEFAULT_PROXY_DOCTOR_BYPASS.includes('<local>'))
+})
+
+test('layer lamp copy combines proxy state and connectivity', () => {
+  const layer = {
+    id: 'git',
+    title: 'Git 代理',
+    state: 'ok',
+    currentValue: 'http://127.0.0.1:7897',
+    detail: '',
+    actionHint: '',
+    canFix: true,
+    canClear: true
+  }
+
+  assert.deepEqual(getLayerLampCopy(layer, true), {
+    tone: 'success',
+    stateLabel: '已开启',
+    reachabilityLabel: '可联通'
+  })
+  assert.equal(getLayerLampCopy(layer, false).reachabilityLabel, '端口未通')
+  assert.equal(getLayerLampCopy({ ...layer, state: 'off', currentValue: '' }, true).stateLabel, '未开启')
+  assert.equal(getLayerLampCopy({ ...layer, state: 'conflict' }, true).tone, 'warning')
 })

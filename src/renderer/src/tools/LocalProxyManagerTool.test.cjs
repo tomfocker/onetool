@@ -14,6 +14,15 @@ test('LocalProxyManagerTool presents Proxy Doctor language and actions', () => {
   assert.match(source, /doctorClearLayer/)
 })
 
+test('LocalProxyManagerTool renders a compact status lamp matrix instead of per-layer cards', () => {
+  assert.match(source, /状态灯总览/)
+  assert.match(source, /建议与操作/)
+  assert.match(source, /environment-status-row/)
+  assert.match(source, /getLayerLampCopy\(layer, snapshot\?\.portOpen/)
+  assert.doesNotMatch(source, /<Card key=\{layer\.id\}/)
+  assert.doesNotMatch(source, /待处理项/)
+})
+
 test('scan failure clears stale diagnosis state and records the failed scan', () => {
   assert.match(source, /setSnapshot\(null\)/)
   assert.match(source, /appendLog\(`扫描失败: \$\{result\.error \|\| '无法读取代理诊断信息。'\}`\)/)

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Activity, AlertTriangle, Copy, ExternalLink, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import { Copy, ExternalLink, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,20 +11,48 @@ import {
   DEFAULT_PROXY_DOCTOR_BYPASS,
   DEFAULT_PROXY_DOCTOR_TARGET,
   createProxyDoctorApplyRequest,
+  getLayerLampCopy,
   getLayerStateLabel,
-  getLayerStateTone,
   getSummaryCopy
 } from './localProxyDoctorViewModel'
 
 const layerToneClassNames = {
-  success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600',
-  muted: 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500',
-  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-600',
-  danger: 'border-red-500/20 bg-red-500/10 text-red-600'
+  success: 'bg-emerald-500 ring-emerald-500/15',
+  muted: 'bg-zinc-300 ring-zinc-400/15 dark:bg-zinc-600',
+  warning: 'bg-amber-500 ring-amber-500/15',
+  danger: 'bg-red-500 ring-red-500/15'
 }
 
-function getLayerBadgeClassName(layer: ProxyDoctorLayerStatus): string {
-  return layerToneClassNames[getLayerStateTone(layer.state)]
+const layerTextToneClassNames = {
+  success: 'text-emerald-600',
+  muted: 'text-zinc-500',
+  warning: 'text-amber-600',
+  danger: 'text-red-600'
+}
+
+const portToneClassNames = {
+  success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+  muted: 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500'
+}
+
+function getPortTone(snapshot: ProxyDoctorSnapshot | null): keyof typeof portToneClassNames {
+  if (!snapshot) return 'muted'
+  return snapshot.portOpen ? 'success' : 'warning'
+}
+
+function needsLayerAction(layer: ProxyDoctorLayerStatus): boolean {
+  return layer.state === 'conflict' || layer.state === 'error' || layer.state === 'off'
+}
+
+function getLayerActionHint(layer: ProxyDoctorLayerStatus): string {
+  if (needsLayerAction(layer)) {
+    return layer.actionHint
+  }
+  if (layer.state === 'unavailable') {
+    return '当前环境不可用，已跳过。'
+  }
+  return '配置已和目标一致。'
 }
 
 export default function LocalProxyManagerTool() {
@@ -227,6 +255,8 @@ export default function LocalProxyManagerTool() {
 
   const summaryCopy = snapshot ? getSummaryCopy(snapshot.summary) : getSummaryCopy('off')
   const portStatus = snapshot ? (snapshot.portOpen ? '端口已开放' : '端口未响应') : '等待诊断'
+  const portTone = getPortTone(snapshot)
+  const problemLayerCount = useMemo(() => snapshot?.layers.filter(needsLayerAction).length || 0, [snapshot])
   const reportText = useMemo(() => snapshot?.reportText || log.join('\n') || '暂无诊断日志。', [log, snapshot])
 
   return (
@@ -255,32 +285,46 @@ export default function LocalProxyManagerTool() {
       </div>
 
       <Card className="overflow-hidden border-none">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-xl font-black">
-            <Activity size={18} className="text-emerald-500" />
-            目标代理
-          </CardTitle>
-          <CardDescription>用于统一写入系统代理、环境变量、Git 和 npm。</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5">
-          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
-              <Input
-                value={target}
-                onChange={(event) => setTarget(event.target.value)}
-                className="h-12 rounded-2xl font-bold"
-                placeholder="127.0.0.1:7897"
-              />
+        <CardContent className="space-y-5 p-5">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-[0.82fr_1.18fr]">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <CardDescription>诊断摘要</CardDescription>
+                <CardTitle className="text-2xl font-black">{summaryCopy.title}</CardTitle>
+                <p className="max-w-2xl text-sm font-bold text-muted-foreground">{summaryCopy.description}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn('px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]', portToneClassNames[portTone])}
+                >
+                  {portStatus}
+                </Badge>
+                <Badge variant="outline" className="px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
+                  {snapshot?.target.url || target}
+                </Badge>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">旁路规则</label>
-              <textarea
-                value={bypass}
-                onChange={(event) => setBypass(event.target.value)}
-                className="min-h-28 w-full rounded-3xl border border-white/20 bg-white/50 px-5 py-4 text-sm font-medium shadow-soft-sm backdrop-blur-sm transition-all duration-300 ease-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:border-white/10 dark:bg-white/10"
-                placeholder="localhost;127.*;<local>"
-              />
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[0.72fr_1.28fr]">
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
+                <Input
+                  value={target}
+                  onChange={(event) => setTarget(event.target.value)}
+                  className="h-12 rounded-2xl font-bold"
+                  placeholder="127.0.0.1:7897"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">旁路规则</label>
+                <textarea
+                  value={bypass}
+                  onChange={(event) => setBypass(event.target.value)}
+                  className="min-h-20 w-full rounded-3xl border border-white/20 bg-white/50 px-5 py-3 text-sm font-medium shadow-soft-sm backdrop-blur-sm transition-all duration-300 ease-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:border-white/10 dark:bg-white/10"
+                  placeholder="localhost;127.*;<local>"
+                />
+              </div>
             </div>
           </div>
 
@@ -301,85 +345,90 @@ export default function LocalProxyManagerTool() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card className="overflow-hidden border-none">
-          <CardHeader>
-            <CardDescription>诊断摘要</CardDescription>
-            <CardTitle className="text-2xl font-black">{summaryCopy.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <p className="text-sm font-bold text-muted-foreground">{summaryCopy.description}</p>
-            <div className="flex flex-wrap gap-2">
-              <Badge
-                variant="outline"
-                className={cn(
-                  'px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]',
-                  snapshot?.portOpen
-                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-                    : 'border-amber-500/20 bg-amber-500/10 text-amber-600'
-                )}
-              >
-                {portStatus}
-              </Badge>
-              <Badge variant="outline" className="px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
-                {snapshot?.target.url || target}
-              </Badge>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden border-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-xl font-black">
-              <AlertTriangle size={18} className="text-amber-500" />
-              操作提示
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm font-medium text-muted-foreground">
-            <p>一键修复会覆盖已管理层的代理值；无法直接修改的进程层会给出重启提示。</p>
-            <p>如果端口未响应，请先确认本地代理客户端已启动并监听目标端口。</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        {(snapshot?.layers || []).map((layer) => (
-          <Card key={layer.id} className="overflow-hidden border-none">
-            <CardHeader className="space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <CardTitle className="text-lg font-black">{layer.title}</CardTitle>
-                  <CardDescription>{layer.detail}</CardDescription>
+      <Card className="overflow-hidden border-none">
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <CardDescription>状态灯总览</CardDescription>
+            <CardTitle className="text-xl font-black">环境代理与连通性</CardTitle>
+          </div>
+          <Badge variant="outline" className="w-fit px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
+            {problemLayerCount > 0 ? `${problemLayerCount} 项需要关注` : '全部正常'}
+          </Badge>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {snapshot ? (
+            <div className="overflow-x-auto rounded-3xl border border-zinc-200/70 bg-white/50 dark:border-white/10 dark:bg-white/5">
+              <div className="min-w-[920px]">
+                <div className="grid grid-cols-[minmax(11rem,1.05fr)_8.5rem_minmax(15rem,1.2fr)_minmax(13rem,1fr)_9.5rem] gap-4 border-b border-zinc-200/70 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
+                  <span>环境</span>
+                  <span>代理状态</span>
+                  <span>当前配置</span>
+                  <span>建议与操作</span>
+                  <span className="text-right">处理</span>
                 </div>
-                <Badge variant="outline" className={cn('shrink-0 font-black', getLayerBadgeClassName(layer))}>
-                  {getLayerStateLabel(layer.state)}
-                </Badge>
+                <div className="divide-y divide-zinc-200/70 dark:divide-white/10">
+                  {snapshot.layers.map((layer) => {
+                    const lamp = getLayerLampCopy(layer, snapshot?.portOpen)
+                    const hasAction = needsLayerAction(layer)
+                    return (
+                      <div
+                        key={layer.id}
+                        className="environment-status-row grid grid-cols-[minmax(11rem,1.05fr)_8.5rem_minmax(15rem,1.2fr)_minmax(13rem,1fr)_9.5rem] items-center gap-4 px-5 py-4 text-sm"
+                      >
+                        <div className="flex min-w-0 items-center gap-3">
+                          <span
+                            className={cn(
+                              'h-3.5 w-3.5 shrink-0 rounded-full ring-4',
+                              layerToneClassNames[lamp.tone]
+                            )}
+                            aria-label={`${layer.title}${lamp.stateLabel}`}
+                          />
+                          <div className="min-w-0">
+                            <div className="truncate font-black text-foreground">{layer.title}</div>
+                            <div className="text-xs font-bold text-muted-foreground">{getLayerStateLabel(layer.state)}</div>
+                          </div>
+                        </div>
+                        <div>
+                          <div className={cn('font-black', layerTextToneClassNames[lamp.tone])}>{lamp.stateLabel}</div>
+                          <div className="text-xs font-bold text-muted-foreground">{lamp.reachabilityLabel}</div>
+                        </div>
+                        <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
+                          {layer.currentValue || '未设置'}
+                        </div>
+                        <div className={cn('text-xs font-bold', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
+                          {getLayerActionHint(layer)}
+                        </div>
+                        <div className="flex shrink-0 justify-end gap-2">
+                          {hasAction ? (
+                            <>
+                              {layer.canFix && (
+                                <Button variant="outline" size="sm" className="h-8 rounded-xl px-3" onClick={() => void handleFixLayer(layer)} disabled={loading}>
+                                  修复
+                                </Button>
+                              )}
+                              {layer.canClear && layer.currentValue.trim().length > 0 && (
+                                <Button variant="outline" size="sm" className="h-8 rounded-xl px-3" onClick={() => void handleClearLayer(layer)} disabled={loading}>
+                                  清除
+                                </Button>
+                              )}
+                            </>
+                          ) : (
+                            <span className="text-xs font-black text-muted-foreground">无需处理</span>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="rounded-2xl bg-zinc-500/5 p-4 text-xs font-bold text-muted-foreground">
-                <div className="mb-1 text-[11px] uppercase tracking-[0.2em]">当前值</div>
-                <div className="break-all text-sm text-foreground">{layer.currentValue || '未设置'}</div>
-              </div>
-              <p className="text-sm font-medium text-muted-foreground">{layer.actionHint}</p>
-              <div className="flex flex-wrap gap-2">
-                {layer.canFix && (
-                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleFixLayer(layer)} disabled={loading}>
-                    <Wrench size={14} />
-                    修复此层
-                  </Button>
-                )}
-                {layer.canClear && (
-                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleClearLayer(layer)} disabled={loading}>
-                    <Power size={14} />
-                    清除此层
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-dashed border-zinc-300/80 px-5 py-8 text-sm font-bold text-muted-foreground">
+              正在等待诊断结果。
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="overflow-hidden border-none">
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

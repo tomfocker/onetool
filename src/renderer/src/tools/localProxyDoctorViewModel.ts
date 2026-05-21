@@ -1,4 +1,9 @@
-import type { ProxyDoctorApplyRequest, ProxyDoctorLayerState, ProxyDoctorSummary } from '../../../shared/proxyDoctor'
+import type {
+  ProxyDoctorApplyRequest,
+  ProxyDoctorLayerState,
+  ProxyDoctorLayerStatus,
+  ProxyDoctorSummary
+} from '../../../shared/proxyDoctor'
 
 export const DEFAULT_PROXY_DOCTOR_TARGET = '127.0.0.1:7897'
 
@@ -78,4 +83,50 @@ export function getLayerStateLabel(state: ProxyDoctorLayerState): string {
   if (state === 'conflict') return '冲突'
   if (state === 'unavailable') return '不可用'
   return '错误'
+}
+
+export interface ProxyDoctorLayerLampCopy {
+  tone: 'success' | 'muted' | 'warning' | 'danger'
+  stateLabel: string
+  reachabilityLabel: string
+}
+
+export function getLayerLampCopy(layer: ProxyDoctorLayerStatus, portOpen?: boolean): ProxyDoctorLayerLampCopy {
+  if (layer.state === 'ok') {
+    return {
+      tone: portOpen === false ? 'warning' : 'success',
+      stateLabel: '已开启',
+      reachabilityLabel: portOpen === false ? '端口未通' : '可联通'
+    }
+  }
+
+  if (layer.state === 'off') {
+    return {
+      tone: 'muted',
+      stateLabel: '未开启',
+      reachabilityLabel: '未使用'
+    }
+  }
+
+  if (layer.state === 'conflict') {
+    return {
+      tone: 'warning',
+      stateLabel: '配置不一致',
+      reachabilityLabel: portOpen === false ? '目标未通' : '目标可通'
+    }
+  }
+
+  if (layer.state === 'unavailable') {
+    return {
+      tone: 'muted',
+      stateLabel: '不可用',
+      reachabilityLabel: '跳过'
+    }
+  }
+
+  return {
+    tone: 'danger',
+    stateLabel: '读取失败',
+    reachabilityLabel: '无法判断'
+  }
 }
