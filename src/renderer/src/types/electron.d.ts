@@ -11,6 +11,9 @@ import {
   GlobalStore,
   LocalProxyConfig,
   LocalProxyStatus,
+  ProxyDoctorApplyRequest,
+  ProxyDoctorLayerId,
+  ProxyDoctorSnapshot,
   WslBackupFormat,
   WslBackupInfo,
   WslOverview,
@@ -214,6 +217,11 @@ declare global {
         setConfig: (config: LocalProxyConfig) => Promise<IpcResponse<LocalProxyStatus>>
         disable: () => Promise<IpcResponse<LocalProxyStatus>>
         openSystemSettings: () => Promise<IpcResponse>
+        doctorScan: (target: string) => Promise<IpcResponse<ProxyDoctorSnapshot>>
+        doctorApplyAll: (request: ProxyDoctorApplyRequest) => Promise<IpcResponse<ProxyDoctorSnapshot>>
+        doctorClearAll: () => Promise<IpcResponse>
+        doctorFixLayer: (layerId: ProxyDoctorLayerId, target: string, bypass: string[]) => Promise<IpcResponse>
+        doctorClearLayer: (layerId: ProxyDoctorLayerId) => Promise<IpcResponse>
       }
       rename: {
         renameFiles: (files: string[], mode: string, options: any) => Promise<IpcResponse<{ results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }> }>>

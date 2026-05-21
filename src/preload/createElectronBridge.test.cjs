@@ -736,3 +736,23 @@ test('createElectronBridge exposes explicit table OCR APIs', async () => {
   assert.equal(mocks.removed.length, 1)
   assert.equal(mocks.removed[0][0], 'table-ocr-state-changed')
 })
+
+test('createElectronBridge maps proxy doctor IPC channels', async () => {
+  const { createElectronBridge } = loadCreateElectronBridgeModule()
+  const mocks = createMocks()
+  const bridge = createElectronBridge(mocks.deps)
+
+  await bridge.localProxy.doctorScan('7897')
+  await bridge.localProxy.doctorApplyAll({ target: '7897', bypass: ['localhost'] })
+  await bridge.localProxy.doctorClearAll()
+  await bridge.localProxy.doctorFixLayer('git', '7897', ['localhost'])
+  await bridge.localProxy.doctorClearLayer('npm')
+
+  assert.deepEqual(normalizeForAssertion(mocks.invokeCalls), [
+    ['local-proxy:doctor-scan', '7897'],
+    ['local-proxy:doctor-apply-all', { target: '7897', bypass: ['localhost'] }],
+    ['local-proxy:doctor-clear-all'],
+    ['local-proxy:doctor-fix-layer', { layerId: 'git', target: '7897', bypass: ['localhost'] }],
+    ['local-proxy:doctor-clear-layer', 'npm']
+  ])
+})

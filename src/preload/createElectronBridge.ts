@@ -53,6 +53,9 @@ import type {
   BilibiliStreamOptionSummary,
   IpcResponse,
   LocalProxyConfig,
+  ProxyDoctorApplyRequest,
+  ProxyDoctorLayerId,
+  ProxyDoctorSnapshot,
   WslBackupFormat,
   WslRestoreMode
 } from '../shared/types'
@@ -341,7 +344,18 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     getStatus: () => ipcRenderer.invoke('local-proxy:get-status'),
     setConfig: (config: LocalProxyConfig) => ipcRenderer.invoke('local-proxy:set-config', config),
     disable: () => ipcRenderer.invoke('local-proxy:disable'),
-    openSystemSettings: () => ipcRenderer.invoke('local-proxy:open-system-settings')
+    openSystemSettings: () => ipcRenderer.invoke('local-proxy:open-system-settings'),
+    doctorScan: (target: string) => ipcRenderer.invoke('local-proxy:doctor-scan', target) as Promise<IpcResponse<ProxyDoctorSnapshot>>,
+    doctorApplyAll: (request: ProxyDoctorApplyRequest) => {
+      return ipcRenderer.invoke('local-proxy:doctor-apply-all', request) as Promise<IpcResponse<ProxyDoctorSnapshot>>
+    },
+    doctorClearAll: () => ipcRenderer.invoke('local-proxy:doctor-clear-all') as Promise<IpcResponse>,
+    doctorFixLayer: (layerId: ProxyDoctorLayerId, target: string, bypass: string[]) => {
+      return ipcRenderer.invoke('local-proxy:doctor-fix-layer', { layerId, target, bypass }) as Promise<IpcResponse>
+    },
+    doctorClearLayer: (layerId: ProxyDoctorLayerId) => {
+      return ipcRenderer.invoke('local-proxy:doctor-clear-layer', layerId) as Promise<IpcResponse>
+    }
   }
 
   const wslAPI = {
