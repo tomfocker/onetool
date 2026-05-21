@@ -17,10 +17,14 @@ test('LocalProxyManagerTool presents Proxy Doctor language and actions', () => {
 test('LocalProxyManagerTool renders a compact status lamp matrix instead of per-layer cards', () => {
   assert.match(source, /状态灯总览/)
   assert.match(source, /建议与操作/)
+  assert.match(source, /environment-action-cell/)
   assert.match(source, /environment-status-row/)
   assert.match(source, /getLayerLampCopy\(layer, snapshot\?\.portOpen/)
   assert.doesNotMatch(source, /<Card key=\{layer\.id\}/)
   assert.doesNotMatch(source, /待处理项/)
+  assert.doesNotMatch(source, /overflow-x-auto/)
+  assert.doesNotMatch(source, /min-w-\[920px\]/)
+  assert.doesNotMatch(source, /<span className="text-right">处理<\/span>/)
 })
 
 test('scan failure clears stale diagnosis state and records the failed scan', () => {

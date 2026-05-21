@@ -357,48 +357,47 @@ export default function LocalProxyManagerTool() {
         </CardHeader>
         <CardContent className="space-y-4">
           {snapshot ? (
-            <div className="overflow-x-auto rounded-3xl border border-zinc-200/70 bg-white/50 dark:border-white/10 dark:bg-white/5">
-              <div className="min-w-[920px]">
-                <div className="grid grid-cols-[minmax(11rem,1.05fr)_8.5rem_minmax(15rem,1.2fr)_minmax(13rem,1fr)_9.5rem] gap-4 border-b border-zinc-200/70 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
-                  <span>环境</span>
-                  <span>代理状态</span>
-                  <span>当前配置</span>
-                  <span>建议与操作</span>
-                  <span className="text-right">处理</span>
-                </div>
-                <div className="divide-y divide-zinc-200/70 dark:divide-white/10">
-                  {snapshot.layers.map((layer) => {
-                    const lamp = getLayerLampCopy(layer, snapshot?.portOpen)
-                    const hasAction = needsLayerAction(layer)
-                    return (
-                      <div
-                        key={layer.id}
-                        className="environment-status-row grid grid-cols-[minmax(11rem,1.05fr)_8.5rem_minmax(15rem,1.2fr)_minmax(13rem,1fr)_9.5rem] items-center gap-4 px-5 py-4 text-sm"
-                      >
-                        <div className="flex min-w-0 items-center gap-3">
-                          <span
-                            className={cn(
-                              'h-3.5 w-3.5 shrink-0 rounded-full ring-4',
-                              layerToneClassNames[lamp.tone]
-                            )}
-                            aria-label={`${layer.title}${lamp.stateLabel}`}
-                          />
-                          <div className="min-w-0">
-                            <div className="truncate font-black text-foreground">{layer.title}</div>
-                            <div className="text-xs font-bold text-muted-foreground">{getLayerStateLabel(layer.state)}</div>
-                          </div>
+            <div className="overflow-hidden rounded-3xl border border-zinc-200/70 bg-white/50 dark:border-white/10 dark:bg-white/5">
+              <div className="grid grid-cols-[minmax(9rem,0.9fr)_7rem_minmax(10rem,1fr)_minmax(15rem,1.35fr)] gap-3 border-b border-zinc-200/70 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-muted-foreground dark:border-white/10">
+                <span>环境</span>
+                <span>代理状态</span>
+                <span>当前配置</span>
+                <span>建议与操作</span>
+              </div>
+              <div className="divide-y divide-zinc-200/70 dark:divide-white/10">
+                {snapshot.layers.map((layer) => {
+                  const lamp = getLayerLampCopy(layer, snapshot?.portOpen)
+                  const hasAction = needsLayerAction(layer)
+                  return (
+                    <div
+                      key={layer.id}
+                      className="environment-status-row grid grid-cols-[minmax(9rem,0.9fr)_7rem_minmax(10rem,1fr)_minmax(15rem,1.35fr)] items-center gap-3 px-4 py-4 text-sm"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0 rounded-full ring-4',
+                            layerToneClassNames[lamp.tone]
+                          )}
+                          aria-label={`${layer.title}${lamp.stateLabel}`}
+                        />
+                        <div className="min-w-0">
+                          <div className="truncate font-black text-foreground">{layer.title}</div>
+                          <div className="text-xs font-bold text-muted-foreground">{getLayerStateLabel(layer.state)}</div>
                         </div>
-                        <div>
-                          <div className={cn('font-black', layerTextToneClassNames[lamp.tone])}>{lamp.stateLabel}</div>
-                          <div className="text-xs font-bold text-muted-foreground">{lamp.reachabilityLabel}</div>
-                        </div>
-                        <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
-                          {layer.currentValue || '未设置'}
-                        </div>
-                        <div className={cn('text-xs font-bold', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
+                      </div>
+                      <div className="min-w-0">
+                        <div className={cn('truncate font-black', layerTextToneClassNames[lamp.tone])}>{lamp.stateLabel}</div>
+                        <div className="truncate text-xs font-bold text-muted-foreground">{lamp.reachabilityLabel}</div>
+                      </div>
+                      <div className="min-w-0 truncate font-mono text-xs font-bold text-muted-foreground" title={layer.currentValue || '未设置'}>
+                        {layer.currentValue || '未设置'}
+                      </div>
+                      <div className="environment-action-cell flex min-w-0 flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+                        <div className={cn('min-w-0 text-xs font-bold leading-relaxed', hasAction ? 'text-foreground' : 'text-muted-foreground')}>
                           {getLayerActionHint(layer)}
                         </div>
-                        <div className="flex shrink-0 justify-end gap-2">
+                        <div className="flex shrink-0 flex-wrap justify-end gap-2">
                           {hasAction ? (
                             <>
                               {layer.canFix && (
@@ -417,9 +416,9 @@ export default function LocalProxyManagerTool() {
                           )}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           ) : (
