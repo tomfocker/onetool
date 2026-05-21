@@ -35,8 +35,8 @@ export const tools: ToolDefinition[] = [
   },
   {
     id: 'local-proxy-manager',
-    name: '本地代理',
-    description: '管理 Windows 系统代理与本地代理端口',
+    name: '代理医生',
+    description: '诊断并统一 Windows 系统代理、WinHTTP、Git、npm 与命令行代理',
     category: '系统维护',
     icon: 'ShieldCheck',
     componentPath: 'LocalProxyManagerTool'

@@ -223,3 +223,11 @@ test('tools registry no longer exposes the external CapsWriter entrypoint', () =
 
   assert.equal(capswriterTool, undefined)
 })
+
+test('local proxy manager keeps its route id while adopting Proxy Doctor naming', () => {
+  const proxyTool = actualTools.find((tool) => tool.id === 'local-proxy-manager')
+
+  assert.equal(proxyTool.id, 'local-proxy-manager')
+  assert.equal(proxyTool.name, '代理医生')
+  assert.match(proxyTool.description, /系统代理|Git|npm/)
+})

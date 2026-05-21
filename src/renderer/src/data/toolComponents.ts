@@ -151,11 +151,11 @@ export const toolComponents: ToolComponent[] = [
   },
   {
     id: 'local-proxy-manager',
-    name: '本地代理管理',
-    description: '一键切换本地代理端口，查看当前系统代理状态',
+    name: '代理医生',
+    description: '一键诊断并修复系统代理、WinHTTP、Git、npm 与开发环境代理冲突',
     category: '网络工具',
     size: 1,
-    version: '1.0.0',
+    version: '1.1.0',
     icon: 'ShieldCheck',
     installed: true
   },
