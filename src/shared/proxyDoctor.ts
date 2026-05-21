@@ -55,6 +55,18 @@ export interface ProxyDoctorApplyRequest {
   bypass: string[]
 }
 
+export interface ProxyDoctorLaunchRequest extends ProxyDoctorApplyRequest {
+  executablePath: string
+  args?: string[]
+}
+
+export interface ProxyDoctorLaunchResult {
+  pid: number
+  executablePath: string
+  proxyUrl: string
+  launchedAt: string
+}
+
 export interface ProxyDoctorLayerDefinition {
   id: ProxyDoctorLayerId
   title: string
@@ -246,8 +258,7 @@ export function normalizeProxyDoctorTarget(input: string): ProxyDoctorTarget {
 }
 
 export function summarizeProxyDoctorLayers(layers: ProxyDoctorLayerStatus[]): ProxyDoctorSummary {
-  const coreLayers = layers
-    .filter((layer) => CORE_LAYER_IDS.includes(layer.id))
+  const coreLayers = layers.filter((layer) => CORE_LAYER_IDS.includes(layer.id))
   const coreStates = coreLayers.map((layer) => layer.state)
 
   if (coreStates.some((state) => state === 'error')) {

@@ -13,8 +13,17 @@ test('LocalProxyManagerTool presents Proxy Doctor language and actions', () => {
   assert.match(source, /测试当前值/)
   assert.match(source, /doctorScan/)
   assert.match(source, /doctorProbe/)
+  assert.match(source, /launcherSelectExecutable/)
+  assert.match(source, /doctorLaunchApp/)
   assert.match(source, /doctorApplyAll/)
   assert.match(source, /doctorClearLayer/)
+})
+
+test('LocalProxyManagerTool exposes a proxy launcher for new processes', () => {
+  assert.match(source, /代理启动器/)
+  assert.match(source, /只影响由 OneTool 启动的新进程/)
+  assert.match(source, /选择程序/)
+  assert.match(source, /用代理启动/)
 })
 
 test('LocalProxyManagerTool renders a compact status lamp matrix instead of per-layer cards', () => {

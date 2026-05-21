@@ -20,15 +20,19 @@ function loadCreateElectronBridgeModule() {
 
   const module = { exports: {} }
 
-  vm.runInNewContext(transpiled, {
-    module,
-    exports: module.exports,
-    require,
-    __dirname,
-    __filename: filePath,
-    console,
-    process
-  }, { filename: filePath })
+  vm.runInNewContext(
+    transpiled,
+    {
+      module,
+      exports: module.exports,
+      require,
+      __dirname,
+      __filename: filePath,
+      console,
+      process
+    },
+    { filename: filePath }
+  )
 
   return module.exports
 }
@@ -96,15 +100,19 @@ function loadFloatBallIpcModule(mocks) {
   }
 
   try {
-    vm.runInNewContext(transpiled, {
-      module,
-      exports: module.exports,
-      require,
-      __dirname: path.dirname(filePath),
-      __filename: filePath,
-      console,
-      process
-    }, { filename: filePath })
+    vm.runInNewContext(
+      transpiled,
+      {
+        module,
+        exports: module.exports,
+        require,
+        __dirname: path.dirname(filePath),
+        __filename: filePath,
+        console,
+        process
+      },
+      { filename: filePath }
+    )
   } finally {
     Module._load = originalLoad
   }
@@ -160,7 +168,10 @@ test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () 
   bridge.floatBall.peek()
   bridge.floatBall.restoreDock()
 
-  assert.deepEqual(mocks.sendCalls[0], ['floatball-begin-drag', { pointerOffsetX: 36, pointerOffsetY: 36 }])
+  assert.deepEqual(mocks.sendCalls[0], [
+    'floatball-begin-drag',
+    { pointerOffsetX: 36, pointerOffsetY: 36 }
+  ])
   assert.deepEqual(mocks.sendCalls[1], ['floatball-drag-to', { screenX: 1400, screenY: 320 }])
   assert.deepEqual(mocks.invokeCalls[0], ['floatball-end-drag', undefined])
   assert.deepEqual(mocks.invokeCalls[1], ['floatball-peek', undefined])
@@ -249,25 +260,31 @@ test('registerFloatBallIpc wires explicit float ball drag lifecycle channels', (
   const { registerFloatBallIpc } = loadFloatBallIpcModule(mocks)
   registerFloatBallIpc()
 
-  assert.deepEqual(registeredOn.map(([channel]) => channel), [
-    'floatball-move',
-    'floatball-set-position',
-    'floatball-resize',
-    'floatball-hide-window',
-    'floatball-show-window',
-    'floatball-toggle-visibility',
-    'floatball-set-visibility',
-    'floatball-begin-drag',
-    'floatball-drag-to',
-    'ondragstart'
-  ])
-  assert.deepEqual(registeredHandle.map(([channel]) => channel), [
-    'floatball-get-state',
-    'floatball-end-drag',
-    'floatball-peek',
-    'floatball-restore-dock',
-    'settings-set-floatball-hotkey'
-  ])
+  assert.deepEqual(
+    registeredOn.map(([channel]) => channel),
+    [
+      'floatball-move',
+      'floatball-set-position',
+      'floatball-resize',
+      'floatball-hide-window',
+      'floatball-show-window',
+      'floatball-toggle-visibility',
+      'floatball-set-visibility',
+      'floatball-begin-drag',
+      'floatball-drag-to',
+      'ondragstart'
+    ]
+  )
+  assert.deepEqual(
+    registeredHandle.map(([channel]) => channel),
+    [
+      'floatball-get-state',
+      'floatball-end-drag',
+      'floatball-peek',
+      'floatball-restore-dock',
+      'settings-set-floatball-hotkey'
+    ]
+  )
 })
 
 test('createElectronBridge subscriptions route through explicit channels and unsubscribe cleanly', () => {
@@ -292,21 +309,31 @@ test('createElectronBridge subscriptions route through explicit channels and uns
   const unsubscribeScreenshotSelectionSession = bridge.screenshot.onSelectionSession((payload) => {
     screenshotSelectionSession = payload
   })
-  const unsubscribeRecorderSelectionSession = bridge.screenRecorder.onSelectionSession((payload) => {
-    recorderSelectionSession = payload
-  })
+  const unsubscribeRecorderSelectionSession = bridge.screenRecorder.onSelectionSession(
+    (payload) => {
+      recorderSelectionSession = payload
+    }
+  )
 
   mocks.listeners.get('open-tool')({}, 'clipboard')
   mocks.listeners.get('update-time')({}, '00:00:10')
   mocks.listeners.get('recorder-selection-result')({}, { x: 10, y: 20, width: 300, height: 200 })
-  mocks.listeners.get('screenshot-selection:session-start')({}, { restrictBounds: null, enhanced: true })
-  mocks.listeners.get('recorder-selection:session-start')({}, { initialBounds: { x: 10, y: 20, width: 300, height: 200 } })
+  mocks.listeners.get('screenshot-selection:session-start')(
+    {},
+    { restrictBounds: null, enhanced: true }
+  )
+  mocks.listeners.get('recorder-selection:session-start')(
+    {},
+    { initialBounds: { x: 10, y: 20, width: 300, height: 200 } }
+  )
 
   assert.equal(openedTool, 'clipboard')
   assert.equal(indicatorTime, '00:00:10')
   assert.deepEqual(selectionBounds, { x: 10, y: 20, width: 300, height: 200 })
   assert.deepEqual(screenshotSelectionSession, { restrictBounds: null, enhanced: true })
-  assert.deepEqual(recorderSelectionSession, { initialBounds: { x: 10, y: 20, width: 300, height: 200 } })
+  assert.deepEqual(recorderSelectionSession, {
+    initialBounds: { x: 10, y: 20, width: 300, height: 200 }
+  })
 
   unsubscribeOpenTool()
   unsubscribeIndicator()
@@ -422,37 +449,49 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['space-cleanup-delete-to-trash', 'C:\\scan\\movie.mkv'],
     ['llm-get-config-status'],
     ['llm-test-connection'],
-    ['llm-parse-calendar-assistant', {
-      message: '明天下午三点开会',
-      context: {
-        selectedDate: '2025-07-23',
-        today: '2025-07-23',
-        events: []
+    [
+      'llm-parse-calendar-assistant',
+      {
+        message: '明天下午三点开会',
+        context: {
+          selectedDate: '2025-07-23',
+          today: '2025-07-23',
+          events: []
+        }
       }
-    }],
-    ['llm-suggest-rename', {
-      instructions: '按项目重命名',
-      files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
-    }],
-    ['llm-analyze-system', {
-      config: {
-        cpu: 'Intel',
-        deviceModel: 'Test',
-        motherboard: 'Board',
-        memory: '16 GB',
-        gpu: 'RTX',
-        monitor: 'Display',
-        disk: 'SSD',
-        os: 'Windows',
-        installTime: 1
-      },
-      doctorReport: null
-    }],
-    ['llm-suggest-space-cleanup', {
-      rootPath: 'D:/downloads',
-      summary: { totalBytes: 1024, scannedFiles: 3, scannedDirectories: 1, skippedEntries: 0 },
-      largestFiles: []
-    }],
+    ],
+    [
+      'llm-suggest-rename',
+      {
+        instructions: '按项目重命名',
+        files: [{ name: 'draft.txt', path: 'D:/docs/draft.txt', size: 12 }]
+      }
+    ],
+    [
+      'llm-analyze-system',
+      {
+        config: {
+          cpu: 'Intel',
+          deviceModel: 'Test',
+          motherboard: 'Board',
+          memory: '16 GB',
+          gpu: 'RTX',
+          monitor: 'Display',
+          disk: 'SSD',
+          os: 'Windows',
+          installTime: 1
+        },
+        doctorReport: null
+      }
+    ],
+    [
+      'llm-suggest-space-cleanup',
+      {
+        rootPath: 'D:/downloads',
+        summary: { totalBytes: 1024, scannedFiles: 3, scannedDirectories: 1, skippedEntries: 0 },
+        largestFiles: []
+      }
+    ],
     ['screen-overlay-start', 'ocr'],
     ['translate:image', 'data:image/png;base64,abc', 'ocr'],
     ['screen-recorder-get-default-path', 'gif'],
@@ -485,7 +524,10 @@ test('createElectronBridge exposes explicit dev environment subscriptions and un
   })
 
   mocks.listeners.get('dev-environment-log')({}, { type: 'info', message: 'refreshing' })
-  mocks.listeners.get('dev-environment-progress')({}, { current: 1, total: 2, currentName: 'nodejs' })
+  mocks.listeners.get('dev-environment-progress')(
+    {},
+    { current: 1, total: 2, currentName: 'nodejs' }
+  )
   mocks.listeners.get('dev-environment-operation-complete')({}, { success: true, message: 'done' })
 
   assert.equal(log.message, 'refreshing')
@@ -546,12 +588,15 @@ test('createElectronBridge forwards fast scan mode metadata through space cleanu
     progress = data
   })
 
-  mocks.listeners.get('space-cleanup-progress')({}, {
-    status: 'scanning',
-    scanMode: 'ntfs-fast',
-    scanModeReason: null,
-    isPartial: true
-  })
+  mocks.listeners.get('space-cleanup-progress')(
+    {},
+    {
+      status: 'scanning',
+      scanMode: 'ntfs-fast',
+      scanModeReason: null,
+      isPartial: true
+    }
+  )
 
   assert.equal(progress.scanMode, 'ntfs-fast')
   assert.equal(progress.scanModeReason, null)
@@ -619,11 +664,14 @@ test('createElectronBridge maps taskbar appearance helpers to the explicit IPC c
 
   assert.deepEqual(mocks.invokeCalls, [
     ['taskbar-appearance-get-status'],
-    ['taskbar-appearance-apply-preset', {
-      preset: 'acrylic',
-      intensity: 72,
-      tintHex: '#22446688'
-    }],
+    [
+      'taskbar-appearance-apply-preset',
+      {
+        preset: 'acrylic',
+        intensity: 72,
+        tintHex: '#22446688'
+      }
+    ],
     ['taskbar-appearance-restore-default']
   ])
 })
@@ -648,7 +696,10 @@ test('createElectronBridge exposes explicit bilibili downloader helpers and stat
   await bridge.bilibiliDownloader.cancelDownload()
   await bridge.bilibiliDownloader.selectOutputDirectory()
 
-  mocks.listeners.get('bilibili-downloader-state-changed')({}, { taskStage: 'cancelled', error: null })
+  mocks.listeners.get('bilibili-downloader-state-changed')(
+    {},
+    { taskStage: 'cancelled', error: null }
+  )
 
   assert.equal(state.taskStage, 'cancelled')
   assert.deepEqual(normalizeForAssertion(mocks.invokeCalls), [
@@ -658,7 +709,10 @@ test('createElectronBridge exposes explicit bilibili downloader helpers and stat
     ['bilibili-downloader-logout'],
     ['bilibili-downloader-parse-link', { link: 'https://www.bilibili.com/video/BV1xK4y1m7aA' }],
     ['bilibili-downloader-load-stream-options', { kind: 'video', itemId: 'page:1' }],
-    ['bilibili-downloader-start-download', { exportMode: 'merge-mp4', outputDirectory: 'D:\\Downloads' }],
+    [
+      'bilibili-downloader-start-download',
+      { exportMode: 'merge-mp4', outputDirectory: 'D:\\Downloads' }
+    ],
     ['bilibili-downloader-cancel-download'],
     ['bilibili-downloader-select-output-directory']
   ])
@@ -717,7 +771,10 @@ test('createElectronBridge exposes explicit table OCR APIs', async () => {
   await bridge.tableOcr.cancelPrepare()
   await bridge.tableOcr.chooseImage()
   await bridge.tableOcr.chooseOutputDirectory()
-  await bridge.tableOcr.recognize({ inputPath: 'D:\\Pictures\\table.png', outputDirectory: 'D:\\Exports' })
+  await bridge.tableOcr.recognize({
+    inputPath: 'D:\\Pictures\\table.png',
+    outputDirectory: 'D:\\Exports'
+  })
   await bridge.tableOcr.openPath('D:\\Exports\\table.xlsx')
   mocks.listeners.get('table-ocr-state-changed')({}, { installStatus: 'running' })
 
@@ -728,7 +785,10 @@ test('createElectronBridge exposes explicit table OCR APIs', async () => {
     ['table-ocr-cancel-prepare'],
     ['table-ocr-choose-image'],
     ['table-ocr-choose-output-dir'],
-    ['table-ocr-recognize', { inputPath: 'D:\\Pictures\\table.png', outputDirectory: 'D:\\Exports' }],
+    [
+      'table-ocr-recognize',
+      { inputPath: 'D:\\Pictures\\table.png', outputDirectory: 'D:\\Exports' }
+    ],
     ['table-ocr-open-path', 'D:\\Exports\\table.xlsx']
   ])
 
@@ -745,6 +805,12 @@ test('createElectronBridge maps proxy doctor IPC channels', async () => {
   await bridge.localProxy.doctorScan('7897')
   await bridge.localProxy.doctorApplyAll({ target: '7897', bypass: ['localhost'] })
   await bridge.localProxy.doctorProbe('7897')
+  await bridge.localProxy.launcherSelectExecutable()
+  await bridge.localProxy.doctorLaunchApp({
+    executablePath: 'C:\\Apps\\example.exe',
+    target: '7897',
+    bypass: ['localhost']
+  })
   await bridge.localProxy.doctorClearAll()
   await bridge.localProxy.doctorFixLayer('git', '7897', ['localhost'])
   await bridge.localProxy.doctorClearLayer('npm')
@@ -753,6 +819,11 @@ test('createElectronBridge maps proxy doctor IPC channels', async () => {
     ['local-proxy:doctor-scan', '7897'],
     ['local-proxy:doctor-apply-all', { target: '7897', bypass: ['localhost'] }],
     ['local-proxy:doctor-probe', '7897'],
+    ['local-proxy:launcher-select-executable'],
+    [
+      'local-proxy:doctor-launch-app',
+      { executablePath: 'C:\\Apps\\example.exe', target: '7897', bypass: ['localhost'] }
+    ],
     ['local-proxy:doctor-clear-all'],
     ['local-proxy:doctor-fix-layer', { layerId: 'git', target: '7897', bypass: ['localhost'] }],
     ['local-proxy:doctor-clear-layer', 'npm']

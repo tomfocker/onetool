@@ -771,6 +771,90 @@ test('default proxy probe timeout explains endpoints that are not direct HTTP pr
   assert.doesNotMatch(serviceSource, /error: '代理请求超时'/)
 })
 
+test('doctorLaunchApp starts a process with proxy environment variables', async () => {
+  const spawnCalls = []
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService({
+    pathExists: () => true,
+    processEnv: {
+      PATH: 'C:\\Windows\\System32',
+      HTTP_PROXY: 'http://old.proxy:8080'
+    },
+    spawn: (command, args, options) => {
+      spawnCalls.push({ command, args, options })
+      return {
+        pid: 4242,
+        unref: () => spawnCalls.push({ unref: true })
+      }
+    }
+  })
+
+  const result = await service.doctorLaunchApp({
+    executablePath: 'C:\\Apps\\Example\\example.exe',
+    target: '7897',
+    bypass: ['localhost', '127.*']
+  })
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.pid, 4242)
+  assert.equal(result.data.proxyUrl, 'http://127.0.0.1:7897')
+  assert.equal(spawnCalls[0].command, 'C:\\Apps\\Example\\example.exe')
+  assert.equal(spawnCalls[0].args.length, 0)
+  assert.equal(spawnCalls[0].options.cwd, 'C:\\Apps\\Example')
+  assert.equal(spawnCalls[0].options.detached, true)
+  assert.equal(spawnCalls[0].options.stdio, 'ignore')
+  assert.equal(spawnCalls[0].options.env.HTTP_PROXY, 'http://127.0.0.1:7897')
+  assert.equal(spawnCalls[0].options.env.HTTPS_PROXY, 'http://127.0.0.1:7897')
+  assert.equal(spawnCalls[0].options.env.ALL_PROXY, 'http://127.0.0.1:7897')
+  assert.equal(spawnCalls[0].options.env.http_proxy, 'http://127.0.0.1:7897')
+  assert.equal(spawnCalls[0].options.env.NO_PROXY, 'localhost,127.*')
+  assert.deepEqual(spawnCalls[1], { unref: true })
+})
+
+test('doctorLaunchApp rejects relative executable paths before spawning', async () => {
+  const spawnCalls = []
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService({
+    pathExists: () => true,
+    spawn: (...args) => {
+      spawnCalls.push(args)
+      throw new Error('should not spawn')
+    }
+  })
+
+  const result = await service.doctorLaunchApp({
+    executablePath: 'example.exe',
+    target: '7897',
+    bypass: []
+  })
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /完整的程序路径/)
+  assert.equal(spawnCalls.length, 0)
+})
+
+test('doctorLaunchApp rejects unsupported launcher file types before spawning', async () => {
+  const spawnCalls = []
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService({
+    pathExists: () => true,
+    spawn: (...args) => {
+      spawnCalls.push(args)
+      throw new Error('should not spawn')
+    }
+  })
+
+  const result = await service.doctorLaunchApp({
+    executablePath: 'C:\\Apps\\Example\\start.bat',
+    target: '7897',
+    bypass: []
+  })
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /exe 或 \.com/)
+  assert.equal(spawnCalls.length, 0)
+})
+
 test('disable returns a failure when the proxy disable script resolves empty output', async () => {
   const { LocalProxyService } = loadLocalProxyServiceModule({
     execPowerShellEncoded: async () => ''

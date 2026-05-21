@@ -39,9 +39,9 @@ export interface AppSettings {
  * 通用 IPC 响应结构
  */
 export interface IpcResponse<T = any> {
-  success: boolean;
-  data?: T;
-  error?: string;
+  success: boolean
+  data?: T
+  error?: string
 }
 
 /**
@@ -68,7 +68,7 @@ export interface RealtimeStats {
   gpuLoad: number
   gpuTemp: number
   memoryUsage: number // 百分比
-  memoryUsed: number  // GB
+  memoryUsed: number // GB
   memoryTotal: number // GB
   netUp: string
   netDown: string
@@ -181,6 +181,8 @@ export type {
   ProxyDoctorLayerId,
   ProxyDoctorLayerState,
   ProxyDoctorLayerStatus,
+  ProxyDoctorLaunchRequest,
+  ProxyDoctorLaunchResult,
   ProxyDoctorProbeCheck,
   ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,

@@ -13,6 +13,8 @@ import {
   LocalProxyStatus,
   ProxyDoctorApplyRequest,
   ProxyDoctorLayerId,
+  ProxyDoctorLaunchRequest,
+  ProxyDoctorLaunchResult,
   ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   WslBackupFormat,
@@ -29,7 +31,11 @@ import {
   BilibiliStreamOptionSummary
 } from '../../../shared/types'
 import type { UpdateState } from '../../../shared/appUpdate'
-import type { DevEnvironmentId, DevEnvironmentOverview, DevEnvironmentRecord } from '../../../shared/devEnvironment'
+import type {
+  DevEnvironmentId,
+  DevEnvironmentOverview,
+  DevEnvironmentRecord
+} from '../../../shared/devEnvironment'
 import type { ModelDownloadRequest, ModelDownloadState } from '../../../shared/modelDownload'
 import type {
   TableOcrChoosePathResult,
@@ -37,7 +43,11 @@ import type {
   TableOcrRecognizeResult,
   TableOcrRuntimeStatus
 } from '../../../shared/tableOcr'
-import type { RecorderBounds, RecorderSelectionPreview, RecorderSessionUpdate } from '../../../shared/ipc-schemas'
+import type {
+  RecorderBounds,
+  RecorderSelectionPreview,
+  RecorderSessionUpdate
+} from '../../../shared/ipc-schemas'
 import type {
   RecorderSelectionSessionPayload,
   ScreenshotSelectionSessionPayload
@@ -83,8 +93,15 @@ declare global {
         update: (id: DevEnvironmentId) => Promise<IpcResponse>
         updateAll: () => Promise<IpcResponse<{ updated: number }>>
         openRelatedTool: (id: DevEnvironmentId) => Promise<IpcResponse<{ toolId: string }>>
-        onLog: (callback: (data: { type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'; message: string }) => void) => () => void
-        onProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => () => void
+        onLog: (
+          callback: (data: {
+            type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'
+            message: string
+          }) => void
+        ) => () => void
+        onProgress: (
+          callback: (data: { current: number; total: number; currentName: string }) => void
+        ) => () => void
         onComplete: (callback: (data: { success: boolean; message: string }) => void) => () => void
       }
       modelDownload: {
@@ -99,7 +116,9 @@ declare global {
         getStatus: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
         prepareRuntime: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
         cancelPrepare: () => Promise<IpcResponse<TableOcrRuntimeStatus>>
-        recognize: (request: TableOcrRecognizeRequest) => Promise<IpcResponse<TableOcrRecognizeResult>>
+        recognize: (
+          request: TableOcrRecognizeRequest
+        ) => Promise<IpcResponse<TableOcrRecognizeResult>>
         chooseImage: () => Promise<IpcResponse<TableOcrChoosePathResult>>
         chooseOutputDirectory: () => Promise<IpcResponse<TableOcrChoosePathResult>>
         openPath: (targetPath: string) => Promise<IpcResponse<{ targetPath: string }>>
@@ -128,25 +147,42 @@ declare global {
       bilibiliDownloader: {
         getSession: () => Promise<IpcResponse<BilibiliLoginSession>>
         startLogin: () => Promise<IpcResponse<{ qrUrl: string; authCode: string }>>
-        pollLogin: () => Promise<IpcResponse<{ status: 'pending' | 'scanned' | 'confirmed'; loginSession?: BilibiliLoginSession }>>
+        pollLogin: () => Promise<
+          IpcResponse<{
+            status: 'pending' | 'scanned' | 'confirmed'
+            loginSession?: BilibiliLoginSession
+          }>
+        >
         logout: () => Promise<IpcResponse>
         parseLink: (link: string) => Promise<IpcResponse<BilibiliParsedLink>>
-        loadStreamOptions: (kind: BilibiliLinkKind, itemId: string) => Promise<IpcResponse<{
+        loadStreamOptions: (
+          kind: BilibiliLinkKind,
           itemId: string
-          qnOptions: Array<{
-            qn: number
-            label: string
-            selected: boolean
-            available: boolean
+        ) => Promise<
+          IpcResponse<{
+            itemId: string
+            qnOptions: Array<{
+              qn: number
+              label: string
+              selected: boolean
+              available: boolean
+            }>
+            summary: BilibiliStreamOptionSummary
           }>
-          summary: BilibiliStreamOptionSummary
-        }>>
-        startDownload: (exportMode: BilibiliExportMode, outputDirectory?: string) => Promise<IpcResponse<{
-          outputPaths: string[]
-          tempDirectory: string
-        }>>
+        >
+        startDownload: (
+          exportMode: BilibiliExportMode,
+          outputDirectory?: string
+        ) => Promise<
+          IpcResponse<{
+            outputPaths: string[]
+            tempDirectory: string
+          }>
+        >
         cancelDownload: () => Promise<IpcResponse>
-        selectOutputDirectory: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+        selectOutputDirectory: () => Promise<
+          IpcResponse<{ canceled: boolean; path: string | null }>
+        >
         onStateChanged: (callback: (state: BilibiliDownloaderState) => void) => () => void
       }
       webUtils: {
@@ -155,8 +191,17 @@ declare global {
       autoClicker: {
         start: (config: { interval: number; button: string }) => Promise<IpcResponse>
         stop: () => Promise<IpcResponse>
-        updateConfig: (config: { interval?: number; button?: string; shortcut?: string }) => Promise<IpcResponse>
-        getStatus: () => Promise<IpcResponse<{ running: boolean; config: { interval: number; button: string; shortcut?: string } }>>
+        updateConfig: (config: {
+          interval?: number
+          button?: string
+          shortcut?: string
+        }) => Promise<IpcResponse>
+        getStatus: () => Promise<
+          IpcResponse<{
+            running: boolean
+            config: { interval: number; button: string; shortcut?: string }
+          }>
+        >
         onStarted: (callback: () => void) => () => void
         onStopped: (callback: () => void) => () => void
       }
@@ -172,10 +217,17 @@ declare global {
       llm: {
         getConfigStatus: () => Promise<IpcResponse<LlmConfigStatus>>
         testConnection: () => Promise<IpcResponse<LlmConnectionStatus>>
-        parseCalendarAssistant: (input: LlmCalendarAssistantRequest) => Promise<IpcResponse<LlmCalendarAssistantResult>>
+        parseCalendarAssistant: (
+          input: LlmCalendarAssistantRequest
+        ) => Promise<IpcResponse<LlmCalendarAssistantResult>>
         analyzeSystem: (input: LlmSystemAnalysisRequest) => Promise<IpcResponse<LlmInsight>>
-        suggestRename: (input: { instructions: string; files: LlmRenameInputFile[] }) => Promise<IpcResponse<LlmRenameSuggestion>>
-        suggestSpaceCleanup: (input: LlmSpaceCleanupSuggestionRequest) => Promise<IpcResponse<LlmInsight>>
+        suggestRename: (input: {
+          instructions: string
+          files: LlmRenameInputFile[]
+        }) => Promise<IpcResponse<LlmRenameSuggestion>>
+        suggestSpaceCleanup: (
+          input: LlmSpaceCleanupSuggestionRequest
+        ) => Promise<IpcResponse<LlmInsight>>
       }
       store: {
         getAll: () => Promise<IpcResponse<GlobalStore>>
@@ -184,10 +236,21 @@ declare global {
         onChanged: (callback: (newStore: GlobalStore) => void) => () => void
       }
       quickInstaller: {
-        installSoftware: (softwareList: { id: string; name: string; source: string }[]) => Promise<IpcResponse>
-        onInstallLog: (callback: (data: { type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'; message: string }) => void) => () => void
-        onInstallProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => () => void
-        onInstallComplete: (callback: (data: { success: boolean; message: string }) => void) => () => void
+        installSoftware: (
+          softwareList: { id: string; name: string; source: string }[]
+        ) => Promise<IpcResponse>
+        onInstallLog: (
+          callback: (data: {
+            type: 'success' | 'error' | 'info' | 'stdout' | 'stderr'
+            message: string
+          }) => void
+        ) => () => void
+        onInstallProgress: (
+          callback: (data: { current: number; total: number; currentName: string }) => void
+        ) => () => void
+        onInstallComplete: (
+          callback: (data: { success: boolean; message: string }) => void
+        ) => () => void
       }
       clipboard: {
         getHistory: () => void
@@ -201,8 +264,28 @@ declare global {
         setHotkey: (hotkey: string) => Promise<IpcResponse>
       }
       colorPicker: {
-        pick: () => Promise<IpcResponse<{ color?: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number } }>>
-        confirm: (color: { hex: string; rgb: string; r: number; g: number; b: number; x: number; y: number }) => void
+        pick: () => Promise<
+          IpcResponse<{
+            color?: {
+              hex: string
+              rgb: string
+              r: number
+              g: number
+              b: number
+              x: number
+              y: number
+            }
+          }>
+        >
+        confirm: (color: {
+          hex: string
+          rgb: string
+          r: number
+          g: number
+          b: number
+          x: number
+          y: number
+        }) => void
         cancel: () => void
         notifyReady: () => void
         onScreenshot: (callback: (dataUrl: string) => void) => () => void
@@ -211,7 +294,9 @@ declare global {
         scanLan: (subnet: string) => Promise<IpcResponse<{ devices: LanDevice[] }>>
         getInfo: () => Promise<IpcResponse<{ interfaces: NetworkInterfaceInfo[] }>>
         ping: (host: string) => Promise<IpcResponse<{ time: number | null; alive: boolean }>>
-        pingBatch: (hosts: string[]) => Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>>
+        pingBatch: (
+          hosts: string[]
+        ) => Promise<IpcResponse<Array<{ host: string; alive: boolean; time: number | null }>>>
       }
       localProxy: {
         getStatus: () => Promise<IpcResponse<LocalProxyStatus>>
@@ -220,15 +305,37 @@ declare global {
         openSystemSettings: () => Promise<IpcResponse>
         doctorScan: (target: string) => Promise<IpcResponse<ProxyDoctorSnapshot>>
         doctorProbe: (target: string) => Promise<IpcResponse<ProxyDoctorProbeResult>>
-        doctorApplyAll: (request: ProxyDoctorApplyRequest) => Promise<IpcResponse<ProxyDoctorSnapshot>>
+        launcherSelectExecutable: () => Promise<
+          IpcResponse<{ canceled: boolean; filePath: string | null }>
+        >
+        doctorLaunchApp: (
+          request: ProxyDoctorLaunchRequest
+        ) => Promise<IpcResponse<ProxyDoctorLaunchResult>>
+        doctorApplyAll: (
+          request: ProxyDoctorApplyRequest
+        ) => Promise<IpcResponse<ProxyDoctorSnapshot>>
         doctorClearAll: () => Promise<IpcResponse>
-        doctorFixLayer: (layerId: ProxyDoctorLayerId, target: string, bypass: string[]) => Promise<IpcResponse>
+        doctorFixLayer: (
+          layerId: ProxyDoctorLayerId,
+          target: string,
+          bypass: string[]
+        ) => Promise<IpcResponse>
         doctorClearLayer: (layerId: ProxyDoctorLayerId) => Promise<IpcResponse>
       }
       rename: {
-        renameFiles: (files: string[], mode: string, options: any) => Promise<IpcResponse<{ results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }> }>>
+        renameFiles: (
+          files: string[],
+          mode: string,
+          options: any
+        ) => Promise<
+          IpcResponse<{
+            results: Array<{ oldPath: string; newPath: string; success: boolean; error?: string }>
+          }>
+        >
         getFileInfo: (filePaths: string[]) => Promise<IpcResponse<{ fileInfo: RenameFileItem[] }>>
-        selectFilesAndFolders: () => Promise<IpcResponse<{ canceled: boolean; filePaths: string[] }>>
+        selectFilesAndFolders: () => Promise<
+          IpcResponse<{ canceled: boolean; filePaths: string[] }>
+        >
         getPathForFile: (file: File) => string
       }
       screenOverlay: {
@@ -236,32 +343,53 @@ declare global {
         close: () => Promise<IpcResponse>
         notifyReady: () => void
         onScreenshot: (callback: (dataUrl: string) => void) => () => void
-        onSessionStart: (callback: (payload: ScreenOverlaySessionStartPayload) => void) => () => void
+        onSessionStart: (
+          callback: (payload: ScreenOverlaySessionStartPayload) => void
+        ) => () => void
       }
       screenshot: {
         getSettings: () => Promise<IpcResponse<{ savePath: string; autoSave: boolean }>>
         setSettings: (settings: { savePath: string; autoSave: boolean }) => Promise<IpcResponse>
         selectDirectory: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
-        capture: (bounds: { x: number; y: number; width: number; height: number }) => Promise<IpcResponse<string>>
-        saveImage: (dataUrl: string, customPath?: string) => Promise<IpcResponse<{ filePath?: string; canceled?: boolean }>>
+        capture: (bounds: {
+          x: number
+          y: number
+          width: number
+          height: number
+        }) => Promise<IpcResponse<string>>
+        saveImage: (
+          dataUrl: string,
+          customPath?: string
+        ) => Promise<IpcResponse<{ filePath?: string; canceled?: boolean }>>
         copyToClipboard: (dataUrl: string) => Promise<IpcResponse>
         getHotkey: () => Promise<IpcResponse<string>>
         setHotkey: (hotkey: string) => Promise<IpcResponse>
-        openSelection: (restrictBounds?: RecorderBounds | null, enhanced?: boolean) => Promise<IpcResponse>
+        openSelection: (
+          restrictBounds?: RecorderBounds | null,
+          enhanced?: boolean
+        ) => Promise<IpcResponse>
         closeSelection: (bounds: RecorderBounds | null) => Promise<IpcResponse>
         onTrigger: (callback: () => void) => () => void
         onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
-        onSelectionSession: (callback: (payload: ScreenshotSelectionSessionPayload) => void) => () => void
+        onSelectionSession: (
+          callback: (payload: ScreenshotSelectionSessionPayload) => void
+        ) => () => void
       }
       screenRecorder: {
         setHotkey: (hotkey: string) => Promise<IpcResponse>
         getHotkey: () => Promise<IpcResponse<string>>
-        getWindows: () => Promise<IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>>
-        getScreens: () => Promise<IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>>
-          getDefaultPath: (format?: 'mp4' | 'gif') => Promise<IpcResponse<string>>
+        getWindows: () => Promise<
+          IpcResponse<Array<{ id: string; name: string; thumbnail: string }>>
+        >
+        getScreens: () => Promise<
+          IpcResponse<Array<{ id: string; name: string; display_id: string; thumbnail: string }>>
+        >
+        getDefaultPath: (format?: 'mp4' | 'gif') => Promise<IpcResponse<string>>
         getSession: () => Promise<IpcResponse<RecorderSessionUpdate>>
         onToggleHotkey: (callback: () => void) => () => void
-          selectOutput: (format?: 'mp4' | 'gif') => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
+        selectOutput: (
+          format?: 'mp4' | 'gif'
+        ) => Promise<IpcResponse<{ canceled: boolean; filePath: string | null }>>
         prepareSelection: (bounds: RecorderBounds) => Promise<IpcResponse<RecorderSelectionPreview>>
         expandPanel: () => Promise<IpcResponse>
         hideSelectionPreview: () => Promise<IpcResponse>
@@ -281,15 +409,15 @@ declare global {
         getStatus: () => Promise<IpcResponse<{ recording: boolean }>>
         onStarted: (callback: () => void) => () => void
         onProgress: (callback: (data: { timemark: string }) => void) => () => void
-        onStopped: (callback: (data: {
-          success: boolean
-          outputPath?: string
-          error?: string
-        }) => void) => () => void
+        onStopped: (
+          callback: (data: { success: boolean; outputPath?: string; error?: string }) => void
+        ) => () => void
         onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => () => void
         onIndicatorTimeUpdated: (callback: (time: string) => void) => () => void
         onSelectionResult: (callback: (bounds: RecorderBounds | null) => void) => () => void
-        onSelectionSession: (callback: (payload: RecorderSelectionSessionPayload) => void) => () => void
+        onSelectionSession: (
+          callback: (payload: RecorderSelectionSessionPayload) => void
+        ) => () => void
       }
       screenSaver: {
         start: () => Promise<IpcResponse>
@@ -300,11 +428,21 @@ declare global {
         executeCommand: (command: string) => Promise<IpcResponse>
       }
       webActivator: {
-        checkVisibility: (configs: ActivatorConfig[]) => Promise<IpcResponse<{ results: boolean[] }>>
+        checkVisibility: (
+          configs: ActivatorConfig[]
+        ) => Promise<IpcResponse<{ results: boolean[] }>>
         getWindowList: () => Promise<IpcResponse<{ windows: WindowInfo[] }>>
-        toggleWindow: (config: { type: 'app' | 'tab'; pattern: string; id?: number }) => Promise<IpcResponse<{ action?: 'activated' | 'minimized' }>>
-        registerShortcuts: (configs: ActivatorConfig[]) => Promise<IpcResponse<{ registeredCount: number }>>
-        onShortcutTriggered: (callback: (data: { id: string; action: string }) => void) => () => void
+        toggleWindow: (config: {
+          type: 'app' | 'tab'
+          pattern: string
+          id?: number
+        }) => Promise<IpcResponse<{ action?: 'activated' | 'minimized' }>>
+        registerShortcuts: (
+          configs: ActivatorConfig[]
+        ) => Promise<IpcResponse<{ registeredCount: number }>>
+        onShortcutTriggered: (
+          callback: (data: { id: string; action: string }) => void
+        ) => () => void
       }
       window: {
         minimize: () => Promise<IpcResponse>
@@ -336,13 +474,20 @@ declare global {
         toggleWidget: () => Promise<IpcResponse<CalendarWidgetState>>
         setWidgetBounds: (bounds: CalendarWidgetBounds) => Promise<IpcResponse<CalendarWidgetState>>
         setWidgetAlwaysOnTop: (alwaysOnTop: boolean) => Promise<IpcResponse<CalendarWidgetState>>
-        setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => Promise<IpcResponse<CalendarWidgetState>>
-        setWidgetGlassSettings: (settings: CalendarWidgetGlassSettings) => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetBackgroundMode: (
+          mode: CalendarWidgetBackgroundMode
+        ) => Promise<IpcResponse<CalendarWidgetState>>
+        setWidgetGlassSettings: (
+          settings: CalendarWidgetGlassSettings
+        ) => Promise<IpcResponse<CalendarWidgetState>>
         replaceEvents: (events: CalendarEvent[]) => Promise<IpcResponse<CalendarEvent[]>>
         onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => () => void
       }
       translate: {
-        translateImage: (base64Image: string, mode?: ScreenOverlayMode) => Promise<IpcResponse<ScreenOverlayLineResult[]>>
+        translateImage: (
+          base64Image: string,
+          mode?: ScreenOverlayMode
+        ) => Promise<IpcResponse<ScreenOverlayLineResult[]>>
       }
       wsl: {
         getOverview: () => Promise<IpcResponse<WslOverview>>
@@ -350,9 +495,16 @@ declare global {
         setDefault: (name: string) => Promise<IpcResponse<WslOverview>>
         terminate: (name: string) => Promise<IpcResponse<WslOverview>>
         shutdownAll: () => Promise<IpcResponse<WslOverview>>
-        createBackup: (name: string, format: WslBackupFormat) => Promise<IpcResponse<WslBackupInfo[]>>
+        createBackup: (
+          name: string,
+          format: WslBackupFormat
+        ) => Promise<IpcResponse<WslBackupInfo[]>>
         deleteBackup: (id: string) => Promise<IpcResponse<WslBackupInfo[]>>
-        restoreBackup: (id: string, mode: WslRestoreMode, targetName?: string) => Promise<IpcResponse<WslOverview>>
+        restoreBackup: (
+          id: string,
+          mode: WslRestoreMode,
+          targetName?: string
+        ) => Promise<IpcResponse<WslOverview>>
         reclaimSpace: (name: string) => Promise<IpcResponse<WslSpaceReclaimResult>>
         launchShell: (name: string) => Promise<IpcResponse>
       }
@@ -364,4 +516,4 @@ declare global {
   }
 }
 
-export { }
+export {}

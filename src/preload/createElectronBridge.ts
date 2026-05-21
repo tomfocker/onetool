@@ -55,6 +55,7 @@ import type {
   LocalProxyConfig,
   ProxyDoctorApplyRequest,
   ProxyDoctorLayerId,
+  ProxyDoctorLaunchRequest,
   ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
   WslBackupFormat,
@@ -116,10 +117,17 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     installSoftware: (softwareList: { id: string; name: string; source: string }[]) => {
       return ipcRenderer.invoke('quick-installer-install', softwareList)
     },
-    onInstallLog: (callback: (data: { type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'; message: string }) => void) => {
+    onInstallLog: (
+      callback: (data: {
+        type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'
+        message: string
+      }) => void
+    ) => {
       return onChannel('quick-installer-log', callback)
     },
-    onInstallProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => {
+    onInstallProgress: (
+      callback: (data: { current: number; total: number; currentName: string }) => void
+    ) => {
       return onChannel('quick-installer-progress', callback)
     },
     onInstallComplete: (callback: (data: { success: boolean; message: string }) => void) => {
@@ -155,19 +163,27 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const llmAPI = {
-    getConfigStatus: () => ipcRenderer.invoke('llm-get-config-status') as Promise<IpcResponse<LlmConfigStatus>>,
-    testConnection: () => ipcRenderer.invoke('llm-test-connection') as Promise<IpcResponse<LlmConnectionStatus>>,
+    getConfigStatus: () =>
+      ipcRenderer.invoke('llm-get-config-status') as Promise<IpcResponse<LlmConfigStatus>>,
+    testConnection: () =>
+      ipcRenderer.invoke('llm-test-connection') as Promise<IpcResponse<LlmConnectionStatus>>,
     parseCalendarAssistant: (input: LlmCalendarAssistantRequest) => {
-      return ipcRenderer.invoke('llm-parse-calendar-assistant', input) as Promise<IpcResponse<LlmCalendarAssistantResult>>
+      return ipcRenderer.invoke('llm-parse-calendar-assistant', input) as Promise<
+        IpcResponse<LlmCalendarAssistantResult>
+      >
     },
     analyzeSystem: (input: LlmSystemAnalysisRequest) => {
       return ipcRenderer.invoke('llm-analyze-system', input) as Promise<IpcResponse<LlmInsight>>
     },
     suggestRename: (input: { instructions: string; files: LlmRenameInputFile[] }) => {
-      return ipcRenderer.invoke('llm-suggest-rename', input) as Promise<IpcResponse<LlmRenameSuggestion>>
+      return ipcRenderer.invoke('llm-suggest-rename', input) as Promise<
+        IpcResponse<LlmRenameSuggestion>
+      >
     },
     suggestSpaceCleanup: (input: LlmSpaceCleanupSuggestionRequest) => {
-      return ipcRenderer.invoke('llm-suggest-space-cleanup', input) as Promise<IpcResponse<LlmInsight>>
+      return ipcRenderer.invoke('llm-suggest-space-cleanup', input) as Promise<
+        IpcResponse<LlmInsight>
+      >
     }
   }
 
@@ -183,8 +199,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
 
   const webActivatorAPI = {
     getWindowList: () => ipcRenderer.invoke('web-activator-get-window-list'),
-    toggleWindow: (config: z.infer<typeof WebActivatorToggleSchema>) => ipcRenderer.invoke('web-activator-toggle-window', config),
-    registerShortcuts: (configs: Array<z.infer<typeof WebActivatorShortcutSchema>>) => ipcRenderer.invoke('web-activator-register-shortcuts', configs),
+    toggleWindow: (config: z.infer<typeof WebActivatorToggleSchema>) =>
+      ipcRenderer.invoke('web-activator-toggle-window', config),
+    registerShortcuts: (configs: Array<z.infer<typeof WebActivatorShortcutSchema>>) =>
+      ipcRenderer.invoke('web-activator-register-shortcuts', configs),
     checkVisibility: (configs: Array<{ type: 'app' | 'tab'; pattern: string; hwnd?: number }>) => {
       return ipcRenderer.invoke('web-activator-check-visibility', configs)
     },
@@ -200,17 +218,21 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     clearHistory: () => ipcRenderer.send('clear-clipboard-history'),
     copyImage: (dataUrl: string) => ipcRenderer.send('copy-image-to-clipboard', dataUrl),
     onChange: (callback: (item: ClipboardItem) => void) => onChannel('clipboard-change', callback),
-    onHistory: (callback: (history: ClipboardItem[]) => void) => onChannel('clipboard-history', callback),
+    onHistory: (callback: (history: ClipboardItem[]) => void) =>
+      onChannel('clipboard-history', callback),
     getHotkey: () => ipcRenderer.invoke('clipboard-hotkey-get'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('clipboard-hotkey-set', hotkey)
   }
 
   const screenRecorderAPI = {
-    selectOutput: (format: 'mp4' | 'gif' = 'mp4') => ipcRenderer.invoke('screen-recorder-select-output', format),
-    startRecording: (config: ScreenRecorderConfig) => ipcRenderer.invoke('screen-recorder-start', config),
+    selectOutput: (format: 'mp4' | 'gif' = 'mp4') =>
+      ipcRenderer.invoke('screen-recorder-select-output', format),
+    startRecording: (config: ScreenRecorderConfig) =>
+      ipcRenderer.invoke('screen-recorder-start', config),
     stopRecording: () => ipcRenderer.invoke('screen-recorder-stop'),
     getStatus: () => ipcRenderer.invoke('screen-recorder-status'),
-    getDefaultPath: (format: 'mp4' | 'gif' = 'mp4') => ipcRenderer.invoke('screen-recorder-get-default-path', format),
+    getDefaultPath: (format: 'mp4' | 'gif' = 'mp4') =>
+      ipcRenderer.invoke('screen-recorder-get-default-path', format),
     getSession: () => ipcRenderer.invoke('screen-recorder-get-session'),
     getHotkey: () => ipcRenderer.invoke('recorder-hotkey-get'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('recorder-hotkey-set', hotkey),
@@ -229,15 +251,23 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       return ipcRenderer.invoke('recorder-selection-close', bounds)
     },
     onStarted: (callback: () => void) => onChannel('screen-recorder-started', callback),
-    onProgress: (callback: (data: { timemark: string }) => void) => onChannel('screen-recorder-progress', callback),
-    onStopped: (callback: (data: { success: boolean; outputPath?: string; error?: string }) => void) => {
+    onProgress: (callback: (data: { timemark: string }) => void) =>
+      onChannel('screen-recorder-progress', callback),
+    onStopped: (
+      callback: (data: { success: boolean; outputPath?: string; error?: string }) => void
+    ) => {
       return onChannel('screen-recorder-stopped', callback)
     },
-    onError: (callback: (data: { message: string }) => void) => onChannel('screen-recorder-error', callback),
+    onError: (callback: (data: { message: string }) => void) =>
+      onChannel('screen-recorder-error', callback),
     onToggleHotkey: (callback: () => void) => onChannel('screen-recorder-toggle-hotkey', callback),
-    onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) => onChannel('screen-recorder-session-updated', callback),
-    onIndicatorTimeUpdated: (callback: (time: string) => void) => onChannel('update-time', callback),
-    onSelectionResult: (callback: (bounds: { x: number; y: number; width: number; height: number } | null) => void) => {
+    onSessionUpdated: (callback: (data: RecorderSessionUpdate) => void) =>
+      onChannel('screen-recorder-session-updated', callback),
+    onIndicatorTimeUpdated: (callback: (time: string) => void) =>
+      onChannel('update-time', callback),
+    onSelectionResult: (
+      callback: (bounds: { x: number; y: number; width: number; height: number } | null) => void
+    ) => {
       return onChannel('recorder-selection-result', callback)
     },
     onSelectionSession: (callback: (payload: RecorderSelectionSessionPayload) => void) => {
@@ -255,9 +285,12 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   const floatBallAPI = {
     move: (x: number, y: number) => ipcRenderer.send('floatball-move', { x, y }),
     setPosition: (x: number, y: number) => ipcRenderer.send('floatball-set-position', { x, y }),
-    resize: (width: number, height: number) => ipcRenderer.send('floatball-resize', { width, height }),
-    beginDrag: (payload: { pointerOffsetX: number; pointerOffsetY: number }) => ipcRenderer.send('floatball-begin-drag', payload),
-    dragTo: (payload: { screenX: number; screenY: number }) => ipcRenderer.send('floatball-drag-to', payload),
+    resize: (width: number, height: number) =>
+      ipcRenderer.send('floatball-resize', { width, height }),
+    beginDrag: (payload: { pointerOffsetX: number; pointerOffsetY: number }) =>
+      ipcRenderer.send('floatball-begin-drag', payload),
+    dragTo: (payload: { screenX: number; screenY: number }) =>
+      ipcRenderer.send('floatball-drag-to', payload),
     endDrag: () => ipcRenderer.invoke('floatball-end-drag', undefined),
     peek: () => ipcRenderer.invoke('floatball-peek', undefined),
     restoreDock: () => ipcRenderer.invoke('floatball-restore-dock', undefined),
@@ -267,37 +300,55 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     setVisible: (visible: boolean) => ipcRenderer.send('floatball-set-visibility', visible),
     getState: () => ipcRenderer.invoke('floatball-get-state'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('settings-set-floatball-hotkey', hotkey),
-    onVisibilityChanged: (callback: (visible: boolean) => void) => onChannel('floatball-visibility-changed', callback)
+    onVisibilityChanged: (callback: (visible: boolean) => void) =>
+      onChannel('floatball-visibility-changed', callback)
   }
 
   const calendarAPI = {
-    getWidgetState: () => ipcRenderer.invoke('calendar-widget-get-state') as Promise<IpcResponse<CalendarWidgetState>>,
-    showWidget: () => ipcRenderer.invoke('calendar-widget-show') as Promise<IpcResponse<CalendarWidgetState>>,
-    hideWidget: () => ipcRenderer.invoke('calendar-widget-hide') as Promise<IpcResponse<CalendarWidgetState>>,
-    toggleWidget: () => ipcRenderer.invoke('calendar-widget-toggle') as Promise<IpcResponse<CalendarWidgetState>>,
+    getWidgetState: () =>
+      ipcRenderer.invoke('calendar-widget-get-state') as Promise<IpcResponse<CalendarWidgetState>>,
+    showWidget: () =>
+      ipcRenderer.invoke('calendar-widget-show') as Promise<IpcResponse<CalendarWidgetState>>,
+    hideWidget: () =>
+      ipcRenderer.invoke('calendar-widget-hide') as Promise<IpcResponse<CalendarWidgetState>>,
+    toggleWidget: () =>
+      ipcRenderer.invoke('calendar-widget-toggle') as Promise<IpcResponse<CalendarWidgetState>>,
     setWidgetBounds: (bounds: CalendarWidgetBounds) => {
-      return ipcRenderer.invoke('calendar-widget-set-bounds', bounds) as Promise<IpcResponse<CalendarWidgetState>>
+      return ipcRenderer.invoke('calendar-widget-set-bounds', bounds) as Promise<
+        IpcResponse<CalendarWidgetState>
+      >
     },
     setWidgetAlwaysOnTop: (alwaysOnTop: boolean) => {
-      return ipcRenderer.invoke('calendar-widget-set-always-on-top', alwaysOnTop) as Promise<IpcResponse<CalendarWidgetState>>
+      return ipcRenderer.invoke('calendar-widget-set-always-on-top', alwaysOnTop) as Promise<
+        IpcResponse<CalendarWidgetState>
+      >
     },
     setWidgetBackgroundMode: (mode: CalendarWidgetBackgroundMode) => {
-      return ipcRenderer.invoke('calendar-widget-set-background-mode', mode) as Promise<IpcResponse<CalendarWidgetState>>
+      return ipcRenderer.invoke('calendar-widget-set-background-mode', mode) as Promise<
+        IpcResponse<CalendarWidgetState>
+      >
     },
     setWidgetGlassSettings: (settings: CalendarWidgetGlassSettings) => {
-      return ipcRenderer.invoke('calendar-widget-set-glass-settings', settings) as Promise<IpcResponse<CalendarWidgetState>>
+      return ipcRenderer.invoke('calendar-widget-set-glass-settings', settings) as Promise<
+        IpcResponse<CalendarWidgetState>
+      >
     },
     replaceEvents: (events: CalendarEvent[]) => {
-      return ipcRenderer.invoke('calendar-events-replace', events) as Promise<IpcResponse<CalendarEvent[]>>
+      return ipcRenderer.invoke('calendar-events-replace', events) as Promise<
+        IpcResponse<CalendarEvent[]>
+      >
     },
-    onEventsUpdated: (callback: (events: CalendarEvent[]) => void) => onChannel('calendar-events-updated', callback)
+    onEventsUpdated: (callback: (events: CalendarEvent[]) => void) =>
+      onChannel('calendar-events-updated', callback)
   }
 
   const screenOverlayAPI = {
-    start: (mode: ScreenOverlayMode = 'translate') => ipcRenderer.invoke('screen-overlay-start', mode),
+    start: (mode: ScreenOverlayMode = 'translate') =>
+      ipcRenderer.invoke('screen-overlay-start', mode),
     close: () => ipcRenderer.invoke('screen-overlay-close'),
     notifyReady: () => ipcRenderer.send('screen-overlay:ready'),
-    onScreenshot: (callback: (dataUrl: string) => void) => onChannel('screen-overlay:screenshot', callback),
+    onScreenshot: (callback: (dataUrl: string) => void) =>
+      onChannel('screen-overlay:screenshot', callback),
     onSessionStart: (callback: (payload: ScreenOverlaySessionStartPayload) => void) => {
       return onChannel('screen-overlay:session-start', callback)
     }
@@ -305,10 +356,13 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
 
   const screenshotAPI = {
     getSettings: () => ipcRenderer.invoke('screenshot-settings-get'),
-    setSettings: (settings: { savePath: string; autoSave: boolean }) => ipcRenderer.invoke('screenshot-settings-set', settings),
+    setSettings: (settings: { savePath: string; autoSave: boolean }) =>
+      ipcRenderer.invoke('screenshot-settings-set', settings),
     selectDirectory: () => ipcRenderer.invoke('select-directory'),
-    capture: (bounds: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke('screenshot-capture', bounds),
-    saveImage: (dataUrl: string, customPath?: string) => ipcRenderer.invoke('save-image', dataUrl, customPath),
+    capture: (bounds: { x: number; y: number; width: number; height: number }) =>
+      ipcRenderer.invoke('screenshot-capture', bounds),
+    saveImage: (dataUrl: string, customPath?: string) =>
+      ipcRenderer.invoke('save-image', dataUrl, customPath),
     copyToClipboard: (dataUrl: string) => ipcRenderer.invoke('copy-to-clipboard-image', dataUrl),
     getHotkey: () => ipcRenderer.invoke('screenshot-hotkey-get'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('screenshot-hotkey-set', hotkey),
@@ -320,7 +374,8 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       return ipcRenderer.invoke('screenshot-selection-close', bounds)
     },
     onTrigger: (callback: () => void) => onChannel('super-screenshot-trigger', callback),
-    onSelectionResult: (callback: (bounds: any) => void) => onChannel('screenshot-selection-result', callback),
+    onSelectionResult: (callback: (bounds: any) => void) =>
+      onChannel('screenshot-selection-result', callback),
     onSelectionSession: (callback: (payload: ScreenshotSelectionSessionPayload) => void) => {
       return onChannel('screenshot-selection:session-start', callback)
     }
@@ -331,7 +386,8 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     confirm: (data: any) => ipcRenderer.send('color-picker:confirm-pick', data),
     cancel: () => ipcRenderer.send('color-picker:cancel-pick'),
     notifyReady: () => ipcRenderer.send('color-picker:overlay-ready'),
-    onScreenshot: (callback: (dataUrl: string) => void) => onChannel('color-picker:screenshot', callback)
+    onScreenshot: (callback: (dataUrl: string) => void) =>
+      onChannel('color-picker:screenshot', callback)
   }
 
   const networkAPI = {
@@ -346,14 +402,35 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     setConfig: (config: LocalProxyConfig) => ipcRenderer.invoke('local-proxy:set-config', config),
     disable: () => ipcRenderer.invoke('local-proxy:disable'),
     openSystemSettings: () => ipcRenderer.invoke('local-proxy:open-system-settings'),
-    doctorScan: (target: string) => ipcRenderer.invoke('local-proxy:doctor-scan', target) as Promise<IpcResponse<ProxyDoctorSnapshot>>,
-    doctorProbe: (target: string) => ipcRenderer.invoke('local-proxy:doctor-probe', target) as Promise<IpcResponse<ProxyDoctorProbeResult>>,
-    doctorApplyAll: (request: ProxyDoctorApplyRequest) => {
-      return ipcRenderer.invoke('local-proxy:doctor-apply-all', request) as Promise<IpcResponse<ProxyDoctorSnapshot>>
+    doctorScan: (target: string) =>
+      ipcRenderer.invoke('local-proxy:doctor-scan', target) as Promise<
+        IpcResponse<ProxyDoctorSnapshot>
+      >,
+    doctorProbe: (target: string) =>
+      ipcRenderer.invoke('local-proxy:doctor-probe', target) as Promise<
+        IpcResponse<ProxyDoctorProbeResult>
+      >,
+    launcherSelectExecutable: () => {
+      return ipcRenderer.invoke('local-proxy:launcher-select-executable') as Promise<
+        IpcResponse<{ canceled: boolean; filePath: string | null }>
+      >
     },
-    doctorClearAll: () => ipcRenderer.invoke('local-proxy:doctor-clear-all') as Promise<IpcResponse>,
+    doctorLaunchApp: (request: ProxyDoctorLaunchRequest) => {
+      return ipcRenderer.invoke('local-proxy:doctor-launch-app', request) as Promise<IpcResponse>
+    },
+    doctorApplyAll: (request: ProxyDoctorApplyRequest) => {
+      return ipcRenderer.invoke('local-proxy:doctor-apply-all', request) as Promise<
+        IpcResponse<ProxyDoctorSnapshot>
+      >
+    },
+    doctorClearAll: () =>
+      ipcRenderer.invoke('local-proxy:doctor-clear-all') as Promise<IpcResponse>,
     doctorFixLayer: (layerId: ProxyDoctorLayerId, target: string, bypass: string[]) => {
-      return ipcRenderer.invoke('local-proxy:doctor-fix-layer', { layerId, target, bypass }) as Promise<IpcResponse>
+      return ipcRenderer.invoke('local-proxy:doctor-fix-layer', {
+        layerId,
+        target,
+        bypass
+      }) as Promise<IpcResponse>
     },
     doctorClearLayer: (layerId: ProxyDoctorLayerId) => {
       return ipcRenderer.invoke('local-proxy:doctor-clear-layer', layerId) as Promise<IpcResponse>
@@ -366,7 +443,8 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     setDefault: (name: string) => ipcRenderer.invoke('wsl:set-default', name),
     terminate: (name: string) => ipcRenderer.invoke('wsl:terminate', name),
     shutdownAll: () => ipcRenderer.invoke('wsl:shutdown-all'),
-    createBackup: (name: string, format: WslBackupFormat) => ipcRenderer.invoke('wsl:create-backup', name, format),
+    createBackup: (name: string, format: WslBackupFormat) =>
+      ipcRenderer.invoke('wsl:create-backup', name, format),
     deleteBackup: (id: string) => ipcRenderer.invoke('wsl:delete-backup', id),
     restoreBackup: (id: string, mode: WslRestoreMode, targetName?: string) => {
       return ipcRenderer.invoke('wsl:restore-backup', id, mode, targetName)
@@ -377,13 +455,19 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
 
   const translateAPI = {
     translateImage: (base64Image: string, mode: ScreenOverlayMode = 'translate') => {
-      return ipcRenderer.invoke('translate:image', base64Image, mode) as Promise<IpcResponse<ScreenOverlayLineResult[]>>
+      return ipcRenderer.invoke('translate:image', base64Image, mode) as Promise<
+        IpcResponse<ScreenOverlayLineResult[]>
+      >
     }
   }
 
   const taskbarAppearanceAPI = {
     getStatus: () => ipcRenderer.invoke('taskbar-appearance-get-status'),
-    applyPreset: (input: { preset: TaskbarAppearancePreset; intensity: number; tintHex: string }) => {
+    applyPreset: (input: {
+      preset: TaskbarAppearancePreset
+      intensity: number
+      tintHex: string
+    }) => {
       return ipcRenderer.invoke('taskbar-appearance-apply-preset', input)
     },
     restoreDefault: () => ipcRenderer.invoke('taskbar-appearance-restore-default')
@@ -404,11 +488,19 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     install: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-install', id),
     update: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-update', id),
     updateAll: () => ipcRenderer.invoke('dev-environment-update-all'),
-    openRelatedTool: (id: DevEnvironmentId) => ipcRenderer.invoke('dev-environment-open-related-tool', id),
-    onLog: (callback: (data: { type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'; message: string }) => void) => {
+    openRelatedTool: (id: DevEnvironmentId) =>
+      ipcRenderer.invoke('dev-environment-open-related-tool', id),
+    onLog: (
+      callback: (data: {
+        type: 'stdout' | 'stderr' | 'info' | 'error' | 'success'
+        message: string
+      }) => void
+    ) => {
       return onChannel('dev-environment-log', callback)
     },
-    onProgress: (callback: (data: { current: number; total: number; currentName: string }) => void) => {
+    onProgress: (
+      callback: (data: { current: number; total: number; currentName: string }) => void
+    ) => {
       return onChannel('dev-environment-progress', callback)
     },
     onComplete: (callback: (data: { success: boolean; message: string }) => void) => {
@@ -417,17 +509,34 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
   }
 
   const spaceCleanupAPI = {
-    chooseRoot: () => ipcRenderer.invoke('space-cleanup-choose-root') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>,
-    startScan: (rootPath: string) => ipcRenderer.invoke('space-cleanup-start-scan', rootPath) as Promise<IpcResponse<SpaceCleanupSession>>,
-    cancelScan: () => ipcRenderer.invoke('space-cleanup-cancel-scan') as Promise<IpcResponse<SpaceCleanupSession>>,
-    getSession: () => ipcRenderer.invoke('space-cleanup-get-session') as Promise<IpcResponse<SpaceCleanupSession>>,
-    scanDirectoryBreakdown: (targetPath: string) => ipcRenderer.invoke('space-cleanup-scan-directory-breakdown', targetPath) as Promise<IpcResponse<SpaceCleanupNode>>,
-    openPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-open-path', targetPath) as Promise<IpcResponse>,
-    copyPath: (targetPath: string) => ipcRenderer.invoke('space-cleanup-copy-path', targetPath) as Promise<IpcResponse>,
-    deleteToTrash: (targetPath: string) => ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath) as Promise<IpcResponse>,
-    onProgress: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-progress', callback),
-    onComplete: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-complete', callback),
-    onError: (callback: (session: SpaceCleanupSession) => void) => onChannel('space-cleanup-error', callback)
+    chooseRoot: () =>
+      ipcRenderer.invoke('space-cleanup-choose-root') as Promise<
+        IpcResponse<{ canceled: boolean; path: string | null }>
+      >,
+    startScan: (rootPath: string) =>
+      ipcRenderer.invoke('space-cleanup-start-scan', rootPath) as Promise<
+        IpcResponse<SpaceCleanupSession>
+      >,
+    cancelScan: () =>
+      ipcRenderer.invoke('space-cleanup-cancel-scan') as Promise<IpcResponse<SpaceCleanupSession>>,
+    getSession: () =>
+      ipcRenderer.invoke('space-cleanup-get-session') as Promise<IpcResponse<SpaceCleanupSession>>,
+    scanDirectoryBreakdown: (targetPath: string) =>
+      ipcRenderer.invoke('space-cleanup-scan-directory-breakdown', targetPath) as Promise<
+        IpcResponse<SpaceCleanupNode>
+      >,
+    openPath: (targetPath: string) =>
+      ipcRenderer.invoke('space-cleanup-open-path', targetPath) as Promise<IpcResponse>,
+    copyPath: (targetPath: string) =>
+      ipcRenderer.invoke('space-cleanup-copy-path', targetPath) as Promise<IpcResponse>,
+    deleteToTrash: (targetPath: string) =>
+      ipcRenderer.invoke('space-cleanup-delete-to-trash', targetPath) as Promise<IpcResponse>,
+    onProgress: (callback: (session: SpaceCleanupSession) => void) =>
+      onChannel('space-cleanup-progress', callback),
+    onComplete: (callback: (session: SpaceCleanupSession) => void) =>
+      onChannel('space-cleanup-complete', callback),
+    onError: (callback: (session: SpaceCleanupSession) => void) =>
+      onChannel('space-cleanup-error', callback)
   }
 
   const updatesAPI = {
@@ -435,104 +544,169 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     checkForUpdates: () => ipcRenderer.invoke('updates-check'),
     downloadUpdate: () => ipcRenderer.invoke('updates-download'),
     quitAndInstall: () => ipcRenderer.invoke('updates-quit-and-install'),
-    onStateChanged: (callback: (state: UpdateState) => void) => onChannel('updates-state-changed', callback)
+    onStateChanged: (callback: (state: UpdateState) => void) =>
+      onChannel('updates-state-changed', callback)
   }
 
   const downloadOrganizerAPI = {
-    getState: () => ipcRenderer.invoke('download-organizer-get-state') as Promise<IpcResponse<DownloadOrganizerState>>,
+    getState: () =>
+      ipcRenderer.invoke('download-organizer-get-state') as Promise<
+        IpcResponse<DownloadOrganizerState>
+      >,
     updateConfig: (updates: Partial<DownloadOrganizerConfig>) => {
-      return ipcRenderer.invoke('download-organizer-update-config', updates) as Promise<IpcResponse<DownloadOrganizerState>>
+      return ipcRenderer.invoke('download-organizer-update-config', updates) as Promise<
+        IpcResponse<DownloadOrganizerState>
+      >
     },
-    preview: () => ipcRenderer.invoke('download-organizer-preview') as Promise<IpcResponse<DownloadOrganizerState>>,
-    applyPreview: () => ipcRenderer.invoke('download-organizer-apply-preview') as Promise<IpcResponse<DownloadOrganizerState>>,
+    preview: () =>
+      ipcRenderer.invoke('download-organizer-preview') as Promise<
+        IpcResponse<DownloadOrganizerState>
+      >,
+    applyPreview: () =>
+      ipcRenderer.invoke('download-organizer-apply-preview') as Promise<
+        IpcResponse<DownloadOrganizerState>
+      >,
     toggleWatch: (enabled: boolean) => {
-      return ipcRenderer.invoke('download-organizer-toggle-watch', enabled) as Promise<IpcResponse<DownloadOrganizerState>>
+      return ipcRenderer.invoke('download-organizer-toggle-watch', enabled) as Promise<
+        IpcResponse<DownloadOrganizerState>
+      >
     },
     chooseWatchPath: () => {
-      return ipcRenderer.invoke('download-organizer-choose-watch-path') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+      return ipcRenderer.invoke('download-organizer-choose-watch-path') as Promise<
+        IpcResponse<{ canceled: boolean; path: string | null }>
+      >
     },
     chooseDestinationRoot: () => {
-      return ipcRenderer.invoke('download-organizer-choose-destination-root') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+      return ipcRenderer.invoke('download-organizer-choose-destination-root') as Promise<
+        IpcResponse<{ canceled: boolean; path: string | null }>
+      >
     },
-    onStateChanged: (callback: (state: DownloadOrganizerState) => void) => onChannel('download-organizer-state-changed', callback)
+    onStateChanged: (callback: (state: DownloadOrganizerState) => void) =>
+      onChannel('download-organizer-state-changed', callback)
   }
 
   const modelDownloadAPI = {
-    getState: () => ipcRenderer.invoke('model-download-get-state') as Promise<IpcResponse<ModelDownloadState>>,
+    getState: () =>
+      ipcRenderer.invoke('model-download-get-state') as Promise<IpcResponse<ModelDownloadState>>,
     startDownload: (request: ModelDownloadRequest) => {
-      return ipcRenderer.invoke('model-download-start', request) as Promise<IpcResponse<ModelDownloadState>>
+      return ipcRenderer.invoke('model-download-start', request) as Promise<
+        IpcResponse<ModelDownloadState>
+      >
     },
-    cancelDownload: () => ipcRenderer.invoke('model-download-cancel') as Promise<IpcResponse<ModelDownloadState>>,
+    cancelDownload: () =>
+      ipcRenderer.invoke('model-download-cancel') as Promise<IpcResponse<ModelDownloadState>>,
     chooseSavePath: () => {
-      return ipcRenderer.invoke('model-download-choose-save-path') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+      return ipcRenderer.invoke('model-download-choose-save-path') as Promise<
+        IpcResponse<{ canceled: boolean; path: string | null }>
+      >
     },
     openPath: (targetPath?: string) => {
-      return ipcRenderer.invoke('model-download-open-path', targetPath) as Promise<IpcResponse<{ targetPath: string }>>
+      return ipcRenderer.invoke('model-download-open-path', targetPath) as Promise<
+        IpcResponse<{ targetPath: string }>
+      >
     },
-    onStateChanged: (callback: (state: ModelDownloadState) => void) => onChannel('model-download-state-changed', callback)
+    onStateChanged: (callback: (state: ModelDownloadState) => void) =>
+      onChannel('model-download-state-changed', callback)
   }
 
   const tableOcrAPI = {
-    getStatus: () => ipcRenderer.invoke('table-ocr-get-status') as Promise<IpcResponse<TableOcrRuntimeStatus>>,
+    getStatus: () =>
+      ipcRenderer.invoke('table-ocr-get-status') as Promise<IpcResponse<TableOcrRuntimeStatus>>,
     prepareRuntime: () => {
-      return ipcRenderer.invoke('table-ocr-prepare-runtime') as Promise<IpcResponse<TableOcrRuntimeStatus>>
+      return ipcRenderer.invoke('table-ocr-prepare-runtime') as Promise<
+        IpcResponse<TableOcrRuntimeStatus>
+      >
     },
     cancelPrepare: () => {
-      return ipcRenderer.invoke('table-ocr-cancel-prepare') as Promise<IpcResponse<TableOcrRuntimeStatus>>
+      return ipcRenderer.invoke('table-ocr-cancel-prepare') as Promise<
+        IpcResponse<TableOcrRuntimeStatus>
+      >
     },
     recognize: (request: TableOcrRecognizeRequest) => {
-      return ipcRenderer.invoke('table-ocr-recognize', request) as Promise<IpcResponse<TableOcrRecognizeResult>>
+      return ipcRenderer.invoke('table-ocr-recognize', request) as Promise<
+        IpcResponse<TableOcrRecognizeResult>
+      >
     },
     chooseImage: () => {
-      return ipcRenderer.invoke('table-ocr-choose-image') as Promise<IpcResponse<TableOcrChoosePathResult>>
+      return ipcRenderer.invoke('table-ocr-choose-image') as Promise<
+        IpcResponse<TableOcrChoosePathResult>
+      >
     },
     chooseOutputDirectory: () => {
-      return ipcRenderer.invoke('table-ocr-choose-output-dir') as Promise<IpcResponse<TableOcrChoosePathResult>>
+      return ipcRenderer.invoke('table-ocr-choose-output-dir') as Promise<
+        IpcResponse<TableOcrChoosePathResult>
+      >
     },
     openPath: (targetPath: string) => {
-      return ipcRenderer.invoke('table-ocr-open-path', targetPath) as Promise<IpcResponse<{ targetPath: string }>>
+      return ipcRenderer.invoke('table-ocr-open-path', targetPath) as Promise<
+        IpcResponse<{ targetPath: string }>
+      >
     },
-    onStateChanged: (callback: (state: TableOcrRuntimeStatus) => void) => onChannel('table-ocr-state-changed', callback)
+    onStateChanged: (callback: (state: TableOcrRuntimeStatus) => void) =>
+      onChannel('table-ocr-state-changed', callback)
   }
 
   const bilibiliDownloaderAPI = {
-    getSession: () => ipcRenderer.invoke('bilibili-downloader-get-session') as Promise<IpcResponse<BilibiliLoginSession>>,
+    getSession: () =>
+      ipcRenderer.invoke('bilibili-downloader-get-session') as Promise<
+        IpcResponse<BilibiliLoginSession>
+      >,
     startLogin: () => {
-      return ipcRenderer.invoke('bilibili-downloader-start-login') as Promise<IpcResponse<{ qrUrl: string; authCode: string }>>
+      return ipcRenderer.invoke('bilibili-downloader-start-login') as Promise<
+        IpcResponse<{ qrUrl: string; authCode: string }>
+      >
     },
     pollLogin: () => {
-      return ipcRenderer.invoke('bilibili-downloader-poll-login') as Promise<IpcResponse<{
-        status: 'pending' | 'scanned' | 'confirmed'
-        loginSession?: BilibiliLoginSession
-      }>>
+      return ipcRenderer.invoke('bilibili-downloader-poll-login') as Promise<
+        IpcResponse<{
+          status: 'pending' | 'scanned' | 'confirmed'
+          loginSession?: BilibiliLoginSession
+        }>
+      >
     },
     logout: () => ipcRenderer.invoke('bilibili-downloader-logout') as Promise<IpcResponse>,
     parseLink: (link: string) => {
-      return ipcRenderer.invoke('bilibili-downloader-parse-link', { link }) as Promise<IpcResponse<BilibiliParsedLink>>
+      return ipcRenderer.invoke('bilibili-downloader-parse-link', { link }) as Promise<
+        IpcResponse<BilibiliParsedLink>
+      >
     },
     loadStreamOptions: (kind: BilibiliLinkKind, itemId: string) => {
-      return ipcRenderer.invoke('bilibili-downloader-load-stream-options', { kind, itemId }) as Promise<IpcResponse<{
-        itemId: string
-        qnOptions: Array<{
-          qn: number
-          label: string
-          selected: boolean
-          available: boolean
+      return ipcRenderer.invoke('bilibili-downloader-load-stream-options', {
+        kind,
+        itemId
+      }) as Promise<
+        IpcResponse<{
+          itemId: string
+          qnOptions: Array<{
+            qn: number
+            label: string
+            selected: boolean
+            available: boolean
+          }>
+          summary: BilibiliStreamOptionSummary
         }>
-        summary: BilibiliStreamOptionSummary
-      }>>
+      >
     },
     startDownload: (exportMode: BilibiliExportMode, outputDirectory?: string) => {
-      return ipcRenderer.invoke('bilibili-downloader-start-download', { exportMode, outputDirectory }) as Promise<IpcResponse<{
-        outputPaths: string[]
-        tempDirectory: string
-      }>>
+      return ipcRenderer.invoke('bilibili-downloader-start-download', {
+        exportMode,
+        outputDirectory
+      }) as Promise<
+        IpcResponse<{
+          outputPaths: string[]
+          tempDirectory: string
+        }>
+      >
     },
-    cancelDownload: () => ipcRenderer.invoke('bilibili-downloader-cancel-download') as Promise<IpcResponse>,
+    cancelDownload: () =>
+      ipcRenderer.invoke('bilibili-downloader-cancel-download') as Promise<IpcResponse>,
     selectOutputDirectory: () => {
-      return ipcRenderer.invoke('bilibili-downloader-select-output-directory') as Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
+      return ipcRenderer.invoke('bilibili-downloader-select-output-directory') as Promise<
+        IpcResponse<{ canceled: boolean; path: string | null }>
+      >
     },
-    onStateChanged: (callback: (state: BilibiliDownloaderState) => void) => onChannel('bilibili-downloader-state-changed', callback)
+    onStateChanged: (callback: (state: BilibiliDownloaderState) => void) =>
+      onChannel('bilibili-downloader-state-changed', callback)
   }
 
   return {
@@ -571,4 +745,3 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     wsl: wslAPI
   }
 }
-

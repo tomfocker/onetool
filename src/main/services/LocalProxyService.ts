@@ -1,4 +1,6 @@
 import net from 'net'
+import fs from 'fs'
+import path from 'path'
 import { spawn } from 'child_process'
 import { execCommand, execPowerShellEncoded } from '../utils/processUtils'
 import { logger } from '../utils/logger'
@@ -10,6 +12,8 @@ import {
   PROXY_DOCTOR_PROXY_KEYS,
   ProxyDoctorLayerId,
   ProxyDoctorLayerStatus,
+  ProxyDoctorLaunchRequest,
+  ProxyDoctorLaunchResult,
   ProxyDoctorProbeCheck,
   ProxyDoctorProbeResult,
   ProxyDoctorSnapshot,
@@ -41,6 +45,7 @@ type LocalProxyServiceDependencies = {
     target: ProxyDoctorTarget,
     timeoutMs?: number
   ) => Promise<ProxyDoctorProbeCheck>
+  pathExists: (targetPath: string) => boolean
   processEnv: NodeJS.ProcessEnv
   spawn: typeof spawn
 }
@@ -222,12 +227,23 @@ function probeHttpProxyRequest(
   })
 }
 
+function normalizeLauncherNoProxy(bypass: string[]): string {
+  const entries = bypass
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .flatMap((item) => (item === '<local>' ? ['localhost', '127.0.0.1', '::1'] : [item]))
+
+  const uniqueEntries = [...new Set(entries)]
+  return uniqueEntries.length > 0 ? uniqueEntries.join(',') : PROXY_DOCTOR_DEFAULT_NO_PROXY
+}
+
 const defaultDeps: LocalProxyServiceDependencies = {
   execPowerShellEncoded,
   execCommand,
   connectToPort: testPortConnection,
   measurePortLatency,
   probeProxyRequest: probeHttpProxyRequest,
+  pathExists: fs.existsSync,
   processEnv: process.env,
   spawn
 }
@@ -625,6 +641,81 @@ Write-Output 'ok'
   private async clearNpmProxy() {
     await this.execMutatingCommand('npm config delete proxy')
     await this.execMutatingCommand('npm config delete https-proxy')
+  }
+
+  private buildLauncherEnv(target: ProxyDoctorTarget, bypass: string[]): NodeJS.ProcessEnv {
+    const env: NodeJS.ProcessEnv = { ...this.deps.processEnv }
+    const noProxy = normalizeLauncherNoProxy(bypass)
+
+    for (const key of PROXY_DOCTOR_PROXY_KEYS) {
+      env[key] = target.envValue
+    }
+    for (const key of PROXY_DOCTOR_NO_PROXY_KEYS) {
+      env[key] = noProxy
+    }
+
+    return env
+  }
+
+  private normalizeExecutablePath(executablePath: string): string {
+    const trimmed = executablePath.trim()
+    if (!trimmed) {
+      throw new Error('请先选择要启动的程序')
+    }
+    if (!path.isAbsolute(trimmed)) {
+      throw new Error('请选择完整的程序路径')
+    }
+    const extension = path.extname(trimmed).toLowerCase()
+    if (extension !== '.exe' && extension !== '.com') {
+      throw new Error('请选择 .exe 或 .com 程序')
+    }
+    if (!this.deps.pathExists(trimmed)) {
+      throw new Error('程序路径不存在')
+    }
+
+    return trimmed
+  }
+
+  async doctorLaunchApp(
+    request: ProxyDoctorLaunchRequest
+  ): Promise<IpcResponse<ProxyDoctorLaunchResult>> {
+    try {
+      const executablePath = this.normalizeExecutablePath(request.executablePath || '')
+      const target = normalizeProxyDoctorTarget(request.target)
+      const bypass = request.bypass || []
+      const args = Array.isArray(request.args)
+        ? request.args.filter((arg): arg is string => typeof arg === 'string')
+        : []
+
+      this.validateBypassEntries(bypass)
+
+      const child = this.deps.spawn(executablePath, args, {
+        cwd: path.dirname(executablePath),
+        detached: true,
+        env: this.buildLauncherEnv(target, bypass),
+        stdio: 'ignore',
+        windowsHide: false
+      })
+
+      if (!child.pid) {
+        throw new Error('程序启动后没有返回进程编号')
+      }
+
+      child.unref()
+
+      return {
+        success: true,
+        data: {
+          pid: child.pid,
+          executablePath,
+          proxyUrl: target.envValue,
+          launchedAt: new Date().toISOString()
+        }
+      }
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorLaunchApp failed', error)
+      return { success: false, error: (error as Error).message }
+    }
   }
 
   async getStatus(): Promise<IpcResponse<LocalProxyStatus>> {

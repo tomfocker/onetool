@@ -1,5 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { Copy, ExternalLink, Gauge, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
+import {
+  Copy,
+  ExternalLink,
+  FolderOpen,
+  Gauge,
+  Power,
+  RefreshCw,
+  Rocket,
+  ShieldCheck,
+  Wrench
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -119,6 +129,8 @@ export default function LocalProxyManagerTool() {
   const [bypass, setBypass] = useState(DEFAULT_PROXY_DOCTOR_BYPASS.join(';'))
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [log, setLog] = useState<string[]>([])
+  const [launcherPath, setLauncherPath] = useState('')
+  const [launcherLoading, setLauncherLoading] = useState(false)
   const [probeResult, setProbeResult] = useState<{
     label: string
     input: string
@@ -220,6 +232,112 @@ export default function LocalProxyManagerTool() {
     },
     [appendLog, showNotification]
   )
+
+  const handleChooseLauncherApp = useCallback(async () => {
+    const proxyApi = window.electron?.localProxy as
+      | (typeof window.electron.localProxy & {
+          launcherSelectExecutable?: () => Promise<{
+            success: boolean
+            data?: { canceled: boolean; filePath: string | null }
+            error?: string
+          }>
+        })
+      | undefined
+
+    if (typeof proxyApi?.launcherSelectExecutable !== 'function') {
+      showNotification({
+        type: 'warning',
+        title: '需要重启预览',
+        message: '当前预览窗口还没有加载代理启动器接口，请重启 OneTool 预览后再试。'
+      })
+      return
+    }
+
+    const result = await proxyApi.launcherSelectExecutable()
+    if (!result.success) {
+      showNotification({
+        type: 'error',
+        title: '选择程序失败',
+        message: result.error || '无法打开程序选择窗口。'
+      })
+      return
+    }
+
+    if (result.data && !result.data.canceled && result.data.filePath) {
+      setLauncherPath(result.data.filePath)
+    }
+  }, [showNotification])
+
+  const handleLaunchAppWithProxy = useCallback(async () => {
+    const executablePath = launcherPath.trim()
+    if (!executablePath) {
+      showNotification({
+        type: 'warning',
+        title: '还没有选择程序',
+        message: '请先选择要通过代理启动的软件。'
+      })
+      return
+    }
+
+    let request
+    try {
+      request = createProxyDoctorApplyRequest(target, bypass)
+    } catch (error) {
+      showNotification({
+        type: 'warning',
+        title: '目标代理无效',
+        message: error instanceof Error ? error.message : '请检查代理地址。'
+      })
+      return
+    }
+
+    const proxyApi = window.electron?.localProxy as
+      | (typeof window.electron.localProxy & {
+          doctorLaunchApp?: (input: {
+            executablePath: string
+            target: string
+            bypass: string[]
+          }) => Promise<{
+            success: boolean
+            data?: { pid: number; proxyUrl: string }
+            error?: string
+          }>
+        })
+      | undefined
+
+    if (typeof proxyApi?.doctorLaunchApp !== 'function') {
+      showNotification({
+        type: 'warning',
+        title: '需要重启预览',
+        message: '当前预览窗口还没有加载代理启动器接口，请重启 OneTool 预览后再试。'
+      })
+      return
+    }
+
+    setLauncherLoading(true)
+    const result = await proxyApi.doctorLaunchApp({
+      executablePath,
+      target: request.target,
+      bypass: request.bypass
+    })
+    setLauncherLoading(false)
+
+    if (result.success && result.data) {
+      appendLog(`启动完成: ${executablePath} -> ${result.data.proxyUrl}`)
+      showNotification({
+        type: 'success',
+        title: '已通过代理启动',
+        message: `新进程 PID ${result.data.pid} 已注入代理环境。`
+      })
+      return
+    }
+
+    showNotification({
+      type: 'error',
+      title: '代理启动失败',
+      message: result.error || '未能启动该程序。'
+    })
+  }, [appendLog, bypass, launcherPath, showNotification, target])
 
   const handleOpenSettings = async () => {
     const result = await window.electron.localProxy.openSystemSettings()
@@ -566,6 +684,52 @@ export default function LocalProxyManagerTool() {
               清除开发代理
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="max-w-full overflow-hidden border-none">
+        <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div className="space-y-2">
+            <CardDescription>代理启动器</CardDescription>
+            <CardTitle className="text-xl font-black">启动单个软件走代理</CardTitle>
+            <p className="max-w-3xl text-sm font-bold text-muted-foreground">
+              只影响由 OneTool 启动的新进程，会临时注入 HTTP_PROXY、HTTPS_PROXY 和
+              ALL_PROXY。有些软件可能会忽略这些环境变量。
+            </p>
+          </div>
+          <Badge
+            variant="outline"
+            className="max-w-full truncate px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]"
+          >
+            当前代理 {target}
+          </Badge>
+        </CardHeader>
+        <CardContent className="grid min-w-0 grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="grid min-w-0 grid-cols-1 gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+            <Input
+              value={launcherPath}
+              onChange={(event) => setLauncherPath(event.target.value)}
+              className="h-12 min-w-0 rounded-2xl font-bold"
+              placeholder="选择要启动的 .exe 程序"
+            />
+            <Button
+              variant="outline"
+              className="h-12 rounded-2xl px-4"
+              onClick={() => void handleChooseLauncherApp()}
+              disabled={launcherLoading}
+            >
+              <FolderOpen size={16} />
+              选择程序
+            </Button>
+          </div>
+          <Button
+            className="h-12 rounded-2xl bg-emerald-500 px-5 shadow-lg shadow-emerald-500/20 hover:bg-emerald-600"
+            onClick={() => void handleLaunchAppWithProxy()}
+            disabled={launcherLoading}
+          >
+            <Rocket size={16} className={cn(launcherLoading && 'animate-pulse')} />
+            {launcherLoading ? '启动中' : '用代理启动'}
+          </Button>
         </CardContent>
       </Card>
 
