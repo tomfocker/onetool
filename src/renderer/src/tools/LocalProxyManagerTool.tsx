@@ -53,6 +53,8 @@ export default function LocalProxyManagerTool() {
         const summary = getSummaryCopy(result.data.summary).title
         appendLog(`扫描完成: ${summary}`)
       } else {
+        setSnapshot(null)
+        appendLog(`扫描失败: ${result.error || '无法读取代理诊断信息。'}`)
         showNotification({
           type: 'error',
           title: '诊断失败',
@@ -69,7 +71,7 @@ export default function LocalProxyManagerTool() {
 
   useEffect(() => {
     void scan()
-  }, [])
+  }, [scan])
 
   const handleOpenSettings = async () => {
     const result = await window.electron.localProxy.openSystemSettings()
@@ -119,6 +121,7 @@ export default function LocalProxyManagerTool() {
       title: '修复失败',
       message: result.error || '未能完成开发代理修复。'
     })
+    await scan(true)
   }
 
   const handleClearAll = async () => {
@@ -146,6 +149,7 @@ export default function LocalProxyManagerTool() {
       title: '清理失败',
       message: result.error || '未能清除开发代理配置。'
     })
+    await scan(true)
   }
 
   const handleFixLayer = async (layer: ProxyDoctorLayerStatus) => {
@@ -181,6 +185,7 @@ export default function LocalProxyManagerTool() {
       title: '单层修复失败',
       message: result.error || `${layer.title} 未能修复。`
     })
+    await scan(true)
   }
 
   const handleClearLayer = async (layer: ProxyDoctorLayerStatus) => {
@@ -204,6 +209,7 @@ export default function LocalProxyManagerTool() {
       title: '单层清除失败',
       message: result.error || `${layer.title} 未能清除。`
     })
+    await scan(true)
   }
 
   const handleCopyReport = async () => {
