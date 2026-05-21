@@ -38,6 +38,7 @@ function loadLocalProxyServiceModule(overrides = {}) {
       __filename: sharedPath,
       console,
       process,
+      URL,
       Buffer,
       setTimeout,
       clearTimeout
@@ -81,6 +82,7 @@ function loadLocalProxyServiceModule(overrides = {}) {
     __filename: filePath,
     console,
     process: { ...process, env: processEnv },
+    URL,
     Buffer,
     setTimeout,
     clearTimeout
@@ -300,6 +302,164 @@ test('doctorScan accepts Windows fallback proxy server syntax', async () => {
   assert.equal(result.success, true)
   assert.equal(result.data.layers.find((layer) => layer.id === 'wininet').state, 'ok')
   assert.equal(result.data.layers.find((layer) => layer.id === 'winhttp').state, 'ok')
+})
+
+test('doctorApplyAll writes every managed proxy layer', async () => {
+  const powershellScripts = []
+  const commands = []
+  const targetServer = 'http=127.0.0.1:7897;https=127.0.0.1:7897'
+  const targetEnvValue = 'http://127.0.0.1:7897'
+  const winInetJson = {
+    enabled: true,
+    server: targetServer,
+    override: 'localhost;127.*',
+    autoConfigUrl: null
+  }
+  const envJson = {
+    HTTP_PROXY: targetEnvValue,
+    HTTPS_PROXY: targetEnvValue,
+    ALL_PROXY: targetEnvValue,
+    http_proxy: targetEnvValue,
+    https_proxy: targetEnvValue,
+    all_proxy: targetEnvValue
+  }
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      powershellScripts.push(script)
+      if (script.includes('Get-ItemProperty')) {
+        return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+      }
+
+      if (script.includes('GetEnvironmentVariable')) {
+        return `---LOCAL_PROXY_ENV_JSON_START---\n${JSON.stringify(envJson)}\n---LOCAL_PROXY_ENV_JSON_END---`
+      }
+
+      return 'ok'
+    },
+    execCommand: async (command) => {
+      commands.push(command)
+      if (command === 'netsh winhttp show proxy') {
+        return `Proxy Server(s) :  ${targetServer}\r\nBypass List     :  localhost;127.*`
+      }
+
+      if (command.includes('--get') || command.includes('get proxy') || command.includes('get https-proxy')) {
+        return targetEnvValue
+      }
+
+      return 'ok'
+    },
+    connectToPort: async () => true,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorApplyAll({ target: '7897', bypass: ['localhost', '127.*'] })
+
+  assert.equal(result.success, true)
+  assert.equal(
+    powershellScripts.some((script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')),
+    true
+  )
+  assert.equal(
+    powershellScripts.some((script) => script.includes("SetEnvironmentVariable('HTTP_PROXY', 'http://127.0.0.1:7897', 'User')")),
+    true
+  )
+  assert.equal(
+    commands.includes('netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="localhost;127.*"'),
+    true
+  )
+  assert.equal(commands.includes('git config --global http.proxy http://127.0.0.1:7897'), true)
+  assert.equal(commands.includes('npm config set proxy http://127.0.0.1:7897'), true)
+})
+
+test('doctorClearLayer clears only the selected layer', async () => {
+  const commands = []
+  const deps = {
+    execPowerShellEncoded: async () => 'ok',
+    execCommand: async (command) => {
+      commands.push(command)
+      return 'ok'
+    },
+    connectToPort: async () => false,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorClearLayer('git')
+
+  assert.equal(result.success, true)
+  assert.deepEqual(commands, [
+    'git config --global --unset http.proxy',
+    'git config --global --unset https.proxy'
+  ])
+})
+
+test('doctorFixLayer returns failure when Git apply command returns failure text', async () => {
+  const commands = []
+  const deps = {
+    execCommand: async (command) => {
+      commands.push(command)
+      if (command === 'git config --global http.proxy http://127.0.0.1:7897') {
+        return "'git' is not recognized as an internal or external command"
+      }
+
+      return 'ok'
+    },
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorFixLayer('git', '7897')
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /not recognized/)
+  assert.deepEqual(commands, ['git config --global http.proxy http://127.0.0.1:7897'])
+})
+
+test('doctorClearLayer treats absent Git proxy keys as already clear', async () => {
+  const commands = []
+  const deps = {
+    execCommand: async (command) => {
+      commands.push(command)
+      const absentKeyError = new Error(`Command failed: ${command}\n`)
+      absentKeyError.code = 5
+      absentKeyError.cmd = command
+      throw absentKeyError
+    },
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorClearLayer('git')
+
+  assert.equal(result.success, true)
+  assert.deepEqual(commands, [
+    'git config --global --unset http.proxy',
+    'git config --global --unset https.proxy'
+  ])
+})
+
+test('doctorFixLayer rejects unsafe WinHTTP bypass entries before running netsh set proxy', async () => {
+  const commands = []
+  const deps = {
+    execCommand: async (command) => {
+      commands.push(command)
+      return 'ok'
+    },
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorFixLayer('winhttp', '7897', ['local"host'])
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /bypass/i)
+  assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
 })
 
 test('disable returns a failure when the proxy disable script resolves empty output', async () => {

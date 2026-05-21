@@ -4,6 +4,7 @@ import { execCommand, execPowerShellEncoded } from '../utils/processUtils'
 import { logger } from '../utils/logger'
 import { IpcResponse, LocalProxyConfig, LocalProxyStatus, ProxyProtocol } from '../../shared/types'
 import {
+  PROXY_DOCTOR_DEFAULT_NO_PROXY,
   PROXY_DOCTOR_LAYER_DEFINITIONS,
   PROXY_DOCTOR_NO_PROXY_KEYS,
   PROXY_DOCTOR_PROXY_KEYS,
@@ -49,6 +50,20 @@ public static extern bool InternetSetOption(System.IntPtr hInternet, int dwOptio
 [WinInet.NativeMethods]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null
 [WinInet.NativeMethods]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null
 `
+}
+
+function commandOutputLooksFailed(output: string): boolean {
+  return /is not recognized|not found|fatal:|error:|错误|找不到|不是内部或外部命令|invalid|the syntax of this command is/i.test(output)
+}
+
+function isAbsentGitConfigError(error: unknown): boolean {
+  const maybeError = error as Error & { code?: unknown; cmd?: unknown }
+  if (maybeError?.code !== 5) {
+    return false
+  }
+
+  const commandText = `${typeof maybeError.cmd === 'string' ? maybeError.cmd : ''}\n${maybeError.message || ''}`
+  return /git config --global --unset (?:http\.proxy|https\.proxy)/.test(commandText)
 }
 
 function testPortConnection(host: string, port: number, timeoutMs = 2500): Promise<boolean> {
@@ -342,6 +357,84 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
     return this.makeLayer('codex', 'unavailable', '', '当前版本暂不扫描 Codex 子进程代理环境')
   }
 
+  private validateBypassEntries(bypass: string[]) {
+    const unsafe = bypass.find((item) => /["&|<>^`]/.test(item))
+    if (unsafe) {
+      throw new Error(`Invalid bypass entry: ${unsafe}`)
+    }
+  }
+
+  private async execMutatingCommand(command: string) {
+    const output = await this.deps.execCommand(command, 10000)
+    if (commandOutputLooksFailed(output)) {
+      throw new Error(output.trim())
+    }
+
+    return output
+  }
+
+  private async setWinHttpProxy(target: ProxyDoctorTarget, bypass: string[]) {
+    this.validateBypassEntries(bypass)
+    const bypassList = bypass.filter(Boolean).join(';')
+    return this.execMutatingCommand(`netsh winhttp set proxy proxy-server="${target.winInetServer}" bypass-list="${bypassList}"`)
+  }
+
+  private async resetWinHttpProxy() {
+    return this.execMutatingCommand('netsh winhttp reset proxy')
+  }
+
+  private async setUserProxyEnv(target: ProxyDoctorTarget) {
+    const script = `
+$ErrorActionPreference = 'Stop'
+${PROXY_DOCTOR_PROXY_KEYS.map((key) => `[System.Environment]::SetEnvironmentVariable('${key}', '${escapePowerShellString(target.envValue)}', 'User')`).join('\n')}
+${PROXY_DOCTOR_NO_PROXY_KEYS.map((key) => `[System.Environment]::SetEnvironmentVariable('${key}', '${PROXY_DOCTOR_DEFAULT_NO_PROXY}', 'User')`).join('\n')}
+Write-Output 'ok'
+`
+    return this.deps.execPowerShellEncoded(script)
+  }
+
+  private async clearUserProxyEnv() {
+    const names = [...PROXY_DOCTOR_PROXY_KEYS, ...PROXY_DOCTOR_NO_PROXY_KEYS]
+    const script = `
+$ErrorActionPreference = 'Stop'
+${names.map((key) => `[System.Environment]::SetEnvironmentVariable('${key}', $null, 'User')`).join('\n')}
+Write-Output 'ok'
+`
+    return this.deps.execPowerShellEncoded(script)
+  }
+
+  private async setGitProxy(target: ProxyDoctorTarget) {
+    await this.execMutatingCommand(`git config --global http.proxy ${target.envValue}`)
+    await this.execMutatingCommand(`git config --global https.proxy ${target.envValue}`)
+  }
+
+  private async clearGitProxy() {
+    await this.clearGitProxyKey('http.proxy')
+    await this.clearGitProxyKey('https.proxy')
+  }
+
+  private async clearGitProxyKey(key: 'http.proxy' | 'https.proxy') {
+    try {
+      await this.execMutatingCommand(`git config --global --unset ${key}`)
+    } catch (error) {
+      if (isAbsentGitConfigError(error)) {
+        return
+      }
+
+      throw error
+    }
+  }
+
+  private async setNpmProxy(target: ProxyDoctorTarget) {
+    await this.execMutatingCommand(`npm config set proxy ${target.envValue}`)
+    await this.execMutatingCommand(`npm config set https-proxy ${target.envValue}`)
+  }
+
+  private async clearNpmProxy() {
+    await this.execMutatingCommand('npm config delete proxy')
+    await this.execMutatingCommand('npm config delete https-proxy')
+  }
+
   async getStatus(): Promise<IpcResponse<LocalProxyStatus>> {
     try {
       const script = `
@@ -499,6 +592,103 @@ Write-Output 'ok'
       return { success: true, data: snapshot }
     } catch (error) {
       logger.error('[LocalProxyService] doctorScan failed', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  async doctorApplyAll(request: { target: string; bypass: string[] }): Promise<IpcResponse<ProxyDoctorSnapshot>> {
+    try {
+      const target = normalizeProxyDoctorTarget(request.target)
+      const bypass = request.bypass || []
+      const winInetResult = await this.setConfig({
+        host: target.host,
+        port: target.port,
+        protocol: target.protocol === 'socks5' ? 'socks5' : 'http',
+        bypass
+      })
+      if (!winInetResult.success) {
+        return { success: false, error: winInetResult.error }
+      }
+
+      await this.setWinHttpProxy(target, bypass)
+      await this.setUserProxyEnv(target)
+      await this.setGitProxy(target)
+      await this.setNpmProxy(target)
+
+      return this.doctorScan(target.url)
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorApplyAll failed', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  async doctorClearAll(): Promise<IpcResponse> {
+    try {
+      const winInetResult = await this.disable()
+      if (!winInetResult.success) {
+        return { success: false, error: winInetResult.error }
+      }
+
+      await this.resetWinHttpProxy()
+      await this.clearUserProxyEnv()
+      await this.clearGitProxy()
+      await this.clearNpmProxy()
+
+      return { success: true }
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorClearAll failed', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  async doctorFixLayer(layerId: ProxyDoctorLayerId, targetInput: string, bypass: string[] = []): Promise<IpcResponse> {
+    try {
+      const target = normalizeProxyDoctorTarget(targetInput)
+      if (layerId === 'wininet') {
+        return this.setConfig({
+          host: target.host,
+          port: target.port,
+          protocol: target.protocol === 'socks5' ? 'socks5' : 'http',
+          bypass
+        })
+      }
+
+      if (layerId === 'winhttp') {
+        await this.setWinHttpProxy(target, bypass)
+      } else if (layerId === 'env') {
+        await this.setUserProxyEnv(target)
+      } else if (layerId === 'git') {
+        await this.setGitProxy(target)
+      } else if (layerId === 'npm') {
+        await this.setNpmProxy(target)
+      }
+
+      return { success: true }
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorFixLayer failed', error)
+      return { success: false, error: (error as Error).message }
+    }
+  }
+
+  async doctorClearLayer(layerId: ProxyDoctorLayerId): Promise<IpcResponse> {
+    try {
+      if (layerId === 'wininet') {
+        return this.disable()
+      }
+
+      if (layerId === 'winhttp') {
+        await this.resetWinHttpProxy()
+      } else if (layerId === 'env') {
+        await this.clearUserProxyEnv()
+      } else if (layerId === 'git') {
+        await this.clearGitProxy()
+      } else if (layerId === 'npm') {
+        await this.clearNpmProxy()
+      }
+
+      return { success: true }
+    } catch (error) {
+      logger.error('[LocalProxyService] doctorClearLayer failed', error)
       return { success: false, error: (error as Error).message }
     }
   }
