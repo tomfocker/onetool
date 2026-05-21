@@ -176,6 +176,16 @@ export interface LocalProxyStatus {
   autoConfigUrl: string | null
 }
 
+export type {
+  ProxyDoctorApplyRequest,
+  ProxyDoctorLayerId,
+  ProxyDoctorLayerState,
+  ProxyDoctorLayerStatus,
+  ProxyDoctorSnapshot,
+  ProxyDoctorSummary,
+  ProxyDoctorTarget
+} from './proxyDoctor'
+
 export interface WslDistroInfo {
   name: string
   state: string
