@@ -40,13 +40,13 @@ export default function LocalProxyManagerTool() {
     setLog((previous) => [message, ...previous].slice(0, 12))
   }, [])
 
-  const scan = useCallback(
-    async (silent = false) => {
+  const scanTarget = useCallback(
+    async (targetValue: string, silent = false) => {
       if (!silent) {
         setLoading(true)
       }
 
-      const result = await window.electron.localProxy.doctorScan(target)
+      const result = await window.electron.localProxy.doctorScan(targetValue)
 
       if (result.success && result.data) {
         setSnapshot(result.data)
@@ -66,12 +66,12 @@ export default function LocalProxyManagerTool() {
         setLoading(false)
       }
     },
-    [appendLog, showNotification, target]
+    [appendLog, showNotification]
   )
 
   useEffect(() => {
-    void scan()
-  }, [scan])
+    void scanTarget(DEFAULT_PROXY_DOCTOR_TARGET)
+  }, [scanTarget])
 
   const handleOpenSettings = async () => {
     const result = await window.electron.localProxy.openSystemSettings()
@@ -121,7 +121,7 @@ export default function LocalProxyManagerTool() {
       title: '修复失败',
       message: result.error || '未能完成开发代理修复。'
     })
-    await scan(true)
+    await scanTarget(target, true)
   }
 
   const handleClearAll = async () => {
@@ -140,7 +140,7 @@ export default function LocalProxyManagerTool() {
         title: '清理完成',
         message: '开发代理配置已清除。'
       })
-      await scan(true)
+      await scanTarget(target, true)
       return
     }
 
@@ -149,7 +149,7 @@ export default function LocalProxyManagerTool() {
       title: '清理失败',
       message: result.error || '未能清除开发代理配置。'
     })
-    await scan(true)
+    await scanTarget(target, true)
   }
 
   const handleFixLayer = async (layer: ProxyDoctorLayerStatus) => {
@@ -176,7 +176,7 @@ export default function LocalProxyManagerTool() {
         title: '单层修复完成',
         message: `${layer.title} 已同步。`
       })
-      await scan(true)
+      await scanTarget(target, true)
       return
     }
 
@@ -185,7 +185,7 @@ export default function LocalProxyManagerTool() {
       title: '单层修复失败',
       message: result.error || `${layer.title} 未能修复。`
     })
-    await scan(true)
+    await scanTarget(target, true)
   }
 
   const handleClearLayer = async (layer: ProxyDoctorLayerStatus) => {
@@ -200,7 +200,7 @@ export default function LocalProxyManagerTool() {
         title: '单层清除完成',
         message: `${layer.title} 已清除。`
       })
-      await scan(true)
+      await scanTarget(target, true)
       return
     }
 
@@ -209,7 +209,7 @@ export default function LocalProxyManagerTool() {
       title: '单层清除失败',
       message: result.error || `${layer.title} 未能清除。`
     })
-    await scan(true)
+    await scanTarget(target, true)
   }
 
   const handleCopyReport = async () => {
@@ -243,7 +243,7 @@ export default function LocalProxyManagerTool() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Button variant="outline" className="rounded-2xl" onClick={() => void scan()} disabled={loading}>
+          <Button variant="outline" className="rounded-2xl" onClick={() => void scanTarget(target)} disabled={loading}>
             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
             刷新诊断
           </Button>

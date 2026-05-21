@@ -20,12 +20,21 @@ test('scan failure clears stale diagnosis state and records the failed scan', ()
 })
 
 test('failed proxy doctor mutations refresh the diagnosis snapshot', () => {
-  assert.match(source, /title: '修复失败'[\s\S]*?await scan\(true\)/)
-  assert.match(source, /title: '清理失败'[\s\S]*?await scan\(true\)/)
-  assert.match(source, /title: '单层修复失败'[\s\S]*?await scan\(true\)/)
-  assert.match(source, /title: '单层清除失败'[\s\S]*?await scan\(true\)/)
+  assert.match(source, /title: '修复失败'[\s\S]*?await scanTarget\(target, true\)/)
+  assert.match(source, /title: '清理失败'[\s\S]*?await scanTarget\(target, true\)/)
+  assert.match(source, /title: '单层修复失败'[\s\S]*?await scanTarget\(target, true\)/)
+  assert.match(source, /title: '单层清除失败'[\s\S]*?await scanTarget\(target, true\)/)
 })
 
-test('mount scan effect declares its scan dependency', () => {
-  assert.match(source, /useEffect\(\(\) => \{\s*void scan\(\)\s*\}, \[scan\]\)/)
+test('target input changes do not trigger diagnosis scans', () => {
+  assert.match(source, /const scanTarget = useCallback\(\s*async \(targetValue: string, silent = false\)/)
+  assert.match(source, /doctorScan\(targetValue\)/)
+  assert.match(source, /onChange=\{\(event\) => setTarget\(event\.target\.value\)\}/)
+  assert.doesNotMatch(source, /doctorScan\(target\)/)
+  assert.doesNotMatch(source, /\[appendLog, showNotification, target\]/)
+})
+
+test('mount and refresh explicitly choose when to scan', () => {
+  assert.match(source, /useEffect\(\(\) => \{\s*void scanTarget\(DEFAULT_PROXY_DOCTOR_TARGET\)\s*\}, \[scanTarget\]\)/)
+  assert.match(source, /onClick=\{\(\) => void scanTarget\(target\)\}/)
 })
