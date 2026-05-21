@@ -66,6 +66,16 @@ function isAbsentGitConfigError(error: unknown): boolean {
   return /git config --global --unset (?:http\.proxy|https\.proxy)/.test(commandText)
 }
 
+function isAbsentGitGetConfigError(error: unknown): boolean {
+  const maybeError = error as Error & { code?: unknown; cmd?: unknown }
+  if (maybeError?.code !== 1) {
+    return false
+  }
+
+  const commandText = `${typeof maybeError.cmd === 'string' ? maybeError.cmd : ''}\n${maybeError.message || ''}`
+  return /git config --global --get (?:http\.proxy|https\.proxy)/.test(commandText)
+}
+
 function testPortConnection(host: string, port: number, timeoutMs = 2500): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port })
@@ -326,6 +336,10 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
       try {
         return { value: await this.deps.execCommand(command), error: null as Error | null }
       } catch (error) {
+        if (id === 'git' && isAbsentGitGetConfigError(error)) {
+          return { value: '', error: null }
+        }
+
         return { value: '', error: error as Error }
       }
     }))

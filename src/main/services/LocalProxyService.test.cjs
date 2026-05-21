@@ -309,6 +309,62 @@ test('doctorScan reports Git and npm conflict when a paired key is missing', asy
   assert.equal(result.data.layers.find((layer) => layer.id === 'npm').state, 'conflict')
 })
 
+test('doctorScan treats absent Git proxy keys as off instead of unavailable', async () => {
+  const winInetJson = {
+    enabled: true,
+    server: 'http=127.0.0.1:7897;https=127.0.0.1:7897',
+    override: '',
+    autoConfigUrl: null
+  }
+  const envJson = {
+    HTTP_PROXY: 'http://127.0.0.1:7897',
+    HTTPS_PROXY: 'http://127.0.0.1:7897',
+    ALL_PROXY: 'http://127.0.0.1:7897',
+    http_proxy: 'http://127.0.0.1:7897',
+    https_proxy: 'http://127.0.0.1:7897',
+    all_proxy: 'http://127.0.0.1:7897'
+  }
+
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      if (script.includes('LOCAL_PROXY_ENV_JSON_START')) {
+        return `---LOCAL_PROXY_ENV_JSON_START---\n${JSON.stringify(envJson)}\n---LOCAL_PROXY_ENV_JSON_END---`
+      }
+
+      return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+    },
+    execCommand: async (command) => {
+      if (command === 'netsh winhttp show proxy') {
+        return 'Proxy Server(s) :  http=127.0.0.1:7897;https=127.0.0.1:7897'
+      }
+
+      if (command.startsWith('git config --global --get')) {
+        const error = new Error(`Command failed: ${command}`)
+        error.code = 1
+        error.cmd = command
+        throw error
+      }
+
+      if (command === 'npm config get proxy' || command === 'npm config get https-proxy') {
+        return 'http://127.0.0.1:7897'
+      }
+
+      return ''
+    },
+    connectToPort: async () => true,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorScan('7897')
+  const gitLayer = result.data.layers.find((layer) => layer.id === 'git')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.summary, 'conflict')
+  assert.equal(gitLayer.state, 'off')
+})
+
 test('doctorScan reports environment conflict when managed proxy keys are incomplete', async () => {
   const winInetJson = {
     enabled: true,
