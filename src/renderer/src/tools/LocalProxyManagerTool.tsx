@@ -1,155 +1,75 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Copy, ExternalLink, Network, Power, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Activity, AlertTriangle, Copy, ExternalLink, Power, RefreshCw, ShieldCheck, Wrench } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import { useGlobalStore } from '@/store'
-import type { LocalProxyConfig, LocalProxyStatus } from '../../../shared/types'
+import type { ProxyDoctorLayerStatus, ProxyDoctorSnapshot } from '../../../shared/proxyDoctor'
+import {
+  DEFAULT_PROXY_DOCTOR_BYPASS,
+  DEFAULT_PROXY_DOCTOR_TARGET,
+  createProxyDoctorApplyRequest,
+  getLayerStateLabel,
+  getLayerStateTone,
+  getSummaryCopy
+} from './localProxyDoctorViewModel'
 
-const DEFAULT_BYPASS = [
-  'localhost',
-  '127.*',
-  '192.168.*',
-  '10.*',
-  '172.16.*',
-  '172.17.*',
-  '172.18.*',
-  '172.19.*',
-  '172.20.*',
-  '172.21.*',
-  '172.22.*',
-  '172.23.*',
-  '172.24.*',
-  '172.25.*',
-  '172.26.*',
-  '172.27.*',
-  '172.28.*',
-  '172.29.*',
-  '172.30.*',
-  '172.31.*',
-  '<local>'
-]
+const layerToneClassNames = {
+  success: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600',
+  muted: 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500',
+  warning: 'border-amber-500/20 bg-amber-500/10 text-amber-600',
+  danger: 'border-red-500/20 bg-red-500/10 text-red-600'
+}
 
-const QUICK_PRESETS: Array<{ label: string; host: string; port: number; protocol: LocalProxyConfig['protocol'] }> = [
-  { label: 'Clash HTTP 7890', host: '127.0.0.1', port: 7890, protocol: 'http' },
-  { label: 'Mixed 7897', host: '127.0.0.1', port: 7897, protocol: 'http' },
-  { label: 'v2rayN SOCKS 10808', host: '127.0.0.1', port: 10808, protocol: 'socks5' }
-]
-
-function splitBypass(value: string): string[] {
-  return value
-    .split(/[;\n]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
+function getLayerBadgeClassName(layer: ProxyDoctorLayerStatus): string {
+  return layerToneClassNames[getLayerStateTone(layer.state)]
 }
 
 export default function LocalProxyManagerTool() {
   const showNotification = useGlobalStore((state) => state.showNotification)
-  const [status, setStatus] = useState<LocalProxyStatus | null>(null)
+  const [snapshot, setSnapshot] = useState<ProxyDoctorSnapshot | null>(null)
   const [loading, setLoading] = useState(false)
-  const [form, setForm] = useState({
-    host: '127.0.0.1',
-    port: '7890',
-    protocol: 'http' as LocalProxyConfig['protocol'],
-    bypass: DEFAULT_BYPASS.join(';')
-  })
+  const [target, setTarget] = useState(DEFAULT_PROXY_DOCTOR_TARGET)
+  const [bypass, setBypass] = useState(DEFAULT_PROXY_DOCTOR_BYPASS.join(';'))
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [log, setLog] = useState<string[]>([])
 
-  const syncFormWithStatus = useCallback((nextStatus: LocalProxyStatus) => {
-    setForm({
-      host: nextStatus.host || '127.0.0.1',
-      port: nextStatus.port ? String(nextStatus.port) : '7890',
-      protocol: nextStatus.protocol === 'socks5' ? 'socks5' : 'http',
-      bypass: nextStatus.bypass.length > 0 ? nextStatus.bypass.join(';') : DEFAULT_BYPASS.join(';')
-    })
+  const appendLog = useCallback((message: string) => {
+    setLog((previous) => [message, ...previous].slice(0, 12))
   }, [])
 
-  const fetchStatus = useCallback(async (silent = false) => {
-    if (!silent) {
-      setLoading(true)
-    }
+  const scan = useCallback(
+    async (silent = false) => {
+      if (!silent) {
+        setLoading(true)
+      }
 
-    const result = await window.electron.localProxy.getStatus()
-    if (result.success && result.data) {
-      setStatus(result.data)
-      syncFormWithStatus(result.data)
-    } else if (!silent) {
-      showNotification({
-        type: 'error',
-        title: '代理状态读取失败',
-        message: result.error || '无法读取当前系统代理配置。'
-      })
-    }
+      const result = await window.electron.localProxy.doctorScan(target)
 
-    if (!silent) {
-      setLoading(false)
-    }
-  }, [showNotification, syncFormWithStatus])
+      if (result.success && result.data) {
+        setSnapshot(result.data)
+        const summary = getSummaryCopy(result.data.summary).title
+        appendLog(`扫描完成: ${summary}`)
+      } else {
+        showNotification({
+          type: 'error',
+          title: '诊断失败',
+          message: result.error || '无法读取代理诊断信息。'
+        })
+      }
+
+      if (!silent) {
+        setLoading(false)
+      }
+    },
+    [appendLog, showNotification, target]
+  )
 
   useEffect(() => {
-    void fetchStatus()
-  }, [fetchStatus])
-
-  const handleApply = async () => {
-    const port = Number(form.port)
-    if (!form.host.trim()) {
-      showNotification({ type: 'warning', message: '请输入代理地址。' })
-      return
-    }
-    if (!Number.isFinite(port) || port <= 0) {
-      showNotification({ type: 'warning', message: '请输入有效端口。' })
-      return
-    }
-
-    setLoading(true)
-    const result = await window.electron.localProxy.setConfig({
-      host: form.host.trim(),
-      port,
-      protocol: form.protocol,
-      bypass: splitBypass(form.bypass)
-    })
-    setLoading(false)
-
-    if (result.success && result.data) {
-      setStatus(result.data)
-      syncFormWithStatus(result.data)
-      showNotification({
-        type: 'success',
-        title: '代理已更新',
-        message: `当前系统代理已切换到 ${result.data.server || `${form.host}:${form.port}`}`
-      })
-      return
-    }
-
-    showNotification({
-      type: 'error',
-      title: '代理设置失败',
-      message: result.error || '系统代理未能成功写入。'
-    })
-  }
-
-  const handleDisable = async () => {
-    setLoading(true)
-    const result = await window.electron.localProxy.disable()
-    setLoading(false)
-
-    if (result.success && result.data) {
-      setStatus(result.data)
-      showNotification({
-        type: 'success',
-        title: '代理已关闭',
-        message: '当前用户级 Windows 代理已禁用。'
-      })
-      return
-    }
-
-    showNotification({
-      type: 'error',
-      title: '关闭失败',
-      message: result.error || '未能关闭系统代理。'
-    })
-  }
+    void scan()
+  }, [])
 
   const handleOpenSettings = async () => {
     const result = await window.electron.localProxy.openSystemSettings()
@@ -162,245 +82,323 @@ export default function LocalProxyManagerTool() {
     }
   }
 
-  const handleCopy = async () => {
-    if (!status?.server) {
+  const handleApplyAll = async () => {
+    if (!window.confirm('将系统、命令行、Git 和 npm 代理同步到目标地址？')) {
       return
     }
-    await navigator.clipboard.writeText(status.server)
+
+    let request
+    try {
+      request = createProxyDoctorApplyRequest(target, bypass)
+    } catch (error) {
+      showNotification({
+        type: 'warning',
+        title: '目标代理无效',
+        message: error instanceof Error ? error.message : '请检查代理地址。'
+      })
+      return
+    }
+
+    setLoading(true)
+    const result = await window.electron.localProxy.doctorApplyAll(request)
+    setLoading(false)
+
+    if (result.success && result.data) {
+      setSnapshot(result.data)
+      appendLog('一键修复完成')
+      showNotification({
+        type: 'success',
+        title: '修复完成',
+        message: '开发代理已同步到目标地址。'
+      })
+      return
+    }
+
     showNotification({
-      type: 'info',
-      message: '已复制当前 ProxyServer 字符串。'
+      type: 'error',
+      title: '修复失败',
+      message: result.error || '未能完成开发代理修复。'
     })
   }
 
-  const summary = useMemo(() => {
-    const serverLabel = status?.server || '未启用'
-    const modeLabel =
-      status?.protocol === 'socks5'
-        ? 'SOCKS5'
-        : status?.protocol === 'http'
-          ? 'HTTP / HTTPS'
-          : '未识别'
-
-    return {
-      serverLabel,
-      modeLabel,
-      bypassCount: status?.bypass.length || 0
+  const handleClearAll = async () => {
+    if (!window.confirm('清除系统、命令行、Git 和 npm 的开发代理配置？')) {
+      return
     }
-  }, [status])
+
+    setLoading(true)
+    const result = await window.electron.localProxy.doctorClearAll()
+    setLoading(false)
+
+    if (result.success) {
+      appendLog('一键清理完成')
+      showNotification({
+        type: 'success',
+        title: '清理完成',
+        message: '开发代理配置已清除。'
+      })
+      await scan(true)
+      return
+    }
+
+    showNotification({
+      type: 'error',
+      title: '清理失败',
+      message: result.error || '未能清除开发代理配置。'
+    })
+  }
+
+  const handleFixLayer = async (layer: ProxyDoctorLayerStatus) => {
+    let request
+    try {
+      request = createProxyDoctorApplyRequest(target, bypass)
+    } catch (error) {
+      showNotification({
+        type: 'warning',
+        title: '目标代理无效',
+        message: error instanceof Error ? error.message : '请检查代理地址。'
+      })
+      return
+    }
+
+    setLoading(true)
+    const result = await window.electron.localProxy.doctorFixLayer(layer.id, request.target, request.bypass)
+    setLoading(false)
+
+    if (result.success) {
+      appendLog(`修复完成: ${layer.title}`)
+      showNotification({
+        type: 'success',
+        title: '单层修复完成',
+        message: `${layer.title} 已同步。`
+      })
+      await scan(true)
+      return
+    }
+
+    showNotification({
+      type: 'error',
+      title: '单层修复失败',
+      message: result.error || `${layer.title} 未能修复。`
+    })
+  }
+
+  const handleClearLayer = async (layer: ProxyDoctorLayerStatus) => {
+    setLoading(true)
+    const result = await window.electron.localProxy.doctorClearLayer(layer.id)
+    setLoading(false)
+
+    if (result.success) {
+      appendLog(`清除完成: ${layer.title}`)
+      showNotification({
+        type: 'success',
+        title: '单层清除完成',
+        message: `${layer.title} 已清除。`
+      })
+      await scan(true)
+      return
+    }
+
+    showNotification({
+      type: 'error',
+      title: '单层清除失败',
+      message: result.error || `${layer.title} 未能清除。`
+    })
+  }
+
+  const handleCopyReport = async () => {
+    const report = snapshot?.reportText || log.join('\n')
+    if (!report) {
+      return
+    }
+
+    await navigator.clipboard.writeText(report)
+    showNotification({
+      type: 'info',
+      message: '诊断报告已复制。'
+    })
+  }
+
+  const summaryCopy = snapshot ? getSummaryCopy(snapshot.summary) : getSummaryCopy('off')
+  const portStatus = snapshot ? (snapshot.portOpen ? '端口已开放' : '端口未响应') : '等待诊断'
+  const reportText = useMemo(() => snapshot?.reportText || log.join('\n') || '暂无诊断日志。', [log, snapshot])
 
   return (
-    <div className="space-y-8 pb-20">
+    <div className="space-y-6 pb-20">
       <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
         <div className="space-y-2">
-          <h2 className="text-3xl font-black tracking-tight flex items-center gap-3">
+          <h2 className="flex items-center gap-3 text-3xl font-black tracking-tight">
             <ShieldCheck className="text-emerald-500" size={30} />
-            本地代理管理
+            代理医生
           </h2>
-          <p className="text-sm font-bold text-muted-foreground">
-            管理当前用户级 Windows 系统代理，适合切换本地代理端口、常见客户端预设和手动旁路规则。
+          <p className="max-w-3xl text-sm font-bold text-muted-foreground">
+            诊断 Windows、命令行、Git 和 npm 的开发代理状态，并按目标地址统一修复。
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
-          <Badge
-            variant="outline"
-            className={cn(
-              'px-4 py-2 text-[11px] font-black uppercase tracking-[0.2em]',
-              status?.enabled
-                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
-                : 'border-zinc-300/60 bg-zinc-500/5 text-zinc-500'
-            )}
-          >
-            {status?.enabled ? 'Proxy On' : 'Proxy Off'}
-          </Badge>
-          <Button variant="outline" className="rounded-2xl" onClick={() => void fetchStatus()}>
+          <Button variant="outline" className="rounded-2xl" onClick={() => void scan()} disabled={loading}>
             <RefreshCw size={16} className={cn(loading && 'animate-spin')} />
-            刷新状态
+            刷新诊断
           </Button>
           <Button variant="outline" className="rounded-2xl" onClick={() => void handleOpenSettings()}>
             <ExternalLink size={16} />
             系统设置
           </Button>
-          <Button
-            className="rounded-2xl bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20"
-            onClick={() => void handleDisable()}
-          >
-            <Power size={16} />
-            关闭代理
-          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="border-none overflow-hidden">
-          <CardHeader className="pb-3">
-            <CardDescription>当前状态</CardDescription>
-            <CardTitle className="text-xl font-black">{status?.enabled ? '已启用' : '未启用'}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            <div className="flex items-center gap-2 text-xs font-bold text-muted-foreground">
-              <div className={cn('w-2.5 h-2.5 rounded-full', status?.enabled ? 'bg-emerald-500' : 'bg-zinc-400')} />
-              当前仅管理 WinINET 用户级代理，不改动 WinHTTP。
+      <Card className="overflow-hidden border-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl font-black">
+            <Activity size={18} className="text-emerald-500" />
+            目标代理
+          </CardTitle>
+          <CardDescription>用于统一写入系统代理、环境变量、Git 和 npm。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+            <div className="space-y-2">
+              <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
+              <Input
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
+                className="h-12 rounded-2xl font-bold"
+                placeholder="127.0.0.1:7897"
+              />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none overflow-hidden">
-          <CardHeader className="pb-3">
-            <CardDescription>当前地址</CardDescription>
-            <CardTitle className="text-xl font-black truncate">{summary.serverLabel}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 flex items-center justify-between">
-            <span className="text-xs font-bold text-muted-foreground">模式：{summary.modeLabel}</span>
-            <Button variant="ghost" size="sm" className="rounded-xl" onClick={() => void handleCopy()} disabled={!status?.server}>
-              <Copy size={14} />
-              复制
-            </Button>
-          </CardContent>
-        </Card>
-
-        <Card className="border-none overflow-hidden">
-          <CardHeader className="pb-3">
-            <CardDescription>旁路规则</CardDescription>
-            <CardTitle className="text-xl font-black">{summary.bypassCount} 条</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0 text-xs font-bold text-muted-foreground">
-            AutoConfigURL: {status?.autoConfigUrl || '未配置'}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[1.2fr_0.8fr] gap-6">
-        <Card className="border-none overflow-hidden">
-          <CardHeader>
-            <CardTitle className="text-xl font-black flex items-center gap-2">
-              <Network size={18} className="text-emerald-500" />
-              手动代理配置
-            </CardTitle>
-            <CardDescription>HTTP 模式会同时写入 HTTP / HTTPS；SOCKS5 模式会写入 socks 项。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            <div className="flex flex-wrap gap-2">
-              {(['http', 'socks5'] as Array<LocalProxyConfig['protocol']>).map((protocol) => (
-                <button
-                  key={protocol}
-                  onClick={() => setForm((prev) => ({ ...prev, protocol }))}
-                  className={cn(
-                    'px-4 py-2 rounded-2xl text-xs font-black uppercase tracking-[0.2em] border transition-all',
-                    form.protocol === protocol
-                      ? 'bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20'
-                      : 'bg-muted/40 text-muted-foreground border-transparent hover:bg-muted'
-                  )}
-                >
-                  {protocol === 'http' ? 'HTTP / HTTPS' : 'SOCKS5'}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理地址</label>
-                <Input
-                  value={form.host}
-                  onChange={(event) => setForm((prev) => ({ ...prev, host: event.target.value }))}
-                  className="h-12 rounded-2xl font-bold"
-                  placeholder="127.0.0.1"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">代理端口</label>
-                <Input
-                  value={form.port}
-                  onChange={(event) => setForm((prev) => ({ ...prev, port: event.target.value }))}
-                  className="h-12 rounded-2xl font-bold"
-                  placeholder="7890"
-                />
-              </div>
-            </div>
-
             <div className="space-y-2">
               <label className="text-xs font-black uppercase tracking-[0.2em] text-muted-foreground">旁路规则</label>
               <textarea
-                value={form.bypass}
-                onChange={(event) => setForm((prev) => ({ ...prev, bypass: event.target.value }))}
-                className="w-full min-h-32 rounded-3xl border border-white/20 dark:border-white/10 bg-white/50 dark:bg-white/10 backdrop-blur-sm px-5 py-4 text-sm font-medium shadow-soft-sm transition-all duration-300 ease-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                value={bypass}
+                onChange={(event) => setBypass(event.target.value)}
+                className="min-h-28 w-full rounded-3xl border border-white/20 bg-white/50 px-5 py-4 text-sm font-medium shadow-soft-sm backdrop-blur-sm transition-all duration-300 ease-apple focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 dark:border-white/10 dark:bg-white/10"
                 placeholder="localhost;127.*;<local>"
               />
-              <p className="text-[11px] font-medium text-muted-foreground">
-                支持使用分号或换行分隔。默认已覆盖常见内网网段和 <code>{'<local>'}</code>。
-              </p>
             </div>
+          </div>
 
-            <div className="flex flex-wrap gap-3">
-              <Button
-                className="rounded-2xl bg-emerald-500 hover:bg-emerald-600 shadow-lg shadow-emerald-500/20"
-                onClick={() => void handleApply()}
-              >
-                应用到系统代理
-              </Button>
-              <Button
+          <div className="flex flex-wrap gap-3">
+            <Button
+              className="rounded-2xl bg-emerald-500 shadow-lg shadow-emerald-500/20 hover:bg-emerald-600"
+              onClick={() => void handleApplyAll()}
+              disabled={loading}
+            >
+              <Wrench size={16} />
+              一键修复开发代理
+            </Button>
+            <Button variant="destructive" className="rounded-2xl" onClick={() => void handleClearAll()} disabled={loading}>
+              <Power size={16} />
+              清除开发代理
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.9fr_1.1fr]">
+        <Card className="overflow-hidden border-none">
+          <CardHeader>
+            <CardDescription>诊断摘要</CardDescription>
+            <CardTitle className="text-2xl font-black">{summaryCopy.title}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm font-bold text-muted-foreground">{summaryCopy.description}</p>
+            <div className="flex flex-wrap gap-2">
+              <Badge
                 variant="outline"
-                className="rounded-2xl"
-                onClick={() => setForm((prev) => ({ ...prev, bypass: DEFAULT_BYPASS.join(';') }))}
+                className={cn(
+                  'px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]',
+                  snapshot?.portOpen
+                    ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-600'
+                    : 'border-amber-500/20 bg-amber-500/10 text-amber-600'
+                )}
               >
-                恢复默认旁路
-              </Button>
+                {portStatus}
+              </Badge>
+              <Badge variant="outline" className="px-4 py-2 text-[11px] font-black uppercase tracking-[0.16em]">
+                {snapshot?.target.url || target}
+              </Badge>
             </div>
           </CardContent>
         </Card>
 
-        <div className="space-y-6">
-          <Card className="border-none overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-xl font-black">常用本地代理预设</CardTitle>
-              <CardDescription>按常见客户端端口快速填充，但不会自动应用。</CardDescription>
-            </CardHeader>
-            <CardContent className="grid grid-cols-1 gap-3">
-              {QUICK_PRESETS.map((preset) => (
-                <button
-                  key={preset.label}
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      host: preset.host,
-                      port: String(preset.port),
-                      protocol: preset.protocol
-                    }))
-                  }
-                  className="flex items-center justify-between px-4 py-4 rounded-2xl bg-emerald-500/5 hover:bg-emerald-500/10 border border-emerald-500/10 transition-all text-left"
-                >
-                  <div>
-                    <div className="text-sm font-black">{preset.label}</div>
-                    <div className="text-xs font-medium text-muted-foreground">
-                      {preset.protocol === 'http' ? 'HTTP / HTTPS' : 'SOCKS5'} · {preset.host}:{preset.port}
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-emerald-500/20 text-emerald-600 bg-emerald-500/5">
-                    填充
-                  </Badge>
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-
-          <Card className="border-none overflow-hidden">
-            <CardHeader>
-              <CardTitle className="text-xl font-black">实时提示</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-sm font-medium text-muted-foreground">
-              <div className="flex items-start gap-3 p-4 rounded-2xl bg-zinc-500/5 border border-zinc-500/10">
-                <AlertTriangle size={18} className="shrink-0 text-amber-500 mt-0.5" />
-                <p>关闭代理只会关闭当前用户的 WinINET 代理开关，不会自动清除其他代理工具自身配置。</p>
-              </div>
-              <div className="flex items-start gap-3 p-4 rounded-2xl bg-emerald-500/5 border border-emerald-500/10">
-                <ShieldCheck size={18} className="shrink-0 text-emerald-500 mt-0.5" />
-                <p>如果你依赖命令行代理或 WinHTTP，请在对应工具里单独配置，避免出现浏览器和终端行为不一致。</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        <Card className="overflow-hidden border-none">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl font-black">
+              <AlertTriangle size={18} className="text-amber-500" />
+              操作提示
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm font-medium text-muted-foreground">
+            <p>一键修复会覆盖已管理层的代理值；无法直接修改的进程层会给出重启提示。</p>
+            <p>如果端口未响应，请先确认本地代理客户端已启动并监听目标端口。</p>
+          </CardContent>
+        </Card>
       </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        {(snapshot?.layers || []).map((layer) => (
+          <Card key={layer.id} className="overflow-hidden border-none">
+            <CardHeader className="space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-lg font-black">{layer.title}</CardTitle>
+                  <CardDescription>{layer.detail}</CardDescription>
+                </div>
+                <Badge variant="outline" className={cn('shrink-0 font-black', getLayerBadgeClassName(layer))}>
+                  {getLayerStateLabel(layer.state)}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-2xl bg-zinc-500/5 p-4 text-xs font-bold text-muted-foreground">
+                <div className="mb-1 text-[11px] uppercase tracking-[0.2em]">当前值</div>
+                <div className="break-all text-sm text-foreground">{layer.currentValue || '未设置'}</div>
+              </div>
+              <p className="text-sm font-medium text-muted-foreground">{layer.actionHint}</p>
+              <div className="flex flex-wrap gap-2">
+                {layer.canFix && (
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleFixLayer(layer)} disabled={loading}>
+                    <Wrench size={14} />
+                    修复此层
+                  </Button>
+                )}
+                {layer.canClear && (
+                  <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleClearLayer(layer)} disabled={loading}>
+                    <Power size={14} />
+                    清除此层
+                  </Button>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <Card className="overflow-hidden border-none">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-xl font-black">高级日志与报告</CardTitle>
+            <CardDescription>查看可复制的诊断文本和近期操作记录。</CardDescription>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => setAdvancedOpen((open) => !open)}>
+              {advancedOpen ? '收起' : '展开'}
+            </Button>
+            <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void handleCopyReport()} disabled={!snapshot && log.length === 0}>
+              <Copy size={14} />
+              复制诊断报告
+            </Button>
+          </div>
+        </CardHeader>
+        {advancedOpen && (
+          <CardContent>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-3xl bg-zinc-950/90 p-5 text-xs font-medium leading-relaxed text-zinc-100">
+              {reportText}
+            </pre>
+          </CardContent>
+        )}
+      </Card>
     </div>
   )
 }
