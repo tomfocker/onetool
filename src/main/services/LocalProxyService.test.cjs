@@ -462,6 +462,66 @@ test('doctorFixLayer rejects unsafe WinHTTP bypass entries before running netsh 
   assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
 })
 
+test('doctorFixLayer allows the Windows local WinHTTP bypass token', async () => {
+  const commands = []
+  const deps = {
+    execCommand: async (command) => {
+      commands.push(command)
+      return 'ok'
+    },
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorFixLayer('winhttp', '7897', ['<local>'])
+
+  assert.equal(result.success, true)
+  assert.equal(
+    commands.includes('netsh winhttp set proxy proxy-server="http=127.0.0.1:7897;https=127.0.0.1:7897" bypass-list="<local>"'),
+    true
+  )
+})
+
+test('doctorApplyAll rejects unsafe bypass before enabling WinINET', async () => {
+  const powershellScripts = []
+  const commands = []
+  const winInetJson = {
+    enabled: false,
+    server: '',
+    override: '',
+    autoConfigUrl: null
+  }
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      powershellScripts.push(script)
+      if (script.includes('Get-ItemProperty')) {
+        return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+      }
+
+      return 'ok'
+    },
+    execCommand: async (command) => {
+      commands.push(command)
+      return 'ok'
+    },
+    connectToPort: async () => false,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorApplyAll({ target: '7897', bypass: ['local"host'] })
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /bypass/i)
+  assert.equal(
+    powershellScripts.some((script) => script.includes('Set-ItemProperty') && script.includes('ProxyEnable -Value 1')),
+    false
+  )
+  assert.equal(commands.some((command) => command.startsWith('netsh winhttp set proxy')), false)
+})
+
 test('disable returns a failure when the proxy disable script resolves empty output', async () => {
   const { LocalProxyService } = loadLocalProxyServiceModule({
     execPowerShellEncoded: async () => ''

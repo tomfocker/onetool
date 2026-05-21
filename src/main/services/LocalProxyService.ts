@@ -358,7 +358,7 @@ Write-Output '${LOCAL_PROXY_ENV_JSON_END}'
   }
 
   private validateBypassEntries(bypass: string[]) {
-    const unsafe = bypass.find((item) => /["&|<>^`]/.test(item))
+    const unsafe = bypass.find((item) => item !== '<local>' && /["&|<>^`]/.test(item))
     if (unsafe) {
       throw new Error(`Invalid bypass entry: ${unsafe}`)
     }
@@ -600,6 +600,7 @@ Write-Output 'ok'
     try {
       const target = normalizeProxyDoctorTarget(request.target)
       const bypass = request.bypass || []
+      this.validateBypassEntries(bypass)
       const winInetResult = await this.setConfig({
         host: target.host,
         port: target.port,
