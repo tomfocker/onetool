@@ -52,7 +52,12 @@ import type {
   RecorderSelectionSessionPayload,
   ScreenshotSelectionSessionPayload
 } from '../../../shared/selectionSession'
-import type { SpaceCleanupNode, SpaceCleanupSession } from '../../../shared/spaceCleanup'
+import type {
+  SpaceCleanupNode,
+  SpaceCleanupDriveRoot,
+  SpaceCleanupSession,
+  SpaceCleanupStartScanOptions
+} from '../../../shared/spaceCleanup'
 import type {
   LlmConfigStatus,
   LlmConnectionStatus,
@@ -126,7 +131,11 @@ declare global {
       }
       spaceCleanup: {
         chooseRoot: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
-        startScan: (rootPath: string) => Promise<IpcResponse<SpaceCleanupSession>>
+        listDriveRoots: () => Promise<IpcResponse<SpaceCleanupDriveRoot[]>>
+        startScan: (
+          rootPath: string,
+          options?: SpaceCleanupStartScanOptions
+        ) => Promise<IpcResponse<SpaceCleanupSession>>
         cancelScan: () => Promise<IpcResponse<SpaceCleanupSession>>
         getSession: () => Promise<IpcResponse<SpaceCleanupSession>>
         scanDirectoryBreakdown: (targetPath: string) => Promise<IpcResponse<SpaceCleanupNode>>

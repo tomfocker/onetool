@@ -7,14 +7,16 @@ import type { IpcResponse } from '../../shared/types'
 import {
   createEmptySpaceCleanupSummary,
   createIdleSpaceCleanupSession,
+  type SpaceCleanupDriveRoot,
   type SpaceCleanupLargestFile,
   type SpaceCleanupNode,
   type SpaceCleanupScanMode,
   type SpaceCleanupSession,
+  type SpaceCleanupStartScanOptions,
   trimLargestFiles
 } from '../../shared/spaceCleanup'
 import { logger } from '../utils/logger'
-import { getFastScanEligibility } from '../utils/windowsVolume'
+import { getFastScanEligibility, listWindowsDriveRoots } from '../utils/windowsVolume'
 import { isProcessElevated } from '../utils/windowsAdmin'
 import { ElevatedNtfsScanRunner } from './ElevatedNtfsScanRunner'
 import {
@@ -30,6 +32,7 @@ type SpaceCleanupServiceDependencies = {
   shellModule?: typeof shell
   clipboardModule?: typeof clipboard
   getFastScanEligibility?: typeof getFastScanEligibility
+  listWindowsDriveRoots?: typeof listWindowsDriveRoots
   isProcessElevated?: typeof isProcessElevated
   ntfsFastScannerBridge?: Pick<NtfsFastScannerBridge, 'start'>
   elevatedNtfsScanRunner?: Pick<ElevatedNtfsScanRunner, 'start'>
@@ -146,6 +149,7 @@ export class SpaceCleanupService {
   private readonly shellModule: typeof shell
   private readonly clipboardModule: typeof clipboard
   private readonly getFastScanEligibility: typeof getFastScanEligibility
+  private readonly listWindowsDriveRoots: typeof listWindowsDriveRoots
   private readonly isProcessElevated: typeof isProcessElevated
   private readonly ntfsFastScannerBridge: Pick<NtfsFastScannerBridge, 'start'>
   private readonly elevatedNtfsScanRunner: Pick<ElevatedNtfsScanRunner, 'start'>
@@ -161,6 +165,7 @@ export class SpaceCleanupService {
     this.shellModule = dependencies.shellModule ?? shell
     this.clipboardModule = dependencies.clipboardModule ?? clipboard
     this.getFastScanEligibility = dependencies.getFastScanEligibility ?? getFastScanEligibility
+    this.listWindowsDriveRoots = dependencies.listWindowsDriveRoots ?? listWindowsDriveRoots
     this.isProcessElevated = dependencies.isProcessElevated ?? isProcessElevated
     this.ntfsFastScannerBridge = dependencies.ntfsFastScannerBridge ?? new NtfsFastScannerBridge({
       scannerPath: resolveNtfsFastScannerPath(this.pathModule)
@@ -179,6 +184,15 @@ export class SpaceCleanupService {
 
   getSession(): IpcResponse<SpaceCleanupSession> {
     return { success: true, data: this.currentSession }
+  }
+
+  async listDriveRoots(): Promise<IpcResponse<SpaceCleanupDriveRoot[]>> {
+    try {
+      return { success: true, data: await this.listWindowsDriveRoots() }
+    } catch (error) {
+      logger.warn('SpaceCleanup: drive root listing failed', error)
+      return { success: false, error: getErrorMessage(error) }
+    }
   }
 
   async chooseRoot(): Promise<IpcResponse<{ canceled: boolean; path: string | null }>> {
@@ -210,15 +224,22 @@ export class SpaceCleanupService {
     return { success: true, data: this.currentSession }
   }
 
-  async startScan(rootPath: string): Promise<IpcResponse<SpaceCleanupSession>> {
+  async startScan(
+    rootPath: string,
+    options: SpaceCleanupStartScanOptions = {}
+  ): Promise<IpcResponse<SpaceCleanupSession>> {
     this.currentSession = this.createScanningSession(rootPath, 'filesystem', null, false)
     this.cancelled = false
     this.activeNtfsFastScanRun = null
     this.emit('space-cleanup-progress', this.currentSession)
 
+    const scanOptions = {
+      preferNtfsFastForDirectories: options.preferNtfsFastForDirectories === true
+    }
+
     let eligibility
     try {
-      eligibility = await this.getFastScanEligibility(rootPath)
+      eligibility = await this.getFastScanEligibility(rootPath, scanOptions)
     } catch (error) {
       logger.warn('SpaceCleanup: fast eligibility lookup failed, falling back to filesystem scan', error)
       if (this.cancelled || this.currentSession.status === 'cancelled') {

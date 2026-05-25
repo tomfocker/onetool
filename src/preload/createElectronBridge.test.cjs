@@ -382,7 +382,9 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.devEnvironment.updateAll()
   await bridge.devEnvironment.openRelatedTool('wsl')
   await bridge.spaceCleanup.chooseRoot()
+  await bridge.spaceCleanup.listDriveRoots()
   await bridge.spaceCleanup.startScan('C:\\scan')
+  await bridge.spaceCleanup.startScan('D:\\vmware', { preferNtfsFastForDirectories: true })
   await bridge.spaceCleanup.cancelScan()
   await bridge.spaceCleanup.getSession()
   await bridge.spaceCleanup.openPath('C:\\scan\\movie.mkv')
@@ -441,7 +443,9 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['dev-environment-update-all'],
     ['dev-environment-open-related-tool', 'wsl'],
     ['space-cleanup-choose-root'],
+    ['space-cleanup-list-drive-roots'],
     ['space-cleanup-start-scan', 'C:\\scan'],
+    ['space-cleanup-start-scan', 'D:\\vmware', { preferNtfsFastForDirectories: true }],
     ['space-cleanup-cancel-scan'],
     ['space-cleanup-get-session'],
     ['space-cleanup-open-path', 'C:\\scan\\movie.mkv'],

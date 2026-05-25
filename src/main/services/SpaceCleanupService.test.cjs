@@ -72,7 +72,8 @@ function loadSpaceCleanupServiceModule(overrides = {}) {
 
     if (specifier === '../utils/windowsVolume') {
       return {
-        getFastScanEligibility: overrides.fastEligibility || (async () => ({ mode: 'filesystem', reason: null }))
+        getFastScanEligibility: overrides.fastEligibility || (async () => ({ mode: 'filesystem', reason: null })),
+        listWindowsDriveRoots: overrides.listDriveRoots || (async () => [])
       }
     }
 
@@ -165,6 +166,30 @@ test('idle space cleanup session includes scan mode metadata', () => {
   assert.equal(session.scanMode, 'filesystem')
   assert.equal(session.scanModeReason, null)
   assert.equal(session.isPartial, false)
+})
+
+test('listDriveRoots forwards detected drive roots', async () => {
+  const driveRoots = [
+    {
+      path: 'D:\\',
+      label: 'D:',
+      name: 'Data',
+      filesystem: 'NTFS',
+      driveType: 'fixed',
+      totalBytes: 1000,
+      freeBytes: 400,
+      supportsNtfsFast: true
+    }
+  ]
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    listDriveRoots: async () => driveRoots
+  })
+  const service = new SpaceCleanupService()
+
+  const result = await service.listDriveRoots()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(result.data, driveRoots)
 })
 
 test('startScan uses ntfs-fast mode for eligible NTFS root volumes', async () => {
@@ -381,6 +406,85 @@ test('startScan keeps filesystem mode and ineligibility reason for non-eligible 
   assert.equal(result.data.scanMode, 'filesystem')
   assert.equal(result.data.scanModeReason, 'NTFS 极速扫描仅支持本地盘根路径')
   assert.equal(result.data.summary.totalBytes, 7)
+})
+
+test('startScan keeps directory scans in filesystem mode by default', async () => {
+  const eligibilityCalls = []
+  const entries = {
+    'D:\\vmware': [createDirent('disk.vmdk', 'file')]
+  }
+  const stats = {
+    'D:\\vmware': { isDirectory: () => true, size: 0 },
+    'D:\\vmware\\disk.vmdk': { isDirectory: () => false, size: 1024 }
+  }
+
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async (targetPath, options) => {
+      eligibilityCalls.push([targetPath, options])
+      return { mode: 'filesystem', reason: 'NTFS 极速扫描仅支持本地盘根路径' }
+    },
+    fsPromises: {
+      readdir: async (targetPath) => entries[targetPath] || [],
+      stat: async (targetPath) => stats[targetPath]
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5050, createId: () => 'session-dir-default' })
+  const result = await service.startScan('D:\\vmware')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.scanMode, 'filesystem')
+  assert.equal(result.data.summary.totalBytes, 1024)
+  assert.equal(eligibilityCalls.length, 1)
+  assert.equal(eligibilityCalls[0][0], 'D:\\vmware')
+  assert.equal(eligibilityCalls[0][1].preferNtfsFastForDirectories, false)
+})
+
+test('startScan can request ntfs-fast mode for directory scans', async () => {
+  const eligibilityCalls = []
+  let fastStartRoot = null
+  const { SpaceCleanupService } = loadSpaceCleanupServiceModule({
+    fastEligibility: async (targetPath, options) => {
+      eligibilityCalls.push([targetPath, options])
+      return { mode: 'ntfs-fast', reason: null }
+    },
+    fastBridge: {
+      start(rootPath, onEvent) {
+        fastStartRoot = rootPath
+        onEvent({ type: 'volume-info', mode: 'ntfs-fast', rootPath: 'D:\\vmware', filesystem: 'NTFS' })
+        onEvent({
+          type: 'complete',
+          summary: {
+            totalBytes: 2048,
+            scannedFiles: 1,
+            scannedDirectories: 1,
+            skippedEntries: 0,
+            largestFile: null
+          },
+          largestFiles: [],
+          tree: createTree('D:\\vmware', 2048)
+        })
+        return {
+          done: Promise.resolve(),
+          cancel() {}
+        }
+      }
+    }
+  })
+
+  const service = new SpaceCleanupService({ now: () => 5075, createId: () => 'session-dir-fast' })
+  const result = await service.startScan('D:\\vmware', { preferNtfsFastForDirectories: true })
+  await Promise.resolve()
+  const finalSession = service.getSession()
+
+  assert.equal(result.success, true)
+  assert.equal(fastStartRoot, 'D:\\vmware')
+  assert.equal(eligibilityCalls.length, 1)
+  assert.equal(eligibilityCalls[0][0], 'D:\\vmware')
+  assert.equal(eligibilityCalls[0][1].preferNtfsFastForDirectories, true)
+  assert.equal(finalSession.data.scanMode, 'ntfs-fast')
+  assert.equal(finalSession.data.rootPath, 'D:\\vmware')
+  assert.equal(finalSession.data.summary.totalBytes, 2048)
 })
 
 test('startScan still attempts ntfs-fast when fsutil-style eligibility probing fails', async () => {

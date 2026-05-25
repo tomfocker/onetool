@@ -9,6 +9,23 @@ export type SpaceCleanupScanMode = 'filesystem' | 'ntfs-fast'
 
 export type SpaceCleanupNodeType = 'file' | 'directory'
 
+export type SpaceCleanupStartScanOptions = {
+  preferNtfsFastForDirectories?: boolean
+}
+
+export type SpaceCleanupDriveType = 'fixed' | 'removable' | 'network' | 'cdrom' | 'ramdisk' | 'unknown'
+
+export type SpaceCleanupDriveRoot = {
+  path: string
+  label: string
+  name: string | null
+  filesystem: string | null
+  driveType: SpaceCleanupDriveType
+  totalBytes: number | null
+  freeBytes: number | null
+  supportsNtfsFast: boolean
+}
+
 export type SpaceCleanupLargestFile = {
   path: string
   name: string

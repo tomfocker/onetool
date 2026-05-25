@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import type { SpaceCleanupStartScanOptions } from '../../shared/spaceCleanup'
 import { spaceCleanupService } from '../services/SpaceCleanupService'
 
 export function registerSpaceCleanupIpc(getMainWindow: () => BrowserWindow | null) {
@@ -9,9 +10,18 @@ export function registerSpaceCleanupIpc(getMainWindow: () => BrowserWindow | nul
     return spaceCleanupService.chooseRoot()
   })
 
-  ipcMain.handle('space-cleanup-start-scan', async (_event, rootPath: string) => {
+  ipcMain.handle('space-cleanup-list-drive-roots', async () => {
     spaceCleanupService.setMainWindow(getMainWindow())
-    return spaceCleanupService.startScan(rootPath)
+    return spaceCleanupService.listDriveRoots()
+  })
+
+  ipcMain.handle('space-cleanup-start-scan', async (
+    _event,
+    rootPath: string,
+    options?: SpaceCleanupStartScanOptions
+  ) => {
+    spaceCleanupService.setMainWindow(getMainWindow())
+    return spaceCleanupService.startScan(rootPath, options)
   })
 
   ipcMain.handle('space-cleanup-cancel-scan', async () => {

@@ -24,7 +24,12 @@ import type {
   TableOcrRecognizeResult,
   TableOcrRuntimeStatus
 } from '../shared/tableOcr'
-import type { SpaceCleanupNode, SpaceCleanupSession } from '../shared/spaceCleanup'
+import type {
+  SpaceCleanupDriveRoot,
+  SpaceCleanupNode,
+  SpaceCleanupSession,
+  SpaceCleanupStartScanOptions
+} from '../shared/spaceCleanup'
 import type {
   RecorderSelectionSessionPayload,
   ScreenshotSelectionSessionPayload
@@ -513,10 +518,14 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       ipcRenderer.invoke('space-cleanup-choose-root') as Promise<
         IpcResponse<{ canceled: boolean; path: string | null }>
       >,
-    startScan: (rootPath: string) =>
-      ipcRenderer.invoke('space-cleanup-start-scan', rootPath) as Promise<
-        IpcResponse<SpaceCleanupSession>
-      >,
+    listDriveRoots: () =>
+      ipcRenderer.invoke('space-cleanup-list-drive-roots') as Promise<IpcResponse<SpaceCleanupDriveRoot[]>>,
+    startScan: (rootPath: string, options?: SpaceCleanupStartScanOptions) =>
+      (options
+        ? ipcRenderer.invoke('space-cleanup-start-scan', rootPath, options)
+        : ipcRenderer.invoke('space-cleanup-start-scan', rootPath)) as Promise<
+          IpcResponse<SpaceCleanupSession>
+        >,
     cancelScan: () =>
       ipcRenderer.invoke('space-cleanup-cancel-scan') as Promise<IpcResponse<SpaceCleanupSession>>,
     getSession: () =>

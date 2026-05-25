@@ -57,7 +57,9 @@ const {
   getSpaceCleanupActionAvailability,
   getInitialExpandedSpaceCleanupPaths,
   toggleExpandedSpaceCleanupPath,
-  layoutTreemapItems
+  layoutTreemapItems,
+  shouldHydrateSpaceCleanupDirectory,
+  resolveSpaceCleanupStartScanOptions
 } = loadUseSpaceCleanupModule()
 const { createIdleSpaceCleanupSession } = require(path.join(__dirname, '../../../shared/spaceCleanup.ts'))
 
@@ -188,6 +190,7 @@ test('buildSpaceCleanupViewModel exposes scan mode, fallback reason, and partial
   assert.equal(viewModel.modeLabel, '普通扫描')
   assert.match(viewModel.modeReason, /NTFS 根盘/)
   assert.equal(viewModel.partialLabel, '已限制到前两级目录')
+  assert.equal(viewModel.statusLabel, '扫描中')
 })
 
 test('buildSpaceCleanupViewModel marks ntfs-fast sessions explicitly', () => {
@@ -204,6 +207,24 @@ test('buildSpaceCleanupViewModel marks ntfs-fast sessions explicitly', () => {
   assert.equal(viewModel.modeLabel, '极速扫描（NTFS）')
   assert.equal(viewModel.modeReason, null)
   assert.equal(viewModel.partialLabel, null)
+  assert.equal(viewModel.statusLabel, '已完成')
+})
+
+test('buildSpaceCleanupViewModel hides completed ntfs-fast stage text from fallback notices', () => {
+  const viewModel = buildSpaceCleanupViewModel({
+    session: {
+      ...createIdleSpaceCleanupSession(),
+      status: 'completed',
+      scanMode: 'ntfs-fast',
+      scanModeReason: '正在整理目录占用和大文件列表',
+      isPartial: true
+    },
+    selectedPath: null
+  })
+
+  assert.equal(viewModel.modeReason, null)
+  assert.equal(viewModel.partialLabel, '深层明细按需补齐')
+  assert.equal(viewModel.statusLabel, '已完成')
 })
 
 test('buildSpaceCleanupViewModel exposes an active scan label for pending ntfs-fast scans', () => {
@@ -473,6 +494,120 @@ test('buildSpaceCleanupViewModel marks a selected deep directory as distribution
   })
 
   assert.equal(viewModel.distributionLoading, true)
+})
+
+test('shouldHydrateSpaceCleanupDirectory requests filesystem breakdown for partial ntfs-fast directories that already have children', () => {
+  const tree = {
+    id: 'root',
+    name: 'D:\\',
+    path: 'D:\\',
+    type: 'directory',
+    sizeBytes: 453,
+    childrenCount: 1,
+    fileCount: 500,
+    directoryCount: 20,
+    skippedChildren: 8,
+    children: [
+      {
+        id: 'dir-vmware',
+        name: 'vmware',
+        path: 'D:\\vmware',
+        type: 'directory',
+        sizeBytes: 197,
+        childrenCount: 5,
+        fileCount: 350,
+        directoryCount: 10,
+        skippedChildren: 4,
+        children: [
+          {
+            id: 'dir-win10',
+            name: 'windows 10',
+            path: 'D:\\vmware\\windows 10',
+            type: 'directory',
+            sizeBytes: 147,
+            childrenCount: 63,
+            fileCount: 300,
+            directoryCount: 4,
+            skippedChildren: 0,
+            children: []
+          }
+        ]
+      }
+    ]
+  }
+
+  assert.equal(
+    shouldHydrateSpaceCleanupDirectory({
+      scanMode: 'ntfs-fast',
+      tree,
+      selectedNode: tree.children[0],
+      hydratedDirectories: {}
+    }),
+    true
+  )
+})
+
+test('shouldHydrateSpaceCleanupDirectory hydrates selected directories when the ntfs session has skipped entries at the root', () => {
+  const tree = {
+    id: 'root',
+    name: 'D:\\',
+    path: 'D:\\',
+    type: 'directory',
+    sizeBytes: 453,
+    childrenCount: 1,
+    fileCount: 500,
+    directoryCount: 20,
+    skippedChildren: 114,
+    children: [
+      {
+        id: 'dir-vmware',
+        name: 'vmware',
+        path: 'D:\\vmware',
+        type: 'directory',
+        sizeBytes: 197,
+        childrenCount: 5,
+        fileCount: 350,
+        directoryCount: 10,
+        skippedChildren: 0,
+        children: [
+          {
+            id: 'dir-win10',
+            name: 'windows 10',
+            path: 'D:\\vmware\\windows 10',
+            type: 'directory',
+            sizeBytes: 147,
+            childrenCount: 63,
+            fileCount: 300,
+            directoryCount: 4,
+            skippedChildren: 0,
+            children: []
+          }
+        ]
+      }
+    ]
+  }
+
+  assert.equal(
+    shouldHydrateSpaceCleanupDirectory({
+      scanMode: 'ntfs-fast',
+      tree,
+      selectedNode: tree.children[0],
+      hydratedDirectories: {},
+      hasSkippedEntries: true
+    }),
+    true
+  )
+})
+
+test('resolveSpaceCleanupStartScanOptions forwards the directory fast-scan preference explicitly', () => {
+  assert.deepEqual(
+    toPlainObject(resolveSpaceCleanupStartScanOptions(true)),
+    { preferNtfsFastForDirectories: true }
+  )
+  assert.deepEqual(
+    toPlainObject(resolveSpaceCleanupStartScanOptions(false)),
+    { preferNtfsFastForDirectories: false }
+  )
 })
 
 test('getInitialExpandedSpaceCleanupPaths keeps only the root expanded by default', () => {

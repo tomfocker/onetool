@@ -14,9 +14,9 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { useGlobalStore } from '@/store'
-import { formatSpaceCleanupBytes, type SpaceCleanupNode } from '../../../shared/spaceCleanup'
+import { formatSpaceCleanupBytes, type SpaceCleanupDriveRoot, type SpaceCleanupNode } from '../../../shared/spaceCleanup'
 import {
   getInitialExpandedSpaceCleanupPaths,
   toggleExpandedSpaceCleanupPath,
@@ -46,6 +46,43 @@ type TreeContextMenuState = {
   y: number
   path: string
   name: string
+}
+
+function getDriveRootMeta(driveRoot: SpaceCleanupDriveRoot) {
+  if (driveRoot.supportsNtfsFast) {
+    return '极速'
+  }
+
+  if (driveRoot.filesystem) {
+    return driveRoot.filesystem
+  }
+
+  switch (driveRoot.driveType) {
+    case 'network':
+      return '网络'
+    case 'removable':
+      return '移动'
+    case 'cdrom':
+      return '光驱'
+    case 'ramdisk':
+      return '内存盘'
+    case 'fixed':
+      return '本地'
+    default:
+      return '未知'
+  }
+}
+
+function isWindowsDriveRootPath(value: string | null | undefined) {
+  return typeof value === 'string' && /^[A-Za-z]:[\\/]+$/.test(value.trim())
+}
+
+function getDriveCapacityLabel(driveRoot: SpaceCleanupDriveRoot) {
+  if (driveRoot.driveType === 'network') {
+    return null
+  }
+
+  return driveRoot.totalBytes ? formatSpaceCleanupBytes(driveRoot.totalBytes) : null
 }
 
 function polarToCartesian(cx: number, cy: number, radius: number, angleInDegrees: number) {
@@ -229,13 +266,18 @@ export default function SpaceCleanupTool() {
   const {
     session,
     rootPath,
+    driveRoots,
+    driveRootsLoading,
     selectedPath,
     pendingAction,
     viewModel,
     actionState,
     chooseRoot,
+    refreshDriveRoots,
     startScan,
     cancelScan,
+    preferNtfsFastForDirectories,
+    setPreferNtfsFastForDirectories,
     selectPath
   } = useSpaceCleanup()
   const [expandedPaths, setExpandedPaths] = React.useState<string[]>([])
@@ -280,6 +322,20 @@ export default function SpaceCleanupTool() {
     const result = await startScan()
     if (!result.success) {
       showNotification({ type: 'error', message: result.error || '扫描失败' })
+    }
+  }
+
+  const handleDriveRootScan = async (drivePath: string) => {
+    const result = await startScan(drivePath)
+    if (!result.success) {
+      showNotification({ type: 'error', message: result.error || '扫描失败' })
+    }
+  }
+
+  const handleRefreshDriveRoots = async () => {
+    const result = await refreshDriveRoots()
+    if (!result.success) {
+      showNotification({ type: 'error', message: result.error || '无法读取盘符' })
     }
   }
 
@@ -350,6 +406,9 @@ export default function SpaceCleanupTool() {
   const distributionSubtitle = viewModel.distributionRoot
     ? `${viewModel.distributionSegments.length} 个主要分段`
     : '等待扫描结果'
+  const isCurrentRootDriveRoot = isWindowsDriveRootPath(rootPath)
+  const folderRootPath = rootPath && !isCurrentRootDriveRoot ? rootPath : ''
+  const hasCurrentTarget = rootPath.trim().length > 0
 
   return (
     <div className="space-y-5">
@@ -358,27 +417,159 @@ export default function SpaceCleanupTool() {
           <HardDrive className="h-6 w-6 text-primary" />
           空间分析
         </h2>
-        <p className="text-muted-foreground">扫描单个目录或磁盘的空间占用，并用目录树和分布图快速定位占用来源。</p>
+        <p className="text-muted-foreground">优先按整盘扫描定位空间占用；需要时也可以单独检查某个文件夹。</p>
       </div>
 
       <Card className="border-0 shadow-md">
         <CardContent className="space-y-4 p-6">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
-            <Input value={rootPath} readOnly placeholder="请选择扫描目录或磁盘根目录" className="h-11" />
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_300px]">
+            <section className="min-w-0 space-y-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground">整盘扫描</div>
+                  <div className="mt-1 text-sm text-muted-foreground">选择盘符后立即扫描整盘，NTFS 本地盘会优先使用极速模式。</div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void handleRefreshDriveRoots()}
+                  disabled={driveRootsLoading}
+                  title="刷新盘符"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${driveRootsLoading ? 'animate-spin' : ''}`} />
+                  刷新盘符
+                </Button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                {driveRoots.map((driveRoot) => {
+                  const isActive = rootPath === driveRoot.path
+                  const capacityLabel = getDriveCapacityLabel(driveRoot)
+                  const metaLabel = getDriveRootMeta(driveRoot)
+
+                  return (
+                    <Button
+                      key={driveRoot.path}
+                      variant={isActive ? 'default' : 'outline'}
+                      onClick={() => void handleDriveRootScan(driveRoot.path)}
+                      disabled={!actionState.canStartScan || pendingAction === 'scan'}
+                      title={`${driveRoot.path}${driveRoot.name ? ` ${driveRoot.name}` : ''}${capacityLabel ? ` · ${capacityLabel}` : ''}`}
+                      className={`h-[76px] justify-start rounded-2xl px-4 py-3 text-left whitespace-normal active:scale-[0.99] ${
+                        isActive ? 'shadow-sm' : 'bg-white hover:bg-zinc-50 dark:bg-zinc-950 dark:hover:bg-zinc-900'
+                      }`}
+                    >
+                      <div className="flex w-full min-w-0 items-center gap-3">
+                        <span
+                          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                            isActive ? 'bg-white/15' : 'bg-zinc-100 dark:bg-zinc-900'
+                          }`}
+                        >
+                          <HardDrive className="h-5 w-5" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex min-w-0 items-center gap-2">
+                            <span className="shrink-0 text-base font-black">{driveRoot.label}</span>
+                            <span
+                              className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                isActive ? 'bg-white/15 text-white/90' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-900 dark:text-zinc-300'
+                              }`}
+                            >
+                              {metaLabel}
+                            </span>
+                          </span>
+                          <span className={`mt-1 block truncate text-xs ${isActive ? 'text-white/75' : 'text-muted-foreground'}`}>
+                            {driveRoot.name || '未命名卷'}
+                          </span>
+                        </span>
+                        {capacityLabel ? (
+                          <span className={`shrink-0 text-xs font-bold ${isActive ? 'text-white/80' : 'text-muted-foreground'}`}>
+                            {capacityLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                    </Button>
+                  )
+                })}
+
+                {driveRootsLoading && driveRoots.length === 0
+                  ? [0, 1, 2, 3].map((item) => (
+                      <div
+                        key={item}
+                        className="h-[76px] animate-pulse rounded-2xl border border-zinc-200 bg-zinc-100/70 dark:border-zinc-800 dark:bg-zinc-900/60"
+                      />
+                    ))
+                  : null}
+
+                {!driveRootsLoading && driveRoots.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-zinc-300 px-4 py-6 text-sm text-muted-foreground dark:border-zinc-700">
+                    未读取到可扫描盘符。
+                  </div>
+                ) : null}
+              </div>
+            </section>
+
+            <aside className="rounded-2xl border border-zinc-200 bg-zinc-50/70 p-4 dark:border-zinc-800 dark:bg-zinc-900/30">
+              <div className="flex items-center gap-2 text-sm font-bold">
+                <FolderSearch className="h-4 w-4 text-primary" />
+                单独扫描文件夹
+              </div>
+              <div
+                className="mt-3 truncate rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs text-muted-foreground dark:border-zinc-800 dark:bg-zinc-950"
+                title={folderRootPath || undefined}
+              >
+                {folderRootPath || '未选择文件夹'}
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button size="sm" variant="outline" onClick={() => void handleChooseRoot()} className="px-2">
+                  <FolderSearch className="mr-2 h-4 w-4" />
+                  选择
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => void handleStartScan()}
+                  disabled={!folderRootPath || !actionState.canStartScan || pendingAction === 'scan'}
+                  className="px-2"
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${pendingAction === 'scan' && folderRootPath ? 'animate-spin' : ''}`} />
+                  扫描
+                </Button>
+              </div>
+              <label className="mt-3 flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-xs font-semibold text-muted-foreground dark:border-zinc-800 dark:bg-zinc-950">
+                <Checkbox
+                  checked={preferNtfsFastForDirectories}
+                  onCheckedChange={(checked) => setPreferNtfsFastForDirectories(checked === true)}
+                  className="h-4 w-4 rounded-md"
+                />
+                文件夹极速扫描
+              </label>
+            </aside>
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800 xl:flex-row xl:items-center xl:justify-between">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="outline">状态：{viewModel.statusLabel}</Badge>
+              <Badge variant="outline">{viewModel.modeLabel}</Badge>
+              {viewModel.partialLabel ? <Badge variant="outline">{viewModel.partialLabel}</Badge> : null}
+              {session.startedAt ? <Badge variant="outline">开始：{new Date(session.startedAt).toLocaleString('zh-CN')}</Badge> : null}
+              {session.finishedAt ? <Badge variant="outline">完成：{new Date(session.finishedAt).toLocaleString('zh-CN')}</Badge> : null}
+            </div>
+
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={() => void handleChooseRoot()}>
-                <FolderSearch className="mr-2 h-4 w-4" />
-                选择目录
-              </Button>
-              <Button onClick={() => void handleStartScan()} disabled={!actionState.canStartScan || pendingAction === 'scan'}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => void handleStartScan()}
+                disabled={!hasCurrentTarget || !actionState.canStartScan || pendingAction === 'scan'}
+              >
                 <RefreshCw className={`mr-2 h-4 w-4 ${pendingAction === 'scan' ? 'animate-spin' : ''}`} />
-                {session.status === 'completed' ? '重新扫描' : '开始扫描'}
+                {session.status === 'completed' ? '重新扫描当前目标' : '扫描当前目标'}
               </Button>
-              <Button variant="outline" onClick={() => void cancelScan()} disabled={!actionState.canCancel}>
+              <Button size="sm" variant="outline" onClick={() => void cancelScan()} disabled={!actionState.canCancel}>
                 <StopCircle className="mr-2 h-4 w-4" />
                 取消扫描
               </Button>
               <Button
+                size="sm"
                 variant="outline"
                 onClick={() => void handleAiCleanupSuggestion()}
                 disabled={session.status === 'idle' || aiLoading}
@@ -387,14 +578,6 @@ export default function SpaceCleanupTool() {
                 {aiLoading ? 'AI 分析中...' : 'AI 清理建议'}
               </Button>
             </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <Badge variant="outline">状态：{session.status}</Badge>
-            <Badge variant="outline">{viewModel.modeLabel}</Badge>
-            {viewModel.partialLabel ? <Badge variant="outline">{viewModel.partialLabel}</Badge> : null}
-            {session.startedAt ? <Badge variant="outline">开始：{new Date(session.startedAt).toLocaleString('zh-CN')}</Badge> : null}
-            {session.finishedAt ? <Badge variant="outline">完成：{new Date(session.finishedAt).toLocaleString('zh-CN')}</Badge> : null}
           </div>
 
           {viewModel.isScanning && viewModel.activityLabel ? (

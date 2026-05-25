@@ -3,8 +3,10 @@ import {
   createIdleSpaceCleanupSession,
   formatSpaceCleanupBytes,
   getRenderableTreemapChildren,
+  type SpaceCleanupDriveRoot,
   type SpaceCleanupNode,
-  type SpaceCleanupSession
+  type SpaceCleanupSession,
+  type SpaceCleanupStartScanOptions
 } from '../../../shared/spaceCleanup'
 
 type SpaceCleanupTreemapItem = {
@@ -37,6 +39,23 @@ type SpaceCleanupLargestFileBar = {
 
 type HydratedSpaceCleanupDirectoryMap = Record<string, SpaceCleanupNode>
 
+function getSpaceCleanupStatusLabel(status: SpaceCleanupSession['status']) {
+  switch (status) {
+    case 'idle':
+      return '待扫描'
+    case 'scanning':
+      return '扫描中'
+    case 'completed':
+      return '已完成'
+    case 'cancelled':
+      return '已取消'
+    case 'failed':
+      return '扫描失败'
+    default:
+      return status
+  }
+}
+
 type SpaceCleanupDistributionSource = {
   root: SpaceCleanupNode | null
   segments: SpaceCleanupDistributionSegment[]
@@ -53,6 +72,23 @@ const SPACE_CLEANUP_CHART_COLORS = [
   '#d97706',
   '#dc2626'
 ]
+const DIRECTORY_FAST_SCAN_STORAGE_KEY = 'space-cleanup-prefer-directory-fast-scan'
+
+function loadDirectoryFastScanPreference() {
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return false
+  }
+
+  return window.localStorage.getItem(DIRECTORY_FAST_SCAN_STORAGE_KEY) === 'true'
+}
+
+export function resolveSpaceCleanupStartScanOptions(
+  preferNtfsFastForDirectories: boolean
+): SpaceCleanupStartScanOptions {
+  return {
+    preferNtfsFastForDirectories
+  }
+}
 
 function getNodeBreadcrumbs(root: SpaceCleanupNode | null, targetPath: string | null) {
   if (!root || !targetPath) {
@@ -354,6 +390,31 @@ export function getSpaceCleanupActionAvailability({
   }
 }
 
+export function shouldHydrateSpaceCleanupDirectory({
+  scanMode,
+  tree,
+  selectedNode,
+  hydratedDirectories = {},
+  hasSkippedEntries = false
+}: {
+  scanMode: SpaceCleanupSession['scanMode']
+  tree: SpaceCleanupNode | null
+  selectedNode: SpaceCleanupNode | null
+  hydratedDirectories?: HydratedSpaceCleanupDirectoryMap
+  hasSkippedEntries?: boolean
+}) {
+  if (scanMode !== 'ntfs-fast' || !tree || !selectedNode || selectedNode.type !== 'directory') {
+    return false
+  }
+
+  if (selectedNode.path === tree.path || selectedNode.childrenCount === 0 || hydratedDirectories[selectedNode.path]) {
+    return false
+  }
+
+  const hasLoadedChildren = (selectedNode.children ?? []).length > 0
+  return !hasLoadedChildren || selectedNode.skippedChildren > 0 || hasSkippedEntries
+}
+
 export function buildSpaceCleanupViewModel({
   session,
   selectedPath,
@@ -403,6 +464,7 @@ export function buildSpaceCleanupViewModel({
     tree: resolvedTree,
     selectedNode,
     currentDirectory,
+    statusLabel: getSpaceCleanupStatusLabel(activeSession.status),
     isScanning,
     activityLabel: isScanning
       ? activeSession.scanModeReason ??
@@ -418,11 +480,11 @@ export function buildSpaceCleanupViewModel({
     distributionRoot,
     distributionLoading: currentDirectory?.type === 'directory' && currentDirectory.path === loadingDirectoryPath,
     modeLabel: activeSession.scanMode === 'ntfs-fast' ? '极速扫描（NTFS）' : '普通扫描',
-    modeReason: activeSession.scanModeReason,
+    modeReason: activeSession.scanMode === 'ntfs-fast' && !isScanning ? null : activeSession.scanModeReason,
     partialLabel: activeSession.isPartial
       ? activeSession.scanMode === 'filesystem'
         ? '已限制到前两级目录'
-        : '结果正在持续补全'
+        : '深层明细按需补齐'
       : null,
     distributionNote: distributionSource.note,
     distributionSegments,
@@ -454,6 +516,11 @@ export function useSpaceCleanup() {
   const [pendingAction, setPendingAction] = useState<string | null>(null)
   const [hydratedDirectories, setHydratedDirectories] = useState<HydratedSpaceCleanupDirectoryMap>({})
   const [loadingDirectoryPath, setLoadingDirectoryPath] = useState<string | null>(null)
+  const [driveRoots, setDriveRoots] = useState<SpaceCleanupDriveRoot[]>([])
+  const [driveRootsLoading, setDriveRootsLoading] = useState(false)
+  const [preferNtfsFastForDirectories, setPreferNtfsFastForDirectoriesState] = useState(
+    loadDirectoryFastScanPreference
+  )
   const hasBootstrappedRef = useRef(false)
 
   const applySession = useCallback((nextSession: SpaceCleanupSession) => {
@@ -474,6 +541,19 @@ export function useSpaceCleanup() {
     return result
   }, [])
 
+  const refreshDriveRoots = useCallback(async () => {
+    setDriveRootsLoading(true)
+    try {
+      const result = await window.electron.spaceCleanup.listDriveRoots()
+      if (result.success && result.data) {
+        setDriveRoots(result.data)
+      }
+      return result
+    } finally {
+      setDriveRootsLoading(false)
+    }
+  }, [])
+
   const startScan = useCallback(async (nextRootPath?: string) => {
     const targetPath = nextRootPath ?? rootPath
     if (!targetPath) {
@@ -481,7 +561,10 @@ export function useSpaceCleanup() {
     }
 
     setPendingAction('scan')
-    const result = await window.electron.spaceCleanup.startScan(targetPath)
+    const result = await window.electron.spaceCleanup.startScan(
+      targetPath,
+      resolveSpaceCleanupStartScanOptions(preferNtfsFastForDirectories)
+    )
     if (result.success && result.data) {
       setHydratedDirectories({})
       setLoadingDirectoryPath(null)
@@ -490,7 +573,12 @@ export function useSpaceCleanup() {
     }
     setPendingAction(null)
     return result
-  }, [applySession, rootPath])
+  }, [applySession, preferNtfsFastForDirectories, rootPath])
+
+  const setPreferNtfsFastForDirectories = useCallback((enabled: boolean) => {
+    setPreferNtfsFastForDirectoriesState(enabled)
+    window.localStorage.setItem(DIRECTORY_FAST_SCAN_STORAGE_KEY, String(enabled))
+  }, [])
 
   const cancelScan = useCallback(async () => {
     const result = await window.electron.spaceCleanup.cancelScan()
@@ -546,6 +634,10 @@ export function useSpaceCleanup() {
   }, [applySession])
 
   useEffect(() => {
+    void refreshDriveRoots()
+  }, [refreshDriveRoots])
+
+  useEffect(() => {
     const unsubscribeProgress = window.electron.spaceCleanup.onProgress((nextSession) => {
       applySession(nextSession)
     })
@@ -577,7 +669,13 @@ export function useSpaceCleanup() {
       return
     }
 
-    if ((selectedNode.children ?? []).length > 0 || selectedNode.childrenCount === 0 || hydratedDirectories[selectedNode.path]) {
+    if (!shouldHydrateSpaceCleanupDirectory({
+      scanMode: session.scanMode,
+      tree: session.tree,
+      selectedNode,
+      hydratedDirectories,
+      hasSkippedEntries: session.isPartial || session.summary.skippedEntries > 0
+    })) {
       return
     }
 
@@ -620,17 +718,22 @@ export function useSpaceCleanup() {
   return {
     session,
     rootPath,
+    driveRoots,
+    driveRootsLoading,
     selectedPath,
     pendingAction,
     viewModel,
     actionState,
     chooseRoot,
+    refreshDriveRoots,
     startScan,
     refreshScan,
     cancelScan,
     openSelectedPath,
     copySelectedPath,
     deleteSelectedPath,
+    preferNtfsFastForDirectories,
+    setPreferNtfsFastForDirectories,
     selectPath: setSelectedPath
   }
 }

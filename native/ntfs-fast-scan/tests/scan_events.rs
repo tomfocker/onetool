@@ -17,12 +17,17 @@ fn cleanup_temp_directory(path: &std::path::Path) {
 }
 
 #[test]
-fn rejects_non_root_paths_with_clear_error() {
+fn rejects_relative_paths_with_clear_error() {
     let root = create_temp_directory("non-root");
+    let relative_path = root
+        .file_name()
+        .expect("relative temp path")
+        .to_string_lossy()
+        .to_string();
 
     let output = Command::new(env!("CARGO_BIN_EXE_ntfs-fast-scan"))
         .args(["scan", "--root"])
-        .arg(&root)
+        .arg(relative_path)
         .output()
         .expect("run scanner");
 
@@ -36,11 +41,11 @@ fn rejects_non_root_paths_with_clear_error() {
 
     let stderr = String::from_utf8(output.stderr).expect("stderr utf8");
     assert!(
-        stderr.contains("root path"),
-        "expected root-path validation error, got: {stderr}"
+        stderr.contains("local NTFS"),
+        "expected local NTFS validation error, got: {stderr}"
     );
     assert!(
-        stderr.contains("NTFS") || stderr.contains("volume root"),
+        stderr.contains("absolute") || stderr.contains("volume"),
         "expected NTFS/root wording, got: {stderr}"
     );
 }

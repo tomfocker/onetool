@@ -1,4 +1,5 @@
 import { execFile as execFileCallback } from 'child_process'
+import type { SpaceCleanupDriveRoot, SpaceCleanupDriveType } from '../../shared/spaceCleanup'
 
 export type FastScanMode = 'filesystem' | 'ntfs-fast'
 
@@ -8,6 +9,32 @@ export type FastScanEligibility = {
 }
 
 type ExecFileFn = typeof execFileCallback
+
+type FastScanEligibilityOptions = {
+  platform?: NodeJS.Platform
+  execFile?: ExecFileFn
+  preferNtfsFastForDirectories?: boolean
+}
+
+type WindowsDriveRootsOptions = {
+  platform?: NodeJS.Platform
+  execFile?: ExecFileFn
+}
+
+type WindowsLogicalDiskRow = {
+  DeviceID?: unknown
+  VolumeName?: unknown
+  FileSystem?: unknown
+  DriveType?: unknown
+  Size?: unknown
+  FreeSpace?: unknown
+}
+
+const DRIVE_ROOT_QUERY_SCRIPT = [
+  '[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)',
+  '$OutputEncoding = [Console]::OutputEncoding',
+  'Get-CimInstance Win32_LogicalDisk | Select-Object DeviceID,VolumeName,FileSystem,DriveType,Size,FreeSpace | ConvertTo-Json -Compress'
+].join('; ')
 
 function execFileAsync(execFile: ExecFileFn, file: string, args: readonly string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -51,6 +78,10 @@ function isWindowsLocalRootVolume(targetPath: string): boolean {
   return /^[A-Za-z]:[\\/]+$/.test(targetPath)
 }
 
+function isWindowsLocalDrivePath(targetPath: string): boolean {
+  return /^[A-Za-z]:[\\/]/.test(targetPath)
+}
+
 function toVolumeSpecifier(targetPath: string): string {
   return `${targetPath.slice(0, 2)}`
 }
@@ -68,12 +99,109 @@ function extractFilesystemName(output: string): string | null {
   return null
 }
 
+function toNullableString(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : null
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+
+  return null
+}
+
+function toDriveType(value: unknown): SpaceCleanupDriveType {
+  const numeric = typeof value === 'number' ? value : Number(value)
+
+  switch (numeric) {
+    case 2:
+      return 'removable'
+    case 3:
+      return 'fixed'
+    case 4:
+      return 'network'
+    case 5:
+      return 'cdrom'
+    case 6:
+      return 'ramdisk'
+    default:
+      return 'unknown'
+  }
+}
+
+function normalizeLogicalDiskRows(output: string): WindowsLogicalDiskRow[] {
+  const trimmed = output.trim()
+  if (!trimmed) {
+    return []
+  }
+
+  const parsed = JSON.parse(trimmed)
+  if (!parsed) {
+    return []
+  }
+
+  return Array.isArray(parsed) ? parsed : [parsed]
+}
+
+function mapLogicalDiskRow(row: WindowsLogicalDiskRow): SpaceCleanupDriveRoot | null {
+  const deviceId = toNullableString(row.DeviceID)?.toUpperCase()
+  if (!deviceId || !/^[A-Z]:$/.test(deviceId)) {
+    return null
+  }
+
+  const filesystem = toNullableString(row.FileSystem)
+  const driveType = toDriveType(row.DriveType)
+
+  return {
+    path: `${deviceId}\\`,
+    label: deviceId,
+    name: toNullableString(row.VolumeName),
+    filesystem,
+    driveType,
+    totalBytes: toNullableNumber(row.Size),
+    freeBytes: toNullableNumber(row.FreeSpace),
+    supportsNtfsFast: driveType === 'fixed' && filesystem?.toUpperCase() === 'NTFS'
+  }
+}
+
+export async function listWindowsDriveRoots(
+  options: WindowsDriveRootsOptions = {}
+): Promise<SpaceCleanupDriveRoot[]> {
+  const platform = options.platform ?? process.platform
+
+  if (platform !== 'win32') {
+    return []
+  }
+
+  const execFile = options.execFile ?? execFileCallback
+  const stdout = await execFileAsync(execFile, 'powershell.exe', [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-Command',
+    DRIVE_ROOT_QUERY_SCRIPT
+  ])
+
+  return normalizeLogicalDiskRows(stdout)
+    .map(mapLogicalDiskRow)
+    .filter((root): root is SpaceCleanupDriveRoot => Boolean(root))
+    .sort((left, right) => left.label.localeCompare(right.label))
+}
+
 export async function getFastScanEligibility(
   targetPath: string,
-  options: {
-    platform?: NodeJS.Platform
-    execFile?: ExecFileFn
-  } = {}
+  options: FastScanEligibilityOptions = {}
 ): Promise<FastScanEligibility> {
   const platform = options.platform ?? process.platform
 
@@ -84,10 +212,13 @@ export async function getFastScanEligibility(
     }
   }
 
-  if (!isWindowsLocalRootVolume(targetPath)) {
+  const isRootVolume = isWindowsLocalRootVolume(targetPath)
+  if (!isRootVolume && (!options.preferNtfsFastForDirectories || !isWindowsLocalDrivePath(targetPath))) {
     return {
       mode: 'filesystem',
-      reason: 'NTFS 极速扫描仅支持本地盘根路径'
+      reason: options.preferNtfsFastForDirectories
+        ? 'NTFS 极速扫描仅支持本地盘符路径'
+        : '文件夹默认使用普通扫描；NTFS 极速扫描默认仅用于本地盘根路径'
     }
   }
 

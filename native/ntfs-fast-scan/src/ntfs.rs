@@ -24,7 +24,8 @@ use self::win32::{
     USN_RECORD_V2, USN_RECORD_V3,
 };
 
-const ROOT_PATH_ERROR: &str = "root path must be a fixed local NTFS volume root like C:\\";
+const ROOT_PATH_ERROR: &str =
+    "scan path must be an absolute fixed local NTFS volume path like C:\\ or C:\\Users";
 #[cfg(windows)]
 const FILE_SHARES: u32 = FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE;
 #[cfg(windows)]
@@ -349,6 +350,7 @@ fn build_snapshot_from_entries(
     entries: Vec<EnumeratedEntry>,
 ) -> io::Result<ScanSnapshot> {
     let root_path_string = path_string(root_path);
+    let root_name = root_display_name(root_path, &root_path_string);
     let mut nodes = HashMap::<FileReference, NodeRecord>::new();
 
     for entry in entries {
@@ -421,7 +423,7 @@ fn build_snapshot_from_entries(
         filesystem: filesystem.to_owned(),
         root: ScanEntry {
             path: root_path_string.clone(),
-            name: root_path_string,
+            name: root_name,
             kind: EntryKind::Directory,
             size_bytes: root_size,
             skipped_children: root_skipped_children,
@@ -525,6 +527,15 @@ fn path_string(path: &Path) -> String {
     normalize_windows_path(path.to_string_lossy().into_owned())
 }
 
+fn root_display_name(root_path: &Path, fallback: &str) -> String {
+    root_path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| fallback.to_owned())
+}
+
 #[cfg(windows)]
 fn file_record_segment_number(file_reference_number: u64) -> u64 {
     file_reference_number & FILE_RECORD_SEGMENT_MASK
@@ -560,6 +571,7 @@ struct NodeRecord {
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct ValidatedRoot {
     root_path: String,
+    volume_root_path: String,
     drive_letter: char,
 }
 
@@ -949,8 +961,8 @@ fn validate_root_path(root: &Path) -> io::Result<ValidatedRoot> {
     use std::path::{Component, Prefix};
 
     let mut components = root.components();
-    let drive_letter = match (components.next(), components.next(), components.next()) {
-        (Some(Component::Prefix(prefix)), Some(Component::RootDir), None) => match prefix.kind() {
+    let drive_letter = match (components.next(), components.next()) {
+        (Some(Component::Prefix(prefix)), Some(Component::RootDir)) => match prefix.kind() {
             Prefix::Disk(letter) | Prefix::VerbatimDisk(letter) => {
                 char::from(letter).to_ascii_uppercase()
             }
@@ -959,8 +971,19 @@ fn validate_root_path(root: &Path) -> io::Result<ValidatedRoot> {
         _ => return Err(invalid_root_path(root)),
     };
 
+    let volume_root_path = format!("{drive_letter}:\\");
+    let mut normalized_path = PathBuf::from(&volume_root_path);
+    for component in components {
+        match component {
+            Component::Normal(part) => normalized_path.push(part),
+            Component::CurDir => {}
+            _ => return Err(invalid_root_path(root)),
+        }
+    }
+
     Ok(ValidatedRoot {
-        root_path: format!("{drive_letter}:\\"),
+        root_path: path_string(&normalized_path),
+        volume_root_path,
         drive_letter,
     })
 }
@@ -975,10 +998,10 @@ fn invalid_root_path(root: &Path) -> io::Error {
 
 #[cfg(windows)]
 fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
-    let root_wide = wide_string(&root.root_path);
+    let root_wide = wide_string(&root.volume_root_path);
     let drive_type = unsafe { GetDriveTypeW(root_wide.as_ptr()) };
     if !supports_fast_ntfs_drive_type(drive_type) {
-        return Err(invalid_root_path(Path::new(&root.root_path)));
+        return Err(invalid_root_path(Path::new(&root.volume_root_path)));
     }
 
     let mut filesystem_name = [0u16; 64];
@@ -1001,7 +1024,7 @@ fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
             io::ErrorKind::Other,
             format!(
                 "failed to query volume information for {}: {}",
-                root.root_path,
+                root.volume_root_path,
                 io::Error::last_os_error()
             ),
         ));
@@ -1013,7 +1036,7 @@ fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
             io::ErrorKind::InvalidInput,
             format!(
                 "root path must be on an NTFS volume root; {} is {}",
-                root.root_path, filesystem
+                root.volume_root_path, filesystem
             ),
         ));
     }
@@ -1023,7 +1046,7 @@ fn query_volume_filesystem(root: &ValidatedRoot) -> io::Result<String> {
             io::ErrorKind::InvalidInput,
             format!(
                 "NTFS volume {} does not expose the USN journal required for ntfs-fast mode",
-                root.root_path
+                root.volume_root_path
             ),
         ));
     }
@@ -1538,7 +1561,7 @@ mod tests {
 
     #[cfg(windows)]
     #[test]
-    fn validate_root_path_only_accepts_local_volume_roots() {
+    fn validate_root_path_accepts_local_volume_roots_and_directories() {
         assert_eq!(
             validate_root_path(Path::new(r"C:\"))
                 .expect("drive root")
@@ -1551,8 +1574,13 @@ mod tests {
                 .root_path,
             r"C:\"
         );
+        assert_eq!(
+            validate_root_path(Path::new(r"C:\vmware"))
+                .expect("drive directory")
+                .root_path,
+            r"C:\vmware"
+        );
 
-        assert!(validate_root_path(Path::new(r"C:\Windows")).is_err());
         assert!(validate_root_path(Path::new(r"\\server\share\")).is_err());
         assert!(validate_root_path(Path::new("relative")).is_err());
     }

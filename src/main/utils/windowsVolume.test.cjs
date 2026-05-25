@@ -51,7 +51,7 @@ function loadWindowsVolumeModule(overrides = {}) {
   return module.exports
 }
 
-test('getFastScanEligibility accepts only Windows local NTFS root volumes', async () => {
+test('getFastScanEligibility keeps Windows local NTFS root volumes eligible by default', async () => {
   const { getFastScanEligibility } = loadWindowsVolumeModule({
     platform: 'win32',
     execFile: async () => ({ stdout: '文件系统名称 : NTFS' })
@@ -64,6 +64,24 @@ test('getFastScanEligibility accepts only Windows local NTFS root volumes', asyn
   assert.equal(eligible.reason, null)
   assert.equal(notRoot.mode, 'filesystem')
   assert.match(notRoot.reason, /根路径/)
+})
+
+test('getFastScanEligibility allows Windows local NTFS directories when directory fast scan is requested', async () => {
+  const calls = []
+  const { getFastScanEligibility } = loadWindowsVolumeModule({
+    platform: 'win32',
+    execFile: async (file, args) => {
+      calls.push([file, args])
+      return { stdout: '文件系统名称 : NTFS' }
+    }
+  })
+
+  const result = await getFastScanEligibility('D:\\vmware', { preferNtfsFastForDirectories: true })
+
+  assert.equal(result.mode, 'ntfs-fast')
+  assert.equal(result.reason, null)
+  assert.equal(calls.length, 1)
+  assert.deepEqual(Array.from(calls[0][1]), ['fsinfo', 'volumeinfo', 'D:'])
 })
 
 test('getFastScanEligibility returns filesystem mode on non-Windows with a Windows-only reason', async () => {
@@ -120,4 +138,60 @@ test('getFastScanEligibility probes root volumes with a drive specifier instead 
   assert.equal(calls.length, 1)
   assert.equal(calls[0][0], 'fsutil')
   assert.deepEqual(Array.from(calls[0][1]), ['fsinfo', 'volumeinfo', 'D:'])
+})
+
+test('listWindowsDriveRoots returns sorted logical drives with fast-scan metadata', async () => {
+  const calls = []
+  const { listWindowsDriveRoots } = loadWindowsVolumeModule({
+    platform: 'win32',
+    execFile: async (file, args) => {
+      calls.push([file, args])
+      return {
+        stdout: JSON.stringify([
+          {
+            DeviceID: 'E:',
+            VolumeName: 'Backup',
+            FileSystem: 'exFAT',
+            DriveType: 2,
+            Size: '2000',
+            FreeSpace: '500'
+          },
+          {
+            DeviceID: 'D:',
+            VolumeName: '本地磁盘',
+            FileSystem: 'NTFS',
+            DriveType: 3,
+            Size: 1000,
+            FreeSpace: 400
+          }
+        ])
+      }
+    }
+  })
+
+  const roots = await listWindowsDriveRoots()
+
+  assert.equal(calls.length, 1)
+  assert.equal(calls[0][0], 'powershell.exe')
+  assert.match(Array.from(calls[0][1]).join(' '), /UTF8Encoding/)
+  assert.deepEqual(Array.from(roots.map((root) => root.path)), ['D:\\', 'E:\\'])
+  assert.deepEqual(JSON.parse(JSON.stringify(roots[0])), {
+    path: 'D:\\',
+    label: 'D:',
+    name: '本地磁盘',
+    filesystem: 'NTFS',
+    driveType: 'fixed',
+    totalBytes: 1000,
+    freeBytes: 400,
+    supportsNtfsFast: true
+  })
+  assert.equal(roots[1].supportsNtfsFast, false)
+})
+
+test('listWindowsDriveRoots returns an empty list outside Windows', async () => {
+  const { listWindowsDriveRoots } = loadWindowsVolumeModule({
+    platform: 'linux'
+  })
+
+  assert.deepEqual(Array.from(await listWindowsDriveRoots()), [])
 })
