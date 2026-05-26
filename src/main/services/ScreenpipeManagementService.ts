@@ -531,7 +531,7 @@ export class ScreenpipeManagementService {
       }
       const apiKey = config.apiKey.trim()
       if (apiKey) {
-        headers['x-api-key'] = apiKey
+        headers.Authorization = `Bearer ${apiKey}`
       }
 
       const response = await this.fetchFn(resolveScreenpipeHealthUrl(config.apiUrl), { headers })
