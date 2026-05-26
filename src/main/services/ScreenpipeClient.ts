@@ -48,26 +48,21 @@ export class ScreenpipeClient {
 
   async search(request: ScreenpipeSearchRequest): Promise<IpcResponse<MemoryDiaryItem[]>> {
     try {
-      const params = new URLSearchParams()
-      params.set('start_time', request.startTime)
-      params.set('end_time', request.endTime)
-      params.set('limit', String(request.limit ?? 1000))
-      params.set('content_type', request.contentTypes.length === 1 ? request.contentTypes[0] : 'all')
-
-      const response = await this.fetchImpl(`${this.buildUrl(request.apiUrl, '/search')}?${params.toString()}`, {
-        headers: this.buildHeaders(request.apiKey)
-      })
-      if (!response.ok) {
-        return {
-          success: false,
-          error: await this.readError(response, 'ScreenPipe 搜索失败')
-        }
+      if (request.contentTypes.length === 0) {
+        return { success: true, data: [] }
       }
 
-      const payload = await response.json() as { data?: ScreenpipePayloadItem[] }
-      const items = (payload.data || [])
-        .map((item, index) => this.mapItem(item, index))
-        .filter((item): item is MemoryDiaryItem => Boolean(item))
+      const results = await Promise.all(
+        request.contentTypes.map((contentType) => this.searchContentType(request, contentType))
+      )
+      const failedResult = results.find((result) => !result.success)
+      if (failedResult) {
+        return failedResult
+      }
+
+      const items = results
+        .flatMap((result) => result.data || [])
+        .sort((left, right) => left.timestamp.localeCompare(right.timestamp))
 
       return { success: true, data: items }
     } catch (error) {
@@ -85,6 +80,34 @@ export class ScreenpipeClient {
       headers.Authorization = `Bearer ${apiKey.trim()}`
     }
     return headers
+  }
+
+  private async searchContentType(
+    request: ScreenpipeSearchRequest,
+    contentType: MemoryDiaryContentType
+  ): Promise<IpcResponse<MemoryDiaryItem[]>> {
+    const params = new URLSearchParams()
+    params.set('start_time', request.startTime)
+    params.set('end_time', request.endTime)
+    params.set('limit', String(request.limit ?? 1000))
+    params.set('content_type', contentType)
+
+    const response = await this.fetchImpl(`${this.buildUrl(request.apiUrl, '/search')}?${params.toString()}`, {
+      headers: this.buildHeaders(request.apiKey)
+    })
+    if (!response.ok) {
+      return {
+        success: false,
+        error: await this.readError(response, `ScreenPipe ${contentType} 搜索失败`)
+      }
+    }
+
+    const payload = await response.json() as { data?: ScreenpipePayloadItem[] }
+    const items = (payload.data || [])
+      .map((item, index) => this.mapItem(item, index))
+      .filter((item): item is MemoryDiaryItem => Boolean(item))
+
+    return { success: true, data: items }
   }
 
   private async readError(response: Response, fallback: string): Promise<string> {

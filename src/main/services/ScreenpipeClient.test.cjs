@@ -5,6 +5,10 @@ const path = require('node:path')
 const vm = require('node:vm')
 const ts = require('typescript')
 
+function toPlainObject(value) {
+  return JSON.parse(JSON.stringify(value))
+}
+
 function loadModule() {
   const filePath = path.join(__dirname, 'ScreenpipeClient.ts')
   const source = fs.readFileSync(filePath, 'utf8')
@@ -92,37 +96,93 @@ test('search calls the configured api url with bearer auth', async () => {
   assert.equal(calls[0][1]['x-api-key'], undefined)
 })
 
+test('search queries each requested content type separately before merging results', async () => {
+  const calls = []
+  const { ScreenpipeClient } = loadModule()
+  const client = new ScreenpipeClient({
+    fetch: async (url, init) => {
+      calls.push([url, init.headers])
+      const parsedUrl = new URL(url)
+      const contentType = parsedUrl.searchParams.get('content_type')
+      return {
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              type: contentType === 'accessibility' ? 'UI' : 'OCR',
+              content: {
+                id: contentType,
+                text: `${contentType} text`,
+                app_name: 'OneTool',
+                window_name: 'Memory diary',
+                timestamp: contentType === 'accessibility'
+                  ? '2026-05-26T01:00:00.000Z'
+                  : '2026-05-26T01:01:00.000Z'
+              }
+            }
+          ]
+        })
+      }
+    }
+  })
+
+  const result = await client.search({
+    apiUrl: 'http://localhost:3030',
+    apiKey: 'token',
+    startTime: '2026-05-26T00:00:00.000Z',
+    endTime: '2026-05-26T23:59:59.999Z',
+    contentTypes: ['accessibility', 'ocr'],
+    limit: 3000
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(calls.map(([url]) => new URL(url).searchParams.get('content_type')), [
+    'accessibility',
+    'ocr'
+  ])
+  assert.deepEqual(toPlainObject(result.data.map((item) => [item.contentType, item.text])), [
+    ['accessibility', 'accessibility text'],
+    ['ocr', 'ocr text']
+  ])
+})
+
 test('search normalizes screenpipe payload items into MemoryDiaryItem records', async () => {
   const { ScreenpipeClient } = loadModule()
   const client = new ScreenpipeClient({
-    fetch: async () => ({
-      ok: true,
-      json: async () => ({
-        data: [
-          {
-            type: 'OCR',
-            content: {
-              frame_id: 42,
-              text: 'Implemented timeline',
-              app_name: 'Code',
-              window_name: 'memoryDiary.ts',
-              timestamp: '2026-05-26T01:00:00.000Z'
-            }
-          },
-          {
-            type: 'Accessibility',
-            content: {
-              id: 'a1',
-              text: 'Reviewed docs',
-              app_name: 'Chrome',
-              window_name: 'ScreenPipe docs',
-              browser_url: 'https://docs.screenpi.pe',
-              timestamp: '2026-05-26T01:15:00.000Z'
-            }
-          }
-        ]
-      })
-    })
+    fetch: async (url) => {
+      const contentType = new URL(url).searchParams.get('content_type')
+      return {
+        ok: true,
+        json: async () => ({
+          data: contentType === 'ocr'
+            ? [
+                {
+                  type: 'OCR',
+                  content: {
+                    frame_id: 42,
+                    text: 'Implemented timeline',
+                    app_name: 'Code',
+                    window_name: 'memoryDiary.ts',
+                    timestamp: '2026-05-26T01:00:00.000Z'
+                  }
+                }
+              ]
+            : [
+                {
+                  type: 'Accessibility',
+                  content: {
+                    id: 'a1',
+                    text: 'Reviewed docs',
+                    app_name: 'Chrome',
+                    window_name: 'ScreenPipe docs',
+                    browser_url: 'https://docs.screenpi.pe',
+                    timestamp: '2026-05-26T01:15:00.000Z'
+                  }
+                }
+              ]
+        })
+      }
+    }
   })
 
   const result = await client.search({
@@ -134,7 +194,7 @@ test('search normalizes screenpipe payload items into MemoryDiaryItem records', 
   })
 
   assert.equal(result.success, true)
-  assert.deepEqual(result.data.map((item) => [item.id, item.contentType, item.appName, item.url, item.text]), [
+  assert.deepEqual(toPlainObject(result.data.map((item) => [item.id, item.contentType, item.appName, item.url, item.text])), [
     ['ocr-42', 'ocr', 'Code', '', 'Implemented timeline'],
     ['accessibility-a1', 'accessibility', 'Chrome', 'https://docs.screenpi.pe', 'Reviewed docs']
   ])
@@ -172,7 +232,7 @@ test('search treats ScreenPipe UI rows as accessibility records', async () => {
   })
 
   assert.equal(result.success, true)
-  assert.deepEqual(result.data.map((item) => [item.id, item.contentType, item.text]), [
+  assert.deepEqual(toPlainObject(result.data.map((item) => [item.id, item.contentType, item.text])), [
     ['accessibility-ui-1', 'accessibility', 'Clean accessibility text']
   ])
 })
@@ -209,7 +269,7 @@ test('search normalizes ScreenPipe input rows with text content and window title
   })
 
   assert.equal(result.success, true)
-  assert.deepEqual(result.data.map((item) => [item.id, item.contentType, item.windowName, item.text]), [
+  assert.deepEqual(toPlainObject(result.data.map((item) => [item.id, item.contentType, item.windowName, item.text])), [
     ['input-input-1', 'input', 'OneTool debugging', 'typed follow-up question']
   ])
 })
