@@ -20,6 +20,7 @@ function loadModule(overrides = {}) {
   const module = { exports: {} }
   const customRequire = (specifier) => {
     if (specifier === 'child_process') return overrides.childProcess
+    if (specifier === 'fs') return overrides.fs || require('node:fs')
     if (specifier === './StoreService') return { storeService: overrides.storeService }
     if (specifier === '../../shared/memoryDiary') return require(path.join(__dirname, '../../shared/memoryDiary.ts'))
     if (specifier === '../../shared/types') return {}
@@ -110,6 +111,36 @@ test('getCliStatus uses configured screenpipe executable path', async () => {
   assert.equal(result.data.executablePath, 'C:\\Tools\\screenpipe.exe')
 })
 
+test('getCliStatus normalizes npm screenpipe.cmd to the Windows binary', async () => {
+  const state = createState()
+  state.memoryDiary.config.screenpipeExecutablePath = 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd'
+  const expectedExecutablePath = 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\node_modules\\screenpipe\\node_modules\\@screenpipe\\cli-win32-x64\\bin\\screenpipe.exe'
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (cmd, args, _options, callback) => {
+        assert.equal(cmd, expectedExecutablePath)
+        assert.deepEqual(Array.from(args), ['--version'])
+        callback(null, 'screenpipe 1.2.3\n', '')
+      },
+      spawn: () => { throw new Error('not used') }
+    },
+    fs: {
+      existsSync: (candidatePath) => candidatePath === expectedExecutablePath
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.getCliStatus()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.installed, true)
+  assert.equal(result.data.executablePath, expectedExecutablePath)
+})
+
 test('getCliStatus explains missing screenpipe executable', async () => {
   const state = createState()
   const error = Object.assign(new Error('spawn screenpipe ENOENT'), { code: 'ENOENT' })
@@ -166,6 +197,7 @@ test('installLatest installs screenpipe with npm and stores global executable pa
   const state = createState()
   let spawnArgs = null
   const execCalls = []
+  const expectedExecutablePath = 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\node_modules\\screenpipe\\node_modules\\@screenpipe\\cli-win32-x64\\bin\\screenpipe.exe'
   const { ScreenpipeManagementService } = loadModule({
     childProcess: {
       execFile: (cmd, args, _options, callback) => {
@@ -175,7 +207,7 @@ test('installLatest installs screenpipe with npm and stores global executable pa
           return
         }
 
-        assert.equal(cmd, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
+        assert.equal(cmd, expectedExecutablePath)
         assert.deepEqual(Array.from(args), ['--version'])
         callback(null, 'screenpipe 0.3.346\n', '')
       },
@@ -191,6 +223,9 @@ test('installLatest installs screenpipe with npm and stores global executable pa
         })
         return child
       }
+    },
+    fs: {
+      existsSync: (candidatePath) => candidatePath === expectedExecutablePath
     },
     storeService: {
       get: (key) => state[key],
@@ -213,10 +248,10 @@ test('installLatest installs screenpipe with npm and stores global executable pa
   ])
   assert.deepEqual(execCalls, [
     ['npm.cmd', ['prefix', '-g']],
-    ['C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd', ['--version']]
+    [expectedExecutablePath, ['--version']]
   ])
-  assert.equal(result.data.config.screenpipeExecutablePath, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
-  assert.equal(writes.at(-1)[1].config.screenpipeExecutablePath, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
+  assert.equal(result.data.config.screenpipeExecutablePath, expectedExecutablePath)
+  assert.equal(writes.at(-1)[1].config.screenpipeExecutablePath, expectedExecutablePath)
 })
 
 test('installLatest reports npm installation failures', async () => {
