@@ -10,6 +10,7 @@ export type MainProcessIpcRegistrars = {
   registerTranslateIpc(): void
   registerLlmIpc(): void
   registerTaskbarAppearanceIpc(): void
+  registerTroubleshootingIpc(): void
   registerRenameIpc(): void
   registerQuickInstallerIpc(): void
   registerScreenOverlayIpc(): void
@@ -49,6 +50,7 @@ export function registerIpc(input: {
   registrars.registerTranslateIpc()
   registrars.registerLlmIpc()
   registrars.registerTaskbarAppearanceIpc()
+  registrars.registerTroubleshootingIpc()
   registrars.registerRenameIpc()
   registrars.registerQuickInstallerIpc()
   registrars.registerScreenOverlayIpc()

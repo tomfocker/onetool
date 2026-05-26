@@ -1,0 +1,41 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const source = fs.readFileSync(path.join(__dirname, 'TroubleshootingTool.tsx'), 'utf8')
+
+test('TroubleshootingTool exposes the Group Policy repair assistant workflow', () => {
+  assert.match(source, /疑难修复/)
+  assert.match(source, /家庭版组策略助手/)
+  assert.match(source, /scanGroupPolicy/)
+  assert.match(source, /installGroupPolicy/)
+  assert.match(source, /openGroupPolicyEditor/)
+  assert.match(source, /window\.confirm/)
+  assert.match(source, /管理员权限/)
+  assert.match(source, /gpedit\.msc/)
+})
+
+test('TroubleshootingTool keeps install output and package counts visible', () => {
+  assert.match(source, /packageCount/)
+  assert.match(source, /clientExtensionPackageCount/)
+  assert.match(source, /clientToolsPackageCount/)
+  assert.match(source, /outputTail/)
+  assert.match(source, /logPath/)
+})
+
+test('TroubleshootingTool exposes the printer share repair client diagnosis workflow', () => {
+  assert.match(source, /打印共享修复/)
+  assert.match(source, /开始修复/)
+  assert.match(source, /高级诊断/)
+  assert.match(source, /diagnosePrinterShare/)
+  assert.match(source, /repairPrinterShare/)
+  assert.match(source, /savePrinterShareCredential/)
+  assert.match(source, /openPrinterShareTarget/)
+  assert.match(source, /apply-rpc-compatibility/)
+  assert.match(source, /save-server-credential/)
+  assert.match(source, /clear-server-connection/)
+  assert.match(source, /clear-server-credential/)
+  assert.match(source, /clear-client-print-queue/)
+  assert.match(source, /window\.confirm/)
+})

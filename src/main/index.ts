@@ -59,6 +59,7 @@ import { registerCalendarIpc } from './ipc/calendarIpc'
 import { registerTranslateIpc } from './ipc/translateIpc'
 import { registerLlmIpc } from './ipc/llmIpc'
 import { registerTaskbarAppearanceIpc, restoreTaskbarAppearanceOnStartup } from './ipc/taskbarAppearanceIpc'
+import { registerTroubleshootingIpc } from './ipc/troubleshootingIpc'
 import { registerUpdateIpc } from './ipc/updateIpc'
 import { registerWebActivatorIpc } from './ipc/webActivatorIpc'
 import { registerWslIpc } from './ipc/wslIpc'
@@ -175,6 +176,7 @@ app.whenReady().then(() => {
     registerTranslateIpc,
     registerLlmIpc,
     registerTaskbarAppearanceIpc,
+    registerTroubleshootingIpc,
     registerRenameIpc,
     registerQuickInstallerIpc,
     registerScreenOverlayIpc,

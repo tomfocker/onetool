@@ -32,6 +32,17 @@ import {
 } from '../../../shared/types'
 import type { UpdateState } from '../../../shared/appUpdate'
 import type {
+  GroupPolicyInstallResult,
+  GroupPolicyStatus,
+  PrinterShareCredentialRequest,
+  PrinterShareCredentialResult,
+  PrinterShareDiagnosis,
+  PrinterShareDiagnosisRequest,
+  PrinterShareOpenRequest,
+  PrinterShareRepairRequest,
+  PrinterShareRepairResult
+} from '../../../shared/troubleshooting'
+import type {
   DevEnvironmentId,
   DevEnvironmentOverview,
   DevEnvironmentRecord
@@ -510,6 +521,21 @@ declare global {
           base64Image: string,
           mode?: ScreenOverlayMode
         ) => Promise<IpcResponse<ScreenOverlayLineResult[]>>
+      }
+      troubleshooting: {
+        scanGroupPolicy: () => Promise<IpcResponse<GroupPolicyStatus>>
+        installGroupPolicy: () => Promise<IpcResponse<GroupPolicyInstallResult>>
+        openGroupPolicyEditor: () => Promise<IpcResponse>
+        diagnosePrinterShare: (
+          request: PrinterShareDiagnosisRequest
+        ) => Promise<IpcResponse<PrinterShareDiagnosis>>
+        repairPrinterShare: (
+          request: PrinterShareRepairRequest
+        ) => Promise<IpcResponse<PrinterShareRepairResult>>
+        savePrinterShareCredential: (
+          request: PrinterShareCredentialRequest
+        ) => Promise<IpcResponse<PrinterShareCredentialResult>>
+        openPrinterShareTarget: (request: PrinterShareOpenRequest) => Promise<IpcResponse>
       }
       wsl: {
         getOverview: () => Promise<IpcResponse<WslOverview>>

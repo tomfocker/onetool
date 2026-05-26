@@ -3,7 +3,7 @@ import {
   Package, Terminal, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
-  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText
+  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText, Wrench
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,7 +22,7 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText
+  Package, Terminal, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText, Wrench
 }
 
 const toolGradientMap: Record<string, string> = {
@@ -47,6 +47,7 @@ const toolGradientMap: Record<string, string> = {
   'network-radar': 'from-blue-600 to-cyan-600',
   'windows-manager': 'from-slate-600 to-zinc-800',
   'local-proxy-manager': 'from-emerald-500 to-teal-600',
+  'troubleshooting': 'from-rose-500 to-red-600',
   'wsl-manager': 'from-cyan-500 to-indigo-600'
 }
 

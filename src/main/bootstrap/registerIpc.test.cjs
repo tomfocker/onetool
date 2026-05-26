@@ -50,6 +50,7 @@ test('registerIpc registers both plain and window-aware handlers through one acc
       registerTranslateIpc: () => calls.push(['registerTranslateIpc']),
       registerLlmIpc: () => calls.push(['registerLlmIpc']),
       registerTaskbarAppearanceIpc: () => calls.push(['registerTaskbarAppearanceIpc']),
+      registerTroubleshootingIpc: () => calls.push(['registerTroubleshootingIpc']),
       registerRenameIpc: () => calls.push(['registerRenameIpc']),
       registerQuickInstallerIpc: () => calls.push(['registerQuickInstallerIpc']),
       registerScreenOverlayIpc: () => calls.push(['registerScreenOverlayIpc']),
@@ -92,4 +93,5 @@ test('registerIpc registers both plain and window-aware handlers through one acc
   ])
   assert.ok(calls.some(([label]) => label === 'registerScreenOverlayIpc'))
   assert.ok(calls.some(([label]) => label === 'registerLlmIpc'))
+  assert.ok(calls.some(([label]) => label === 'registerTroubleshootingIpc'))
 })

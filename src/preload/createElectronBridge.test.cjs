@@ -150,6 +150,13 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.taskbarAppearance.getStatus, 'function')
   assert.equal(typeof bridge.taskbarAppearance.applyPreset, 'function')
   assert.equal(typeof bridge.taskbarAppearance.restoreDefault, 'function')
+  assert.equal(typeof bridge.troubleshooting.scanGroupPolicy, 'function')
+  assert.equal(typeof bridge.troubleshooting.installGroupPolicy, 'function')
+  assert.equal(typeof bridge.troubleshooting.openGroupPolicyEditor, 'function')
+  assert.equal(typeof bridge.troubleshooting.diagnosePrinterShare, 'function')
+  assert.equal(typeof bridge.troubleshooting.repairPrinterShare, 'function')
+  assert.equal(typeof bridge.troubleshooting.savePrinterShareCredential, 'function')
+  assert.equal(typeof bridge.troubleshooting.openPrinterShareTarget, 'function')
   assert.equal(typeof bridge.tableOcr.getStatus, 'function')
   assert.equal(typeof bridge.tableOcr.prepareRuntime, 'function')
   assert.equal(typeof bridge.tableOcr.cancelPrepare, 'function')
@@ -445,6 +452,17 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     outputDirectory: 'D:\\Exports'
   })
   await bridge.pdfTools.openPath('D:\\Exports')
+  await bridge.troubleshooting.scanGroupPolicy()
+  await bridge.troubleshooting.installGroupPolicy()
+  await bridge.troubleshooting.openGroupPolicyEditor()
+  await bridge.troubleshooting.diagnosePrinterShare({ target: '192.168.6.7' })
+  await bridge.troubleshooting.repairPrinterShare({ actionId: 'apply-rpc-compatibility' })
+  await bridge.troubleshooting.savePrinterShareCredential({
+    targetHost: '192.168.6.7',
+    username: 'SERVER\\printuser',
+    password: 'secret'
+  })
+  await bridge.troubleshooting.openPrinterShareTarget({ target: 'credential-manager' })
 
   assert.deepEqual(mocks.invokeCalls, [
     ['doctor-run-audit'],
@@ -528,7 +546,17 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
         outputDirectory: 'D:\\Exports'
       }
     ],
-    ['pdf-tools-open-path', 'D:\\Exports']
+    ['pdf-tools-open-path', 'D:\\Exports'],
+    ['troubleshooting:group-policy-scan'],
+    ['troubleshooting:group-policy-install'],
+    ['troubleshooting:group-policy-open'],
+    ['troubleshooting:printer-share-diagnose', { target: '192.168.6.7' }],
+    ['troubleshooting:printer-share-repair', { actionId: 'apply-rpc-compatibility' }],
+    [
+      'troubleshooting:printer-share-credential',
+      { targetHost: '192.168.6.7', username: 'SERVER\\printuser', password: 'secret' }
+    ],
+    ['troubleshooting:printer-share-open', { target: 'credential-manager' }]
   ])
 })
 

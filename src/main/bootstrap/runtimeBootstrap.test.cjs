@@ -119,6 +119,7 @@ test('registerMainProcessIpc wires window-aware registrations through the shared
     registerTranslateIpc: () => calls.push(['registerTranslateIpc']),
     registerLlmIpc: () => calls.push(['registerLlmIpc']),
     registerTaskbarAppearanceIpc: () => calls.push(['registerTaskbarAppearanceIpc']),
+    registerTroubleshootingIpc: () => calls.push(['registerTroubleshootingIpc']),
     registerRenameIpc: () => calls.push(['registerRenameIpc']),
     registerQuickInstallerIpc: () => calls.push(['registerQuickInstallerIpc']),
     registerScreenOverlayIpc: () => calls.push(['registerScreenOverlayIpc']),
@@ -162,6 +163,7 @@ test('registerMainProcessIpc wires window-aware registrations through the shared
   ])
   assert.ok(calls.some(([label]) => label === 'registerScreenOverlayIpc'))
   assert.ok(calls.some(([label]) => label === 'registerTaskbarAppearanceIpc'))
+  assert.ok(calls.some(([label]) => label === 'registerTroubleshootingIpc'))
 })
 
 test('initializeMainRuntime wires post-window services, updates, and hotkeys', async () => {

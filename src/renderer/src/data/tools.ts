@@ -42,6 +42,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'LocalProxyManagerTool'
   },
   {
+    id: 'troubleshooting',
+    name: '疑难修复',
+    description: '用向导处理 Windows 常见疑难功能与修复流程',
+    category: '系统维护',
+    icon: 'Wrench',
+    componentPath: 'TroubleshootingTool'
+  },
+  {
     id: 'wsl-manager',
     name: 'WSL 管理',
     description: '查看、切换和控制 WSL 发行版运行状态',

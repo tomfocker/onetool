@@ -43,6 +43,17 @@ import type {
 } from '../shared/selectionSession'
 import type { TaskbarAppearancePreset } from '../shared/taskbarAppearance'
 import type {
+  GroupPolicyInstallResult,
+  GroupPolicyStatus,
+  PrinterShareCredentialRequest,
+  PrinterShareCredentialResult,
+  PrinterShareDiagnosis,
+  PrinterShareDiagnosisRequest,
+  PrinterShareOpenRequest,
+  PrinterShareRepairRequest,
+  PrinterShareRepairResult
+} from '../shared/troubleshooting'
+import type {
   LlmConfigStatus,
   LlmConnectionStatus,
   LlmInsight,
@@ -484,6 +495,32 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     },
     restoreDefault: () => ipcRenderer.invoke('taskbar-appearance-restore-default')
   }
+
+  const troubleshootingAPI = {
+    scanGroupPolicy: () =>
+      ipcRenderer.invoke('troubleshooting:group-policy-scan') as Promise<IpcResponse<GroupPolicyStatus>>,
+    installGroupPolicy: () =>
+      ipcRenderer.invoke('troubleshooting:group-policy-install') as Promise<
+        IpcResponse<GroupPolicyInstallResult>
+      >,
+    openGroupPolicyEditor: () =>
+      ipcRenderer.invoke('troubleshooting:group-policy-open') as Promise<IpcResponse>,
+    diagnosePrinterShare: (request: PrinterShareDiagnosisRequest) =>
+      ipcRenderer.invoke('troubleshooting:printer-share-diagnose', request) as Promise<
+        IpcResponse<PrinterShareDiagnosis>
+      >,
+    repairPrinterShare: (request: PrinterShareRepairRequest) =>
+      ipcRenderer.invoke('troubleshooting:printer-share-repair', request) as Promise<
+        IpcResponse<PrinterShareRepairResult>
+      >,
+    savePrinterShareCredential: (request: PrinterShareCredentialRequest) =>
+      ipcRenderer.invoke('troubleshooting:printer-share-credential', request) as Promise<
+        IpcResponse<PrinterShareCredentialResult>
+      >,
+    openPrinterShareTarget: (request: PrinterShareOpenRequest) =>
+      ipcRenderer.invoke('troubleshooting:printer-share-open', request) as Promise<IpcResponse>
+  }
+
   const appAPI = {
     onOpenTool: (callback: (toolId: string) => void) => onChannel('open-tool', callback),
     onNotification: (callback: (data: any) => void) => onChannel('app-notification', callback)
@@ -782,6 +819,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     network: networkAPI,
     translate: translateAPI,
     taskbarAppearance: taskbarAppearanceAPI,
+    troubleshooting: troubleshootingAPI,
     wsl: wslAPI
   }
 }

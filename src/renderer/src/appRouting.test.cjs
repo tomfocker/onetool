@@ -261,3 +261,32 @@ test('tools registry exposes the PDF tool through the main shell route map', () 
   assert.equal(typeof map.settings, 'function')
   assert.equal(warnings.length, 0)
 })
+
+test('tools registry exposes the troubleshooting tool through the main shell route map', () => {
+  const troubleshootingTool = actualTools.find((tool) => tool.id === 'troubleshooting')
+
+  assert.ok(troubleshootingTool)
+  assert.deepEqual(
+    toPlainObject(troubleshootingTool),
+    {
+      id: 'troubleshooting',
+      name: '疑难修复',
+      description: '用向导处理 Windows 常见疑难功能与修复流程',
+      category: '系统维护',
+      icon: 'Wrench',
+      componentPath: 'TroubleshootingTool'
+    }
+  )
+
+  const { result: map, warnings } = captureWarnings(() => createToolRouteModuleMap([troubleshootingTool], {
+    './components/ConfigChecker.tsx': () => 'config',
+    './components/SettingsPage.tsx': () => 'settings',
+    './components/WebActivator.tsx': () => 'web-activator'
+  }, {
+    './tools/TroubleshootingTool.tsx': () => 'troubleshooting'
+  }))
+
+  assert.equal(typeof map.troubleshooting, 'function')
+  assert.equal(typeof map.settings, 'function')
+  assert.equal(warnings.length, 0)
+})
