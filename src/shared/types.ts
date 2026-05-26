@@ -1,4 +1,5 @@
 import type { DownloadOrganizerStoredState } from './downloadOrganizer'
+import type { MemoryDiaryStoredState } from './memoryDiary'
 import type { TaskbarAppearancePreset } from './taskbarAppearance'
 import type { CalendarWidgetBackgroundMode, CalendarWidgetBounds } from './calendar'
 
@@ -294,6 +295,7 @@ export interface GlobalStore {
   windowsManagerFavorites: string[]
   clipboardHistory: ClipboardItem[]
   downloadOrganizer: DownloadOrganizerStoredState
+  memoryDiary: MemoryDiaryStoredState
   version: string
 }
 

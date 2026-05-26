@@ -1,5 +1,6 @@
 import { DEFAULT_PINNED_TOOL_IDS } from './devEnvironment'
 import { createDefaultDownloadOrganizerStoredState } from './downloadOrganizer'
+import { createDefaultMemoryDiaryStoredState } from './memoryDiary'
 import { createDefaultAppSettings, migrateSettings } from './settingsSchema'
 import type { GlobalStore } from './types'
 
@@ -17,6 +18,8 @@ const DEFAULT_WINDOWS_MANAGER_FAVORITES = [
 export const GLOBAL_STORE_SCHEMA_VERSION = 1
 
 export function createDefaultGlobalStore(appVersion: string): GlobalStore {
+  const defaultMemoryDiary = createDefaultMemoryDiaryStoredState()
+
   return {
     schemaVersion: GLOBAL_STORE_SCHEMA_VERSION,
     settings: createDefaultAppSettings(),
@@ -27,6 +30,7 @@ export function createDefaultGlobalStore(appVersion: string): GlobalStore {
     windowsManagerFavorites: [...DEFAULT_WINDOWS_MANAGER_FAVORITES],
     clipboardHistory: [],
     downloadOrganizer: createDefaultDownloadOrganizerStoredState(),
+    memoryDiary: defaultMemoryDiary,
     version: appVersion
   }
 }
@@ -37,6 +41,7 @@ export function migrateGlobalStore(
 ): GlobalStore {
   const defaults = createDefaultGlobalStore(appVersion)
   const defaultDownloadOrganizer = createDefaultDownloadOrganizerStoredState()
+  const defaultMemoryDiary = createDefaultMemoryDiaryStoredState()
 
   return {
     ...defaults,
@@ -70,6 +75,20 @@ export function migrateGlobalStore(
         : [],
       activity: Array.isArray(parsed.downloadOrganizer?.activity)
         ? parsed.downloadOrganizer.activity
+        : []
+    },
+    memoryDiary: {
+      ...defaultMemoryDiary,
+      ...(parsed.memoryDiary || {}),
+      config: {
+        ...defaultMemoryDiary.config,
+        ...(parsed.memoryDiary?.config || {})
+      },
+      diaryHistory: Array.isArray(parsed.memoryDiary?.diaryHistory)
+        ? parsed.memoryDiary.diaryHistory
+        : [],
+      deploymentLogs: Array.isArray(parsed.memoryDiary?.deploymentLogs)
+        ? parsed.memoryDiary.deploymentLogs
         : []
     }
   }
