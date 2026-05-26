@@ -105,3 +105,52 @@ test('createMemoryDiaryBucketStart floors timestamps to bucket boundaries', () =
     '2026-05-26T01:15:00.000Z'
   )
 })
+
+test('countMemoryDiaryItemsByType returns a stable capture source distribution', () => {
+  const memoryDiary = loadMemoryDiaryModule()
+  const items = [
+    {
+      id: '1',
+      timestamp: '2026-05-26T01:00:00.000Z',
+      contentType: 'ocr',
+      appName: 'Code',
+      windowName: 'README.md',
+      url: '',
+      text: 'implemented timeline'
+    },
+    {
+      id: '2',
+      timestamp: '2026-05-26T01:01:00.000Z',
+      contentType: 'accessibility',
+      appName: 'Chrome',
+      windowName: 'ScreenPipe docs',
+      url: '',
+      text: 'clean UI text'
+    },
+    {
+      id: '3',
+      timestamp: '2026-05-26T01:02:00.000Z',
+      contentType: 'accessibility',
+      appName: 'Chrome',
+      windowName: 'ScreenPipe docs',
+      url: '',
+      text: 'more UI text'
+    },
+    {
+      id: '4',
+      timestamp: '2026-05-26T01:03:00.000Z',
+      contentType: 'input',
+      appName: 'Codex',
+      windowName: 'OneTool',
+      url: '',
+      text: 'typed question'
+    }
+  ]
+
+  assert.deepEqual(toPlainObject(memoryDiary.countMemoryDiaryItemsByType(items)), {
+    accessibility: 2,
+    ocr: 1,
+    audio: 0,
+    input: 1
+  })
+})

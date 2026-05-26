@@ -105,6 +105,15 @@ export interface MemoryDiaryStoredState {
   deploymentLogs: MemoryDiaryDeploymentLog[]
 }
 
+export function createEmptyMemoryDiaryContentCounts(): Record<MemoryDiaryContentType, number> {
+  return {
+    accessibility: 0,
+    ocr: 0,
+    audio: 0,
+    input: 0
+  }
+}
+
 export function createDefaultMemoryDiaryConfig(): MemoryDiaryConfig {
   return {
     apiUrl: 'http://localhost:3030',
@@ -164,6 +173,15 @@ export function filterMemoryDiaryItems(
     if (matchesAnyPattern(item.windowName, config.sensitiveWindowPatterns)) return false
     return item.text.trim().length > 0
   })
+}
+
+export function countMemoryDiaryItemsByType(
+  items: MemoryDiaryItem[]
+): Record<MemoryDiaryContentType, number> {
+  return items.reduce((counts, item) => {
+    counts[item.contentType] += 1
+    return counts
+  }, createEmptyMemoryDiaryContentCounts())
 }
 
 export function createMemoryDiaryBucketStart(timestamp: string, bucketMinutes: number): string {

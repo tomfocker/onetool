@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
+  countMemoryDiaryItemsByType,
   createDefaultMemoryDiaryConfig,
   type MemoryDiaryCliStatus,
   type MemoryDiaryConfig,
@@ -135,6 +136,9 @@ export default function MemoryDiaryTool() {
 
   const contentTypes = useMemo(() => getContentTypes(config), [config])
   const totalItems = useMemo(() => timeline.reduce((sum, bucket) => sum + bucket.items.length, 0), [timeline])
+  const sourceCounts = useMemo(() => (
+    countMemoryDiaryItemsByType(timeline.flatMap((bucket) => bucket.items))
+  ), [timeline])
   const latestLog = logs[0]
 
   const runTask = async (task: string, work: () => Promise<void>) => {
@@ -508,6 +512,26 @@ export default function MemoryDiaryTool() {
                 <div className="rounded-lg border border-white/25 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
                   <div className="text-xs text-muted-foreground">颗粒度</div>
                   <div className="mt-1 text-xl font-black">{config.timelineBucketMinutes}</div>
+                </div>
+              </div>
+
+              <div className="space-y-3 border-y border-white/20 py-4 dark:border-white/10">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold">采集诊断</div>
+                  <Badge variant="outline">摘要优先 UI</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {(Object.keys(CONTENT_TYPE_LABELS) as MemoryDiaryContentType[]).map((type) => (
+                    <div key={type} className="min-w-0">
+                      <div className="text-xs text-muted-foreground">{CONTENT_TYPE_LABELS[type]}</div>
+                      <div className={cn(
+                        'mt-1 text-lg font-black tabular-nums',
+                        sourceCounts[type] > 0 ? 'text-zinc-950 dark:text-zinc-50' : 'text-muted-foreground'
+                      )}>
+                        {sourceCounts[type]}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 
