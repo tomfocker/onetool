@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'child_process'
+import * as path from 'path'
 import type { IpcResponse } from '../../shared/types'
 import {
   createDefaultMemoryDiaryStoredState,
@@ -34,6 +35,9 @@ type ScreenpipeManagementServiceDependencies = {
 }
 
 const DEFAULT_SCREENPIPE_COMMAND = 'screenpipe'
+const SCREENPIPE_NPM_PACKAGE = 'screenpipe@latest'
+const SCREENPIPE_NPM_REGISTRY = 'https://registry.npmjs.org'
+const NPM_COMMAND = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -77,6 +81,15 @@ function isUnsupportedRecordSubcommand(output: string): boolean {
 
 function normalizeProcessOutput(output: string | Buffer): string {
   return String(output).trim()
+}
+
+function resolveGlobalScreenpipeExecutablePath(npmPrefix: string): string {
+  const trimmedPrefix = npmPrefix.trim()
+  if (process.platform === 'win32') {
+    return path.join(trimmedPrefix, 'screenpipe.cmd')
+  }
+
+  return path.join(trimmedPrefix, 'bin', 'screenpipe')
 }
 
 export class ScreenpipeManagementService {
@@ -159,6 +172,38 @@ export class ScreenpipeManagementService {
       return {
         success: false,
         error: message
+      }
+    }
+  }
+
+  async installLatest(): Promise<IpcResponse<MemoryDiaryStoredState>> {
+    this.appendLog('info', '正在安装或更新 ScreenPipe CLI')
+
+    try {
+      const npmPrefix = await this.getNpmGlobalPrefix()
+      await this.installScreenpipePackage()
+      const screenpipeExecutablePath = resolveGlobalScreenpipeExecutablePath(npmPrefix)
+      const { stdout } = await this.execScreenpipe(['--version'], screenpipeExecutablePath)
+      const version = normalizeProcessOutput(stdout)
+      const state = this.getState()
+      const nextState = {
+        ...state,
+        config: {
+          ...state.config,
+          screenpipeExecutablePath
+        }
+      }
+
+      this.saveState(nextState)
+      this.appendLog('success', `ScreenPipe CLI 已安装：${version || screenpipeExecutablePath}`)
+      return this.getStoredState()
+    } catch (error) {
+      const message = toErrorMessage(error)
+      this.appendLog('error', `ScreenPipe CLI 安装失败：${message}`)
+      return {
+        success: false,
+        error: message,
+        data: this.getState()
       }
     }
   }
@@ -313,14 +358,93 @@ export class ScreenpipeManagementService {
     return configuredPath.length > 0 ? configuredPath : DEFAULT_SCREENPIPE_COMMAND
   }
 
+  private getLegacyScreenpipeRuntimeArgs(): string[] {
+    const config = this.getState().config
+    const args = ['--fps', '1', '--ocr-engine', 'windows-native']
+    if (!config.includeAudio) {
+      args.push('--disable-audio')
+    }
+
+    return args
+  }
+
+  private getModernScreenpipeRecordArgs(): string[] {
+    const config = this.getState().config
+    if (!config.includeAudio) {
+      return ['--disable-audio']
+    }
+
+    return []
+  }
+
+  private getNpmGlobalPrefix(): Promise<string> {
+    return new Promise((resolve, reject) => {
+      this.execFileFn(NPM_COMMAND, ['prefix', '-g'], { windowsHide: true }, (error, stdout) => {
+        if (error) {
+          reject(new Error(`npm 不可用：${toErrorMessage(error)}`))
+          return
+        }
+
+        const prefix = normalizeProcessOutput(stdout)
+        if (!prefix) {
+          reject(new Error('npm 没有返回全局安装目录'))
+          return
+        }
+
+        resolve(prefix)
+      })
+    })
+  }
+
+  private installScreenpipePackage(): Promise<void> {
+    return new Promise((resolve, reject) => {
+      let latestOutput = ''
+      const child = this.spawnFn(
+        NPM_COMMAND,
+        ['install', '-g', SCREENPIPE_NPM_PACKAGE, `--registry=${SCREENPIPE_NPM_REGISTRY}`],
+        {
+        windowsHide: true,
+        stdio: ['ignore', 'pipe', 'pipe']
+        }
+      )
+
+      child.stdout?.on('data', (chunk) => {
+        const message = normalizeProcessOutput(chunk)
+        if (message) {
+          latestOutput = message
+          this.appendLog('info', message)
+        }
+      })
+      child.stderr?.on('data', (chunk) => {
+        const message = normalizeProcessOutput(chunk)
+        if (message) {
+          latestOutput = message
+          this.appendLog('warning', message)
+        }
+      })
+      child.on('error', (error) => {
+        reject(error)
+      })
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+          return
+        }
+
+        const detail = latestOutput ? `：${latestOutput}` : ''
+        reject(new Error(`安装失败，退出码：${code ?? 'unknown'}${detail}`))
+      })
+    })
+  }
+
   private async getScreenpipeStartArgs(executablePath: string): Promise<string[]> {
     const supportsRecordSubcommand = await this.screenpipeSupportsRecordSubcommand(executablePath)
     if (supportsRecordSubcommand) {
-      return ['record']
+      return ['record', ...this.getModernScreenpipeRecordArgs()]
     }
 
     this.appendLog('info', '检测到旧版 ScreenPipe CLI，将使用兼容启动方式')
-    return []
+    return this.getLegacyScreenpipeRuntimeArgs()
   }
 
   private screenpipeSupportsRecordSubcommand(executablePath: string): Promise<boolean> {

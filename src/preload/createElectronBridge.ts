@@ -626,6 +626,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
         IpcResponse<MemoryDiaryStoredState>
       >
     },
+    installLatest: () =>
+      ipcRenderer.invoke('memory-screenpipe-install-latest') as Promise<
+        IpcResponse<MemoryDiaryStoredState>
+      >,
     startScreenpipe: () =>
       ipcRenderer.invoke('memory-screenpipe-start') as Promise<
         IpcResponse<MemoryDiaryRuntimeStatus>

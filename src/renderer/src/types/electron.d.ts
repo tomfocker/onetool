@@ -133,6 +133,7 @@ declare global {
         updateConfig: (
           updates: Partial<MemoryDiaryConfig>
         ) => Promise<IpcResponse<MemoryDiaryStoredState>>
+        installLatest: () => Promise<IpcResponse<MemoryDiaryStoredState>>
         startScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
         stopScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
         getToken: () => Promise<IpcResponse<{ apiKey: string }>>

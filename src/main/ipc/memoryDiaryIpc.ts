@@ -16,6 +16,10 @@ export function registerMemoryDiaryIpc() {
     return screenpipeManagementService.updateConfig(updates)
   })
 
+  ipcMain.handle('memory-screenpipe-install-latest', () => {
+    return screenpipeManagementService.installLatest()
+  })
+
   ipcMain.handle('memory-screenpipe-start', () => {
     return screenpipeManagementService.start()
   })
