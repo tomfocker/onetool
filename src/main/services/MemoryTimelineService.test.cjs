@@ -127,3 +127,37 @@ test('queryTimeline asks ScreenPipe for the privacy-enabled content types', asyn
   assert.equal(searchRequest.apiKey, 'token')
   assert.equal(searchRequest.limit, 3000)
 })
+
+test('queryTimeline keeps long OCR snippets compact for the timeline view', async () => {
+  const longText = 'Codex.exe '.repeat(80) + 'screenpipe timeline overflow regression'
+  const { MemoryTimelineService } = loadModule()
+  const service = new MemoryTimelineService({
+    screenpipeClient: {
+      search: async () => ({
+        success: true,
+        data: [
+          {
+            id: 'long-ocr',
+            timestamp: '2026-05-26T01:00:00.000Z',
+            contentType: 'ocr',
+            appName: 'Codex',
+            windowName: 'Preview',
+            url: '',
+            text: longText
+          }
+        ]
+      })
+    },
+    storeService: {
+      get: () => createState()
+    }
+  })
+
+  const result = await service.queryTimeline({ date: '2026-05-26', timezone: 'Asia/Shanghai' })
+
+  assert.equal(result.success, true)
+  assert.equal(result.data[0].summary.length <= 160, true)
+  assert.equal(result.data[0].keyTexts[0].length <= 140, true)
+  assert.match(result.data[0].summary, /\.\.\.$/)
+  assert.equal(result.data[0].items[0].text, longText)
+})
