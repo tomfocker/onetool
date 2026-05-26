@@ -675,6 +675,10 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       ipcRenderer.invoke('memory-screenpipe-stop') as Promise<
         IpcResponse<MemoryDiaryRuntimeStatus>
       >,
+    getRuntimeStatus: () =>
+      ipcRenderer.invoke('memory-screenpipe-get-runtime-status') as Promise<
+        IpcResponse<MemoryDiaryRuntimeStatus>
+      >,
     getToken: () =>
       ipcRenderer.invoke('memory-screenpipe-get-token') as Promise<
         IpcResponse<{ apiKey: string }>

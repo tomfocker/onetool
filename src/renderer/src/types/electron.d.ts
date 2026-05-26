@@ -147,6 +147,7 @@ declare global {
         installLatest: () => Promise<IpcResponse<MemoryDiaryStoredState>>
         startScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
         stopScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
+        getRuntimeStatus: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
         getToken: () => Promise<IpcResponse<{ apiKey: string }>>
         getLogs: () => Promise<IpcResponse<MemoryDiaryDeploymentLog[]>>
         queryTimeline: (request: {

@@ -28,6 +28,10 @@ export function registerMemoryDiaryIpc() {
     return screenpipeManagementService.stop()
   })
 
+  ipcMain.handle('memory-screenpipe-get-runtime-status', () => {
+    return screenpipeManagementService.getRuntimeStatus()
+  })
+
   ipcMain.handle('memory-screenpipe-get-token', () => {
     return screenpipeManagementService.getAuthToken()
   })

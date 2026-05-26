@@ -192,6 +192,55 @@ test('getAuthToken runs screenpipe auth token and stores api key', async () => {
   assert.equal(writes.at(-1)[1].config.apiKey, 'secret-token')
 })
 
+test('getRuntimeStatus reports healthy external ScreenPipe API', async () => {
+  const state = createState()
+  state.memoryDiary.config.apiKey = 'secret-token'
+  const fetchCalls = []
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: () => { throw new Error('not used') },
+      spawn: () => { throw new Error('not used') }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService({
+    fetch: async (url, options) => {
+      fetchCalls.push([url, options])
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          status: 'healthy',
+          last_frame_timestamp: '2026-05-26T19:12:07+08:00',
+          pipeline: {
+            frames_captured: 62,
+            frames_db_written: 62
+          },
+          ui_recorder: {
+            running: true,
+            events_inserted: 115
+          }
+        })
+      }
+    }
+  })
+
+  const result = await service.getRuntimeStatus()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.state, 'external-running')
+  assert.equal(result.data.apiReachable, true)
+  assert.equal(result.data.lastCaptureAt, '2026-05-26T19:12:07+08:00')
+  assert.equal(result.data.todayItemCount, 177)
+  assert.equal(result.data.message, 'ScreenPipe API healthy')
+  assert.equal(fetchCalls[0][0], 'http://localhost:3030/health')
+  assert.equal(fetchCalls[0][1].headers['x-api-key'], 'secret-token')
+})
+
 test('installLatest installs screenpipe with npm and stores global executable path', async () => {
   const writes = []
   const state = createState()

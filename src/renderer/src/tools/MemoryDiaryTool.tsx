@@ -96,6 +96,25 @@ function panelClassName(className?: string) {
   return cn('rounded-lg before:rounded-lg after:rounded-lg shadow-soft-sm', className)
 }
 
+function runtimeStatusLabel(status: MemoryDiaryRuntimeStatus | null) {
+  if (!status) return '未托管'
+  if (status.apiReachable) {
+    return status.state === 'external-running' ? '外部运行中' : '运行中'
+  }
+
+  const labels: Record<MemoryDiaryRuntimeStatus['state'], string> = {
+    unknown: '未知',
+    'not-installed': '未安装',
+    stopped: '未运行',
+    running: '运行中',
+    'external-running': '外部运行中',
+    starting: '启动中',
+    stopping: '停止中',
+    error: '异常'
+  }
+  return labels[status.state] || status.state
+}
+
 export default function MemoryDiaryTool() {
   const api = window.electron?.memoryDiary
   const [config, setConfig] = useState<MemoryDiaryConfig>(createDefaultMemoryDiaryConfig())
@@ -140,9 +159,10 @@ export default function MemoryDiaryTool() {
       return
     }
 
-    const [stateResult, statusResult, logsResult, historyResult] = await Promise.all([
+    const [stateResult, statusResult, runtimeResult, logsResult, historyResult] = await Promise.all([
       api.getState(),
       api.getCliStatus(),
+      api.getRuntimeStatus(),
       api.getLogs(),
       api.listDiaries()
     ])
@@ -152,6 +172,9 @@ export default function MemoryDiaryTool() {
     }
     if (statusResult.success && statusResult.data) {
       setCliStatus(statusResult.data)
+    }
+    if (runtimeResult.success && runtimeResult.data) {
+      setRuntimeStatus(runtimeResult.data)
     }
     if (logsResult.success && logsResult.data) {
       setLogs(logsResult.data)
@@ -164,6 +187,27 @@ export default function MemoryDiaryTool() {
   useEffect(() => {
     void refreshAll()
   }, [])
+
+  useEffect(() => {
+    if (!api) return
+
+    const intervalId = window.setInterval(() => {
+      void (async () => {
+        const [runtimeResult, logsResult] = await Promise.all([
+          api.getRuntimeStatus(),
+          api.getLogs()
+        ])
+        if (runtimeResult.success && runtimeResult.data) {
+          setRuntimeStatus(runtimeResult.data)
+        }
+        if (logsResult.success && logsResult.data) {
+          setLogs(logsResult.data)
+        }
+      })()
+    }, 3000)
+
+    return () => window.clearInterval(intervalId)
+  }, [api])
 
   const saveConfig = () => runTask('save-config', async () => {
     const result = await api!.updateConfig(config)
@@ -205,7 +249,9 @@ export default function MemoryDiaryTool() {
     const result = await api!.startScreenpipe()
     if (result.data) setRuntimeStatus(result.data)
     await refreshAll()
-    setMessage(result.success ? 'ScreenPipe 正在启动' : result.error || '启动失败')
+    setMessage(result.success
+      ? result.data?.apiReachable ? 'ScreenPipe 已运行' : 'ScreenPipe 正在启动'
+      : result.error || '启动失败')
   })
 
   const stopScreenpipe = () => runTask('stop', async () => {
@@ -290,6 +336,7 @@ export default function MemoryDiaryTool() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Badge variant="outline">CLI {cliStatus?.installed ? '已安装' : '未安装'}</Badge>
+          <Badge variant="outline">采集 {runtimeStatusLabel(runtimeStatus)}</Badge>
           <Badge variant="outline">API {config.apiUrl}</Badge>
           <Badge variant="outline">{contentTypes.map((type) => CONTENT_TYPE_LABELS[type]).join(' / ')}</Badge>
         </div>
@@ -341,7 +388,7 @@ export default function MemoryDiaryTool() {
                 </div>
                 <div className="rounded-lg border border-white/25 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
                   <div className="text-xs text-muted-foreground">进程状态</div>
-                  <div className="mt-1 font-semibold">{runtimeStatus?.state || '未托管'}</div>
+                  <div className="mt-1 font-semibold">{runtimeStatusLabel(runtimeStatus)}</div>
                 </div>
               </div>
 
