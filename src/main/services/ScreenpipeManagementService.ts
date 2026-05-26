@@ -26,20 +26,57 @@ type ExecFileLike = (
 ) => void
 
 type SpawnLike = typeof spawn
+type FetchResponseLike = {
+  ok: boolean
+  status: number
+  statusText?: string
+  json: () => Promise<unknown>
+}
+type FetchLike = (
+  url: string,
+  options?: { headers?: Record<string, string> }
+) => Promise<FetchResponseLike>
 
 type ScreenpipeManagementServiceDependencies = {
   storeService?: StoreServiceLike
   execFile?: ExecFileLike
   spawn?: SpawnLike
+  fetch?: FetchLike | null
   now?: () => Date
   createId?: () => string
 }
+
+type ScreenpipeHealthPayload = {
+  status?: unknown
+  last_frame_timestamp?: unknown
+  last_audio_timestamp?: unknown
+  pipeline?: {
+    frames_captured?: unknown
+    frames_db_written?: unknown
+  } | null
+  ui_recorder?: {
+    running?: unknown
+    events_inserted?: unknown
+    last_event_at?: unknown
+  } | null
+}
+
+type ScreenpipeHealthResult =
+  | { reachable: true, payload: ScreenpipeHealthPayload }
+  | { reachable: false, message: string }
 
 const DEFAULT_SCREENPIPE_COMMAND = 'screenpipe'
 const SCREENPIPE_NPM_PACKAGE = 'screenpipe@latest'
 const SCREENPIPE_NPM_REGISTRY = 'https://registry.npmjs.org'
 const NPM_COMMAND = process.platform === 'win32' ? 'npm.cmd' : 'npm'
 const SCREENPIPE_WINDOWS_ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
+const SCREENPIPE_RUNTIME_LOG_NOISE = [
+  'screenpipe_engine::frame_linker_actor',
+  'content dedup:',
+  'event_driven_capture',
+  'hot_frame_cache',
+  'wgc_capture'
+]
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -83,6 +120,23 @@ function isUnsupportedRecordSubcommand(output: string): boolean {
 
 function normalizeProcessOutput(output: string | Buffer): string {
   return String(output).trim()
+}
+
+function getStringValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null
+}
+
+function getNumberValue(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value
+  }
+
+  return 0
+}
+
+function shouldStoreScreenpipeOutput(message: string): boolean {
+  const normalizedMessage = message.toLowerCase()
+  return !SCREENPIPE_RUNTIME_LOG_NOISE.some((pattern) => normalizedMessage.includes(pattern))
 }
 
 function resolveGlobalScreenpipeExecutablePath(npmPrefix: string): string {
@@ -135,10 +189,23 @@ function getExplicitApiPort(apiUrl: string): string | null {
   }
 }
 
+function resolveScreenpipeHealthUrl(apiUrl: string): string {
+  const healthUrl = new URL(apiUrl)
+  healthUrl.pathname = '/health'
+  healthUrl.search = ''
+  healthUrl.hash = ''
+  return healthUrl.toString()
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export class ScreenpipeManagementService {
   private readonly store: StoreServiceLike
   private readonly execFileFn: ExecFileLike
   private readonly spawnFn: SpawnLike
+  private readonly fetchFn: FetchLike | null
   private readonly now: () => Date
   private readonly createId: () => string
   private managedProcess: ChildProcess | null = null
@@ -147,6 +214,10 @@ export class ScreenpipeManagementService {
     this.store = dependencies.storeService ?? storeService
     this.execFileFn = dependencies.execFile ?? (execFile as ExecFileLike)
     this.spawnFn = dependencies.spawn ?? spawn
+    const globalFetch = (globalThis as { fetch?: FetchLike }).fetch
+    this.fetchFn = dependencies.fetch === undefined
+      ? (typeof globalFetch === 'function' ? globalFetch.bind(globalThis) : null)
+      : dependencies.fetch
     this.now = dependencies.now ?? (() => new Date())
     this.createId = dependencies.createId ?? (() => `${Date.now()}-${Math.random().toString(16).slice(2)}`)
   }
@@ -253,13 +324,23 @@ export class ScreenpipeManagementService {
 
   async start(): Promise<IpcResponse<MemoryDiaryRuntimeStatus>> {
     if (this.managedProcess) {
+      const status = await this.inspectRuntimeStatus()
       return {
         success: true,
-        data: this.createRuntimeStatus('running', 'ScreenPipe 已由 onetool 启动')
+        data: status.apiReachable ? status : this.createRuntimeStatus('running', 'ScreenPipe 已由 onetool 启动')
       }
     }
 
     try {
+      const existingStatus = await this.inspectRuntimeStatus()
+      if (existingStatus.apiReachable) {
+        this.appendLog('success', '检测到 ScreenPipe API 已运行')
+        return {
+          success: true,
+          data: existingStatus
+        }
+      }
+
       const executablePath = this.getScreenpipeExecutablePath()
       const startArgs = await this.getScreenpipeStartArgs(executablePath)
       const child = this.spawnFn(executablePath, startArgs, {
@@ -271,13 +352,13 @@ export class ScreenpipeManagementService {
 
       child.stdout?.on('data', (chunk) => {
         const message = normalizeProcessOutput(chunk)
-        if (message) {
+        if (message && shouldStoreScreenpipeOutput(message)) {
           this.appendLog('info', message)
         }
       })
       child.stderr?.on('data', (chunk) => {
         const message = normalizeProcessOutput(chunk)
-        if (message) {
+        if (message && shouldStoreScreenpipeOutput(message)) {
           this.appendLog('warning', message)
         }
       })
@@ -293,7 +374,7 @@ export class ScreenpipeManagementService {
 
       return {
         success: true,
-        data: this.createRuntimeStatus('starting', 'ScreenPipe 正在启动')
+        data: await this.waitForRuntimeStatus()
       }
     } catch (error) {
       const executablePath = this.getScreenpipeExecutablePath()
@@ -353,6 +434,13 @@ export class ScreenpipeManagementService {
     return this.getStoredState()
   }
 
+  async getRuntimeStatus(): Promise<IpcResponse<MemoryDiaryRuntimeStatus>> {
+    return {
+      success: true,
+      data: await this.inspectRuntimeStatus()
+    }
+  }
+
   getLogs(): IpcResponse<MemoryDiaryDeploymentLog[]> {
     return {
       success: true,
@@ -394,6 +482,92 @@ export class ScreenpipeManagementService {
       },
       message
     }
+  }
+
+  private async inspectRuntimeStatus(): Promise<MemoryDiaryRuntimeStatus> {
+    const storedState = this.getState()
+    const health = await this.readScreenpipeHealth(storedState.config)
+    if (!health.reachable) {
+      const state: MemoryDiaryRuntimeStatus['state'] = this.managedProcess ? 'starting' : 'stopped'
+      return this.createRuntimeStatus(state, health.message)
+    }
+
+    const { payload } = health
+    const framesWritten = getNumberValue(payload.pipeline?.frames_db_written)
+    const eventsInserted = getNumberValue(payload.ui_recorder?.events_inserted)
+    const statusText = getStringValue(payload.status) || 'reachable'
+
+    return {
+      state: this.managedProcess ? 'running' : 'external-running',
+      apiReachable: true,
+      apiUrl: storedState.config.apiUrl,
+      apiKeyConfigured: storedState.config.apiKey.trim().length > 0,
+      lastCaptureAt:
+        getStringValue(payload.last_frame_timestamp) ||
+        getStringValue(payload.ui_recorder?.last_event_at) ||
+        getStringValue(payload.last_audio_timestamp),
+      todayItemCount: framesWritten + eventsInserted,
+      contentTypeCounts: {
+        accessibility: eventsInserted,
+        ocr: framesWritten,
+        audio: 0,
+        input: 0
+      },
+      message: `ScreenPipe API ${statusText}`
+    }
+  }
+
+  private async readScreenpipeHealth(config: MemoryDiaryConfig): Promise<ScreenpipeHealthResult> {
+    if (!this.fetchFn) {
+      return {
+        reachable: false,
+        message: '当前运行环境没有可用的 ScreenPipe 健康检查能力'
+      }
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        Accept: 'application/json'
+      }
+      const apiKey = config.apiKey.trim()
+      if (apiKey) {
+        headers['x-api-key'] = apiKey
+      }
+
+      const response = await this.fetchFn(resolveScreenpipeHealthUrl(config.apiUrl), { headers })
+      if (!response.ok) {
+        const statusText = response.statusText ? ` ${response.statusText}` : ''
+        return {
+          reachable: false,
+          message: `ScreenPipe API 返回 ${response.status}${statusText}`
+        }
+      }
+
+      return {
+        reachable: true,
+        payload: await response.json() as ScreenpipeHealthPayload
+      }
+    } catch (error) {
+      return {
+        reachable: false,
+        message: `ScreenPipe API 暂不可达：${toErrorMessage(error)}`
+      }
+    }
+  }
+
+  private async waitForRuntimeStatus(timeoutMs = 12000): Promise<MemoryDiaryRuntimeStatus> {
+    if (!this.fetchFn) {
+      return this.createRuntimeStatus('starting', 'ScreenPipe 正在启动')
+    }
+
+    const deadline = Date.now() + timeoutMs
+    let status = await this.inspectRuntimeStatus()
+    while (!status.apiReachable && Date.now() < deadline) {
+      await delay(500)
+      status = await this.inspectRuntimeStatus()
+    }
+
+    return status.apiReachable ? status : this.createRuntimeStatus('starting', status.message || 'ScreenPipe 正在启动')
   }
 
   private getScreenpipeExecutablePath(): string {

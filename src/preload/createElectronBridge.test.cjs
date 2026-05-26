@@ -165,6 +165,7 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.memoryDiary.installLatest, 'function')
   assert.equal(typeof bridge.memoryDiary.startScreenpipe, 'function')
   assert.equal(typeof bridge.memoryDiary.stopScreenpipe, 'function')
+  assert.equal(typeof bridge.memoryDiary.getRuntimeStatus, 'function')
   assert.equal(typeof bridge.memoryDiary.getToken, 'function')
   assert.equal(typeof bridge.memoryDiary.getLogs, 'function')
   assert.equal(typeof bridge.memoryDiary.queryTimeline, 'function')
@@ -464,6 +465,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.memoryDiary.installLatest()
   await bridge.memoryDiary.startScreenpipe()
   await bridge.memoryDiary.stopScreenpipe()
+  await bridge.memoryDiary.getRuntimeStatus()
   await bridge.memoryDiary.getToken()
   await bridge.memoryDiary.getLogs()
   await bridge.memoryDiary.queryTimeline({ date: '2026-05-26' })
@@ -561,6 +563,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['memory-screenpipe-install-latest'],
     ['memory-screenpipe-start'],
     ['memory-screenpipe-stop'],
+    ['memory-screenpipe-get-runtime-status'],
     ['memory-screenpipe-get-token'],
     ['memory-screenpipe-get-logs'],
     ['memory-timeline-query', { date: '2026-05-26' }],

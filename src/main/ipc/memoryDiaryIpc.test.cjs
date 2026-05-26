@@ -71,6 +71,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
       installLatest: async () => ({ success: true, data: { config: { screenpipeExecutablePath: 'screenpipe.cmd' } } }),
       start: async () => ({ success: true, data: { state: 'starting' } }),
       stop: async () => ({ success: true, data: { state: 'stopped' } }),
+      getRuntimeStatus: async () => ({ success: true, data: { state: 'external-running' } }),
       getAuthToken: async () => ({ success: true, data: { apiKey: 'token' } }),
       getLogs: () => ({ success: true, data: [] })
     },
@@ -93,6 +94,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
   assert.equal((await handlers['memory-screenpipe-install-latest']()).data.config.screenpipeExecutablePath, 'screenpipe.cmd')
   assert.equal((await handlers['memory-screenpipe-start']()).data.state, 'starting')
   assert.equal((await handlers['memory-screenpipe-stop']()).data.state, 'stopped')
+  assert.equal((await handlers['memory-screenpipe-get-runtime-status']()).data.state, 'external-running')
   assert.equal((await handlers['memory-screenpipe-get-token']()).data.apiKey, 'token')
   assert.deepEqual((await handlers['memory-screenpipe-get-logs']()).data, [])
   assert.equal((await handlers['memory-timeline-query']({}, { date: '2026-05-26' })).data[0].id, '2026-05-26')
