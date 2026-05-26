@@ -14,6 +14,12 @@ import { screenpipeClient, type ScreenpipeClient } from './ScreenpipeClient'
 type StoreLike = Pick<typeof storeService, 'get'>
 const TIMELINE_SUMMARY_MAX_LENGTH = 160
 const TIMELINE_KEY_TEXT_MAX_LENGTH = 140
+const TIMELINE_TEXT_SOURCE_PRIORITY: Record<MemoryDiaryContentType, number> = {
+  accessibility: 0,
+  audio: 1,
+  input: 2,
+  ocr: 3
+}
 
 export interface MemoryTimelineQuery {
   date: string
@@ -147,8 +153,11 @@ export class MemoryTimelineService {
         const windowNames = this.unique(bucketItems.map((item) => item.windowName).filter(Boolean))
         const urls = this.unique(bucketItems.map((item) => item.url).filter(Boolean))
         const contentTypes = this.unique(bucketItems.map((item) => item.contentType))
+        const readableItems = [...bucketItems].sort((left, right) => (
+          TIMELINE_TEXT_SOURCE_PRIORITY[left.contentType] - TIMELINE_TEXT_SOURCE_PRIORITY[right.contentType]
+        ))
         const keyTexts = this.unique(
-          bucketItems
+          readableItems
             .map((item) => this.compactTimelineText(item.text, TIMELINE_KEY_TEXT_MAX_LENGTH))
             .filter(Boolean)
         ).slice(0, 5)

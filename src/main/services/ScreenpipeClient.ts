@@ -99,7 +99,7 @@ export class ScreenpipeClient {
   private mapItem(item: ScreenpipePayloadItem, index: number): MemoryDiaryItem | null {
     const content = item.content || {}
     const contentType = this.mapContentType(item.type)
-    const text = String(content.text ?? content.transcription ?? '').trim()
+    const text = this.getFirstStringValue(content.text, content.transcription, content.text_content).trim()
     const timestamp = String(content.timestamp ?? content.created_at ?? '')
     if (!contentType || !text || !timestamp) {
       return null
@@ -111,7 +111,7 @@ export class ScreenpipeClient {
       timestamp,
       contentType,
       appName: String(content.app_name ?? content.appName ?? ''),
-      windowName: String(content.window_name ?? content.windowName ?? ''),
+      windowName: String(content.window_name ?? content.windowName ?? content.window_title ?? ''),
       url: String(content.browser_url ?? content.url ?? ''),
       text
     }
@@ -119,11 +119,16 @@ export class ScreenpipeClient {
 
   private mapContentType(input: unknown): MemoryDiaryContentType | null {
     const normalized = String(input ?? '').toLowerCase()
-    if (normalized.includes('accessibility')) return 'accessibility'
+    if (normalized === 'ui' || normalized.includes('accessibility')) return 'accessibility'
     if (normalized.includes('ocr')) return 'ocr'
     if (normalized.includes('audio')) return 'audio'
     if (normalized.includes('input')) return 'input'
     return null
+  }
+
+  private getFirstStringValue(...values: unknown[]): string {
+    const value = values.find((item) => typeof item === 'string' && item.trim().length > 0)
+    return typeof value === 'string' ? value : ''
   }
 
   private toErrorMessage(error: unknown): string {

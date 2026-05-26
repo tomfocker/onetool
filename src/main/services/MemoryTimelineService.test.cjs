@@ -161,3 +161,46 @@ test('queryTimeline keeps long OCR snippets compact for the timeline view', asyn
   assert.match(result.data[0].summary, /\.\.\.$/)
   assert.equal(result.data[0].items[0].text, longText)
 })
+
+test('queryTimeline prefers accessibility text over OCR noise for bucket summaries', async () => {
+  const { MemoryTimelineService } = loadModule()
+  const service = new MemoryTimelineService({
+    screenpipeClient: {
+      search: async () => ({
+        success: true,
+        data: [
+          {
+            id: 'ocr-noise',
+            timestamp: '2026-05-26T01:00:00.000Z',
+            contentType: 'ocr',
+            appName: 'Codex',
+            windowName: 'Preview',
+            url: '',
+            text: 'File Edit View Window Help hidden sidebar everything all menus repeated OCR noise'
+          },
+          {
+            id: 'ui-clean',
+            timestamp: '2026-05-26T01:02:00.000Z',
+            contentType: 'accessibility',
+            appName: 'Codex',
+            windowName: 'ScreenPipe bridge notes',
+            url: '',
+            text: 'ScreenPipe bridge now reads accessibility records'
+          }
+        ]
+      })
+    },
+    storeService: {
+      get: () => createState()
+    }
+  })
+
+  const result = await service.queryTimeline({ date: '2026-05-26', timezone: 'Asia/Shanghai' })
+
+  assert.equal(result.success, true)
+  assert.equal(result.data[0].summary, 'ScreenPipe bridge now reads accessibility records')
+  assert.deepEqual(Array.from(result.data[0].keyTexts), [
+    'ScreenPipe bridge now reads accessibility records',
+    'File Edit View Window Help hidden sidebar everything all menus repeated OCR noise'
+  ])
+})
