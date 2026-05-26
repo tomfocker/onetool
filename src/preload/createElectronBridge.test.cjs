@@ -166,6 +166,18 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.pdfTools.chooseOutputDirectory, 'function')
   assert.equal(typeof bridge.pdfTools.convert, 'function')
   assert.equal(typeof bridge.pdfTools.openPath, 'function')
+  assert.equal(typeof bridge.memoryDiary.getState, 'function')
+  assert.equal(typeof bridge.memoryDiary.getCliStatus, 'function')
+  assert.equal(typeof bridge.memoryDiary.updateConfig, 'function')
+  assert.equal(typeof bridge.memoryDiary.startScreenpipe, 'function')
+  assert.equal(typeof bridge.memoryDiary.stopScreenpipe, 'function')
+  assert.equal(typeof bridge.memoryDiary.getToken, 'function')
+  assert.equal(typeof bridge.memoryDiary.getLogs, 'function')
+  assert.equal(typeof bridge.memoryDiary.queryTimeline, 'function')
+  assert.equal(typeof bridge.memoryDiary.generateDiary, 'function')
+  assert.equal(typeof bridge.memoryDiary.listDiaries, 'function')
+  assert.equal(typeof bridge.memoryDiary.saveDiary, 'function')
+  assert.equal(typeof bridge.memoryDiary.deleteDiary, 'function')
 })
 
 test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () => {
@@ -463,6 +475,18 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     password: 'secret'
   })
   await bridge.troubleshooting.openPrinterShareTarget({ target: 'credential-manager' })
+  await bridge.memoryDiary.getState()
+  await bridge.memoryDiary.getCliStatus()
+  await bridge.memoryDiary.updateConfig({ apiUrl: 'http://127.0.0.1:3030' })
+  await bridge.memoryDiary.startScreenpipe()
+  await bridge.memoryDiary.stopScreenpipe()
+  await bridge.memoryDiary.getToken()
+  await bridge.memoryDiary.getLogs()
+  await bridge.memoryDiary.queryTimeline({ date: '2026-05-26' })
+  await bridge.memoryDiary.generateDiary({ userNotes: 'summary' })
+  await bridge.memoryDiary.listDiaries()
+  await bridge.memoryDiary.saveDiary({ id: 'draft-1' })
+  await bridge.memoryDiary.deleteDiary('draft-1')
 
   assert.deepEqual(mocks.invokeCalls, [
     ['doctor-run-audit'],
@@ -556,7 +580,19 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
       'troubleshooting:printer-share-credential',
       { targetHost: '192.168.6.7', username: 'SERVER\\printuser', password: 'secret' }
     ],
-    ['troubleshooting:printer-share-open', { target: 'credential-manager' }]
+    ['troubleshooting:printer-share-open', { target: 'credential-manager' }],
+    ['memory-screenpipe-get-state'],
+    ['memory-screenpipe-get-cli-status'],
+    ['memory-screenpipe-update-config', { apiUrl: 'http://127.0.0.1:3030' }],
+    ['memory-screenpipe-start'],
+    ['memory-screenpipe-stop'],
+    ['memory-screenpipe-get-token'],
+    ['memory-screenpipe-get-logs'],
+    ['memory-timeline-query', { date: '2026-05-26' }],
+    ['memory-diary-generate', { userNotes: 'summary' }],
+    ['memory-diary-list'],
+    ['memory-diary-save', { id: 'draft-1' }],
+    ['memory-diary-delete', 'draft-1']
   ])
 })
 
