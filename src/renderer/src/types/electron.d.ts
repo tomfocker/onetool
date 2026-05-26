@@ -47,6 +47,17 @@ import type {
   DevEnvironmentOverview,
   DevEnvironmentRecord
 } from '../../../shared/devEnvironment'
+import type {
+  MemoryDiaryCliStatus,
+  MemoryDiaryConfig,
+  MemoryDiaryDeploymentLog,
+  MemoryDiaryGenerateRequest,
+  MemoryDiaryGenerateResult,
+  MemoryDiaryHistoryEntry,
+  MemoryDiaryRuntimeStatus,
+  MemoryDiaryStoredState,
+  MemoryDiaryTimelineBucket
+} from '../../../shared/memoryDiary'
 import type { ModelDownloadRequest, ModelDownloadState } from '../../../shared/modelDownload'
 import type {
   TableOcrChoosePathResult,
@@ -126,6 +137,29 @@ declare global {
           callback: (data: { current: number; total: number; currentName: string }) => void
         ) => () => void
         onComplete: (callback: (data: { success: boolean; message: string }) => void) => () => void
+      }
+      memoryDiary: {
+        getState: () => Promise<IpcResponse<MemoryDiaryStoredState>>
+        getCliStatus: () => Promise<IpcResponse<MemoryDiaryCliStatus>>
+        updateConfig: (
+          updates: Partial<MemoryDiaryConfig>
+        ) => Promise<IpcResponse<MemoryDiaryStoredState>>
+        startScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
+        stopScreenpipe: () => Promise<IpcResponse<MemoryDiaryRuntimeStatus>>
+        getToken: () => Promise<IpcResponse<{ apiKey: string }>>
+        getLogs: () => Promise<IpcResponse<MemoryDiaryDeploymentLog[]>>
+        queryTimeline: (request: {
+          date: string
+          timezone: string
+        }) => Promise<IpcResponse<MemoryDiaryTimelineBucket[]>>
+        generateDiary: (
+          request: MemoryDiaryGenerateRequest
+        ) => Promise<IpcResponse<MemoryDiaryGenerateResult>>
+        listDiaries: () => Promise<IpcResponse<MemoryDiaryHistoryEntry[]>>
+        saveDiary: (
+          request: MemoryDiaryGenerateResult
+        ) => Promise<IpcResponse<MemoryDiaryHistoryEntry>>
+        deleteDiary: (id: string) => Promise<IpcResponse>
       }
       modelDownload: {
         getState: () => Promise<IpcResponse<ModelDownloadState>>
