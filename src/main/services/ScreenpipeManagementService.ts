@@ -1,4 +1,5 @@
 import { execFile, spawn, type ChildProcess } from 'child_process'
+import * as fs from 'fs'
 import * as path from 'path'
 import type { IpcResponse } from '../../shared/types'
 import {
@@ -38,6 +39,7 @@ const DEFAULT_SCREENPIPE_COMMAND = 'screenpipe'
 const SCREENPIPE_NPM_PACKAGE = 'screenpipe@latest'
 const SCREENPIPE_NPM_REGISTRY = 'https://registry.npmjs.org'
 const NPM_COMMAND = process.platform === 'win32' ? 'npm.cmd' : 'npm'
+const SCREENPIPE_WINDOWS_ARCH = process.arch === 'arm64' ? 'arm64' : 'x64'
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
@@ -86,10 +88,37 @@ function normalizeProcessOutput(output: string | Buffer): string {
 function resolveGlobalScreenpipeExecutablePath(npmPrefix: string): string {
   const trimmedPrefix = npmPrefix.trim()
   if (process.platform === 'win32') {
+    const windowsBinaryPath = resolveWindowsScreenpipeBinaryPath(trimmedPrefix)
+    if (fs.existsSync(windowsBinaryPath)) {
+      return windowsBinaryPath
+    }
+
     return path.join(trimmedPrefix, 'screenpipe.cmd')
   }
 
   return path.join(trimmedPrefix, 'bin', 'screenpipe')
+}
+
+function resolveWindowsScreenpipeBinaryPath(npmPrefix: string): string {
+  return path.join(
+    npmPrefix,
+    'node_modules',
+    'screenpipe',
+    'node_modules',
+    '@screenpipe',
+    `cli-win32-${SCREENPIPE_WINDOWS_ARCH}`,
+    'bin',
+    'screenpipe.exe'
+  )
+}
+
+function normalizeWindowsScreenpipeExecutablePath(executablePath: string): string {
+  if (process.platform !== 'win32' || path.basename(executablePath).toLowerCase() !== 'screenpipe.cmd') {
+    return executablePath
+  }
+
+  const windowsBinaryPath = resolveWindowsScreenpipeBinaryPath(path.dirname(executablePath))
+  return fs.existsSync(windowsBinaryPath) ? windowsBinaryPath : executablePath
 }
 
 function getExplicitApiPort(apiUrl: string): string | null {
@@ -369,7 +398,9 @@ export class ScreenpipeManagementService {
 
   private getScreenpipeExecutablePath(): string {
     const configuredPath = this.getState().config.screenpipeExecutablePath.trim()
-    return configuredPath.length > 0 ? configuredPath : DEFAULT_SCREENPIPE_COMMAND
+    return configuredPath.length > 0
+      ? normalizeWindowsScreenpipeExecutablePath(configuredPath)
+      : DEFAULT_SCREENPIPE_COMMAND
   }
 
   private getLegacyScreenpipeRuntimeArgs(): string[] {
