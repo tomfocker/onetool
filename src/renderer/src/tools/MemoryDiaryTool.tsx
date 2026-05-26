@@ -329,6 +329,17 @@ export default function MemoryDiaryTool() {
               </div>
 
               <div className="space-y-2">
+                <label className="text-sm font-semibold">ScreenPipe 路径</label>
+                <Input
+                  value={config.screenpipeExecutablePath}
+                  placeholder="screenpipe 或 C:\\Tools\\screenpipe.exe"
+                  onChange={(event) => setConfig((prev) => ({
+                    ...prev,
+                    screenpipeExecutablePath: event.target.value
+                  }))}
+                />
+              </div>
+              <div className="space-y-2">
                 <label className="text-sm font-semibold">API 地址</label>
                 <Input
                   value={config.apiUrl}

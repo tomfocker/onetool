@@ -44,6 +44,7 @@ function createState() {
     memoryDiary: {
       config: {
         apiUrl: 'http://localhost:3030',
+        screenpipeExecutablePath: '',
         apiKey: '',
         enabledContentTypes: ['accessibility', 'ocr'],
         includeAudio: false,
@@ -78,6 +79,55 @@ test('getCliStatus reports installed version from screenpipe --version', async (
   assert.equal(result.success, true)
   assert.equal(result.data.installed, true)
   assert.equal(result.data.version, 'screenpipe 1.2.3')
+})
+
+test('getCliStatus uses configured screenpipe executable path', async () => {
+  const state = createState()
+  state.memoryDiary.config.screenpipeExecutablePath = 'C:\\Tools\\screenpipe.exe'
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (cmd, args, _options, callback) => {
+        assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
+        assert.deepEqual(Array.from(args), ['--version'])
+        callback(null, 'screenpipe 1.2.3\n', '')
+      },
+      spawn: () => { throw new Error('not used') }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.getCliStatus()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.installed, true)
+  assert.equal(result.data.executablePath, 'C:\\Tools\\screenpipe.exe')
+})
+
+test('getCliStatus explains missing screenpipe executable', async () => {
+  const state = createState()
+  const error = Object.assign(new Error('spawn screenpipe ENOENT'), { code: 'ENOENT' })
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (_cmd, _args, _options, callback) => callback(error, '', ''),
+      spawn: () => { throw new Error('not used') }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.getCliStatus()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.installed, false)
+  assert.match(result.data.error, /找不到 ScreenPipe/)
+  assert.match(state.memoryDiary.deploymentLogs[0].message, /screenpipe\.exe 路径/)
 })
 
 test('getAuthToken runs screenpipe auth token and stores api key', async () => {
@@ -140,4 +190,33 @@ test('start and stop only manage the process launched by onetool', async () => {
   assert.equal(stopResult.success, true)
   assert.equal(stopResult.data.state, 'stopped')
   assert.equal(killed, true)
+})
+
+test('start uses configured screenpipe executable path', async () => {
+  const state = createState()
+  state.memoryDiary.config.screenpipeExecutablePath = 'C:\\Tools\\screenpipe.exe'
+  const child = {
+    on() {},
+    kill() {}
+  }
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: () => { throw new Error('not used') },
+      spawn: (cmd, args) => {
+        assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
+        assert.deepEqual(Array.from(args), ['record'])
+        return child
+      }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.start()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.state, 'starting')
 })

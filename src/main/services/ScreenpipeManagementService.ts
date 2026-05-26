@@ -33,6 +33,8 @@ type ScreenpipeManagementServiceDependencies = {
   createId?: () => string
 }
 
+const DEFAULT_SCREENPIPE_COMMAND = 'screenpipe'
+
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message
@@ -46,6 +48,26 @@ function toErrorMessage(error: unknown): string {
   }
 
   return String(error)
+}
+
+function isMissingExecutableError(error: unknown): boolean {
+  if (error && typeof error === 'object' && 'code' in error) {
+    return (error as { code?: unknown }).code === 'ENOENT'
+  }
+
+  return toErrorMessage(error).includes('ENOENT')
+}
+
+function formatScreenpipeErrorMessage(error: unknown, executablePath: string): string {
+  if (!isMissingExecutableError(error)) {
+    return toErrorMessage(error)
+  }
+
+  if (executablePath === DEFAULT_SCREENPIPE_COMMAND) {
+    return '找不到 ScreenPipe CLI。请安装 ScreenPipe CLI，或在管理面板填写 screenpipe.exe 路径。'
+  }
+
+  return `找不到 ScreenPipe CLI：${executablePath}。请确认 screenpipe.exe 路径有效。`
 }
 
 function normalizeProcessOutput(output: string | Buffer): string {
@@ -76,20 +98,22 @@ export class ScreenpipeManagementService {
   }
 
   async getCliStatus(): Promise<IpcResponse<MemoryDiaryCliStatus>> {
+    const executablePath = this.getScreenpipeExecutablePath()
+
     try {
-      const { stdout } = await this.execScreenpipe(['--version'])
+      const { stdout } = await this.execScreenpipe(['--version'], executablePath)
       const version = normalizeProcessOutput(stdout)
       return {
         success: true,
         data: {
           installed: true,
           version: version || null,
-          executablePath: 'screenpipe',
+          executablePath,
           error: null
         }
       }
     } catch (error) {
-      const message = toErrorMessage(error)
+      const message = formatScreenpipeErrorMessage(error, executablePath)
       this.appendLog('warning', `ScreenPipe CLI 检测失败：${message}`)
       return {
         success: true,
@@ -142,8 +166,10 @@ export class ScreenpipeManagementService {
       }
     }
 
+    const executablePath = this.getScreenpipeExecutablePath()
+
     try {
-      const child = this.spawnFn('screenpipe', ['record'], {
+      const child = this.spawnFn(executablePath, ['record'], {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -163,8 +189,9 @@ export class ScreenpipeManagementService {
         }
       })
       child.on('error', (error) => {
+        const message = formatScreenpipeErrorMessage(error, executablePath)
         this.managedProcess = null
-        this.appendLog('error', `ScreenPipe 采集进程启动失败：${toErrorMessage(error)}`)
+        this.appendLog('error', `ScreenPipe 采集进程启动失败：${message}`)
       })
       child.on('close', (code) => {
         this.managedProcess = null
@@ -176,7 +203,7 @@ export class ScreenpipeManagementService {
         data: this.createRuntimeStatus('starting', 'ScreenPipe 正在启动')
       }
     } catch (error) {
-      const message = toErrorMessage(error)
+      const message = formatScreenpipeErrorMessage(error, executablePath)
       this.managedProcess = null
       this.appendLog('error', `启动 ScreenPipe 失败：${message}`)
       return {
@@ -275,9 +302,17 @@ export class ScreenpipeManagementService {
     }
   }
 
-  private execScreenpipe(args: string[]): Promise<{ stdout: string | Buffer, stderr: string | Buffer }> {
+  private getScreenpipeExecutablePath(): string {
+    const configuredPath = this.getState().config.screenpipeExecutablePath.trim()
+    return configuredPath.length > 0 ? configuredPath : DEFAULT_SCREENPIPE_COMMAND
+  }
+
+  private execScreenpipe(
+    args: string[],
+    executablePath = this.getScreenpipeExecutablePath()
+  ): Promise<{ stdout: string | Buffer, stderr: string | Buffer }> {
     return new Promise((resolve, reject) => {
-      this.execFileFn('screenpipe', args, { windowsHide: true }, (error, stdout, stderr) => {
+      this.execFileFn(executablePath, args, { windowsHide: true }, (error, stdout, stderr) => {
         if (error) {
           reject(error)
           return

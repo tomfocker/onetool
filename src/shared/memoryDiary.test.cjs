@@ -40,6 +40,7 @@ test('createDefaultMemoryDiaryStoredState uses privacy-conservative defaults', (
   const state = memoryDiary.createDefaultMemoryDiaryStoredState()
 
   assert.equal(state.config.apiUrl, 'http://localhost:3030')
+  assert.equal(state.config.screenpipeExecutablePath, '')
   assert.equal(state.config.includeAudio, false)
   assert.equal(state.config.includeInput, false)
   assert.deepEqual(toPlainObject(state.config.enabledContentTypes), ['accessibility', 'ocr'])

@@ -12,6 +12,7 @@ export type MemoryDiaryTaskState = 'idle' | 'running' | 'success' | 'error'
 
 export interface MemoryDiaryConfig {
   apiUrl: string
+  screenpipeExecutablePath: string
   apiKey: string
   enabledContentTypes: MemoryDiaryContentType[]
   includeAudio: boolean
@@ -107,6 +108,7 @@ export interface MemoryDiaryStoredState {
 export function createDefaultMemoryDiaryConfig(): MemoryDiaryConfig {
   return {
     apiUrl: 'http://localhost:3030',
+    screenpipeExecutablePath: '',
     apiKey: '',
     enabledContentTypes: ['accessibility', 'ocr'],
     includeAudio: false,
