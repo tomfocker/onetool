@@ -70,6 +70,11 @@ function formatScreenpipeErrorMessage(error: unknown, executablePath: string): s
   return `找不到 ScreenPipe CLI：${executablePath}。请确认 screenpipe.exe 路径有效。`
 }
 
+function isUnsupportedRecordSubcommand(output: string): boolean {
+  const normalizedOutput = output.toLowerCase()
+  return normalizedOutput.includes('unrecognized subcommand') && normalizedOutput.includes('record')
+}
+
 function normalizeProcessOutput(output: string | Buffer): string {
   return String(output).trim()
 }
@@ -166,10 +171,10 @@ export class ScreenpipeManagementService {
       }
     }
 
-    const executablePath = this.getScreenpipeExecutablePath()
-
     try {
-      const child = this.spawnFn(executablePath, ['record'], {
+      const executablePath = this.getScreenpipeExecutablePath()
+      const startArgs = await this.getScreenpipeStartArgs(executablePath)
+      const child = this.spawnFn(executablePath, startArgs, {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
@@ -203,6 +208,7 @@ export class ScreenpipeManagementService {
         data: this.createRuntimeStatus('starting', 'ScreenPipe 正在启动')
       }
     } catch (error) {
+      const executablePath = this.getScreenpipeExecutablePath()
       const message = formatScreenpipeErrorMessage(error, executablePath)
       this.managedProcess = null
       this.appendLog('error', `启动 ScreenPipe 失败：${message}`)
@@ -305,6 +311,45 @@ export class ScreenpipeManagementService {
   private getScreenpipeExecutablePath(): string {
     const configuredPath = this.getState().config.screenpipeExecutablePath.trim()
     return configuredPath.length > 0 ? configuredPath : DEFAULT_SCREENPIPE_COMMAND
+  }
+
+  private async getScreenpipeStartArgs(executablePath: string): Promise<string[]> {
+    const supportsRecordSubcommand = await this.screenpipeSupportsRecordSubcommand(executablePath)
+    if (supportsRecordSubcommand) {
+      return ['record']
+    }
+
+    this.appendLog('info', '检测到旧版 ScreenPipe CLI，将使用兼容启动方式')
+    return []
+  }
+
+  private screenpipeSupportsRecordSubcommand(executablePath: string): Promise<boolean> {
+    return new Promise((resolve, reject) => {
+      this.execFileFn(executablePath, ['record', '--help'], { windowsHide: true }, (error, stdout, stderr) => {
+        if (!error) {
+          resolve(true)
+          return
+        }
+
+        if (isMissingExecutableError(error)) {
+          reject(error)
+          return
+        }
+
+        const output = [
+          toErrorMessage(error),
+          normalizeProcessOutput(stdout),
+          normalizeProcessOutput(stderr)
+        ].join('\n')
+
+        if (isUnsupportedRecordSubcommand(output)) {
+          resolve(false)
+          return
+        }
+
+        reject(error)
+      })
+    })
   }
 
   private execScreenpipe(

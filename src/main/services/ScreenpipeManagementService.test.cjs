@@ -169,7 +169,10 @@ test('start and stop only manage the process launched by onetool', async () => {
   }
   const { ScreenpipeManagementService } = loadModule({
     childProcess: {
-      execFile: () => { throw new Error('not used') },
+      execFile: (_cmd, args, _options, callback) => {
+        assert.deepEqual(Array.from(args), ['record', '--help'])
+        callback(null, 'Usage: screenpipe record\n', '')
+      },
       spawn: (_cmd, args) => {
         assert.deepEqual(Array.from(args), ['record'])
         return child
@@ -192,6 +195,37 @@ test('start and stop only manage the process launched by onetool', async () => {
   assert.equal(killed, true)
 })
 
+test('start falls back to legacy no-argument launch when record subcommand is unavailable', async () => {
+  const state = createState()
+  const recordError = new Error("error: unrecognized subcommand 'record'")
+  const child = {
+    on() {},
+    kill() {}
+  }
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (_cmd, args, _options, callback) => {
+        assert.deepEqual(Array.from(args), ['record', '--help'])
+        callback(recordError, '', "error: unrecognized subcommand 'record'")
+      },
+      spawn: (_cmd, args) => {
+        assert.deepEqual(Array.from(args), [])
+        return child
+      }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.start()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.state, 'starting')
+})
+
 test('start uses configured screenpipe executable path', async () => {
   const state = createState()
   state.memoryDiary.config.screenpipeExecutablePath = 'C:\\Tools\\screenpipe.exe'
@@ -201,7 +235,11 @@ test('start uses configured screenpipe executable path', async () => {
   }
   const { ScreenpipeManagementService } = loadModule({
     childProcess: {
-      execFile: () => { throw new Error('not used') },
+      execFile: (cmd, args, _options, callback) => {
+        assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
+        assert.deepEqual(Array.from(args), ['record', '--help'])
+        callback(null, 'Usage: screenpipe record\n', '')
+      },
       spawn: (cmd, args) => {
         assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
         assert.deepEqual(Array.from(args), ['record'])
