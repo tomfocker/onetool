@@ -17,6 +17,17 @@ import type {
 } from '../shared/calendar'
 import type { DevEnvironmentId } from '../shared/devEnvironment'
 import type { DownloadOrganizerConfig, DownloadOrganizerState } from '../shared/downloadOrganizer'
+import type {
+  MemoryDiaryCliStatus,
+  MemoryDiaryConfig,
+  MemoryDiaryDeploymentLog,
+  MemoryDiaryGenerateRequest,
+  MemoryDiaryGenerateResult,
+  MemoryDiaryHistoryEntry,
+  MemoryDiaryRuntimeStatus,
+  MemoryDiaryStoredState,
+  MemoryDiaryTimelineBucket
+} from '../shared/memoryDiary'
 import type { ModelDownloadRequest, ModelDownloadState } from '../shared/modelDownload'
 import type {
   TableOcrChoosePathResult,
@@ -601,6 +612,53 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       onChannel('download-organizer-state-changed', callback)
   }
 
+  const memoryDiaryAPI = {
+    getState: () =>
+      ipcRenderer.invoke('memory-screenpipe-get-state') as Promise<
+        IpcResponse<MemoryDiaryStoredState>
+      >,
+    getCliStatus: () =>
+      ipcRenderer.invoke('memory-screenpipe-get-cli-status') as Promise<
+        IpcResponse<MemoryDiaryCliStatus>
+      >,
+    updateConfig: (updates: Partial<MemoryDiaryConfig>) => {
+      return ipcRenderer.invoke('memory-screenpipe-update-config', updates) as Promise<
+        IpcResponse<MemoryDiaryStoredState>
+      >
+    },
+    startScreenpipe: () =>
+      ipcRenderer.invoke('memory-screenpipe-start') as Promise<
+        IpcResponse<MemoryDiaryRuntimeStatus>
+      >,
+    stopScreenpipe: () =>
+      ipcRenderer.invoke('memory-screenpipe-stop') as Promise<
+        IpcResponse<MemoryDiaryRuntimeStatus>
+      >,
+    getToken: () =>
+      ipcRenderer.invoke('memory-screenpipe-get-token') as Promise<
+        IpcResponse<{ apiKey: string }>
+      >,
+    getLogs: () =>
+      ipcRenderer.invoke('memory-screenpipe-get-logs') as Promise<
+        IpcResponse<MemoryDiaryDeploymentLog[]>
+      >,
+    queryTimeline: (request: { date: string; timezone: string }) =>
+      ipcRenderer.invoke('memory-timeline-query', request) as Promise<
+        IpcResponse<MemoryDiaryTimelineBucket[]>
+      >,
+    generateDiary: (request: MemoryDiaryGenerateRequest) =>
+      ipcRenderer.invoke('memory-diary-generate', request) as Promise<
+        IpcResponse<MemoryDiaryGenerateResult>
+      >,
+    listDiaries: () =>
+      ipcRenderer.invoke('memory-diary-list') as Promise<IpcResponse<MemoryDiaryHistoryEntry[]>>,
+    saveDiary: (request: MemoryDiaryGenerateResult) =>
+      ipcRenderer.invoke('memory-diary-save', request) as Promise<
+        IpcResponse<MemoryDiaryHistoryEntry>
+      >,
+    deleteDiary: (id: string) => ipcRenderer.invoke('memory-diary-delete', id) as Promise<IpcResponse>
+  }
+
   const modelDownloadAPI = {
     getState: () =>
       ipcRenderer.invoke('model-download-get-state') as Promise<IpcResponse<ModelDownloadState>>,
@@ -754,6 +812,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     doctor: doctorAPI,
     devEnvironment: devEnvironmentAPI,
     downloadOrganizer: downloadOrganizerAPI,
+    memoryDiary: memoryDiaryAPI,
     modelDownload: modelDownloadAPI,
     tableOcr: tableOcrAPI,
     pdfTools: pdfToolsAPI,
