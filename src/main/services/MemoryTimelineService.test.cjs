@@ -203,4 +203,12 @@ test('queryTimeline prefers accessibility text over OCR noise for bucket summari
     'ScreenPipe bridge now reads accessibility records',
     'File Edit View Window Help hidden sidebar everything all menus repeated OCR noise'
   ])
+  assert.equal(result.data[0].insight.activityKind, 'development')
+  assert.equal(result.data[0].insight.uniqueTextCount, 2)
+  assert.deepEqual(JSON.parse(JSON.stringify(result.data[0].insight.sourceCounts)), {
+    accessibility: 1,
+    ocr: 1,
+    audio: 0,
+    input: 0
+  })
 })

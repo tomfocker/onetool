@@ -1,5 +1,6 @@
 import type { IpcResponse } from '../../shared/types'
 import {
+  buildMemoryDiaryTimelineInsight,
   createDefaultMemoryDiaryStoredState,
   createMemoryDiaryBucketStart,
   filterMemoryDiaryItems,
@@ -153,14 +154,17 @@ export class MemoryTimelineService {
         const windowNames = this.unique(bucketItems.map((item) => item.windowName).filter(Boolean))
         const urls = this.unique(bucketItems.map((item) => item.url).filter(Boolean))
         const contentTypes = this.unique(bucketItems.map((item) => item.contentType))
+        const insight = buildMemoryDiaryTimelineInsight(bucketItems)
         const readableItems = [...bucketItems].sort((left, right) => (
           TIMELINE_TEXT_SOURCE_PRIORITY[left.contentType] - TIMELINE_TEXT_SOURCE_PRIORITY[right.contentType]
         ))
-        const keyTexts = this.unique(
-          readableItems
+        const keyTexts = insight.evidenceTexts.length > 0
+          ? insight.evidenceTexts
+            .map((text) => this.compactTimelineText(text, TIMELINE_KEY_TEXT_MAX_LENGTH))
+            .slice(0, 5)
+          : this.unique(readableItems
             .map((item) => this.compactTimelineText(item.text, TIMELINE_KEY_TEXT_MAX_LENGTH))
-            .filter(Boolean)
-        ).slice(0, 5)
+            .filter(Boolean)).slice(0, 5)
 
         return {
           id: start,
@@ -175,7 +179,8 @@ export class MemoryTimelineService {
           urls,
           contentTypes: contentTypes as MemoryDiaryContentType[],
           keyTexts,
-          items: bucketItems
+          items: bucketItems,
+          insight
         }
       })
   }
