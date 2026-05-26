@@ -427,7 +427,7 @@ export class LocalProxyService {
     const keys = [...PROXY_DOCTOR_PROXY_KEYS, ...PROXY_DOCTOR_NO_PROXY_KEYS]
     const script = `
 $ErrorActionPreference = 'Stop'
-$result = @{}
+$result = [System.Collections.Specialized.OrderedDictionary]::new([System.StringComparer]::Ordinal)
 ${keys.map((key) => `$value = [Environment]::GetEnvironmentVariable('${key}', 'User'); if ($null -ne $value -and [string]$value -ne '') { $result['${key}'] = [string]$value }`).join('\n')}
 Write-Output '${LOCAL_PROXY_ENV_JSON_START}'
 $result | ConvertTo-Json -Compress

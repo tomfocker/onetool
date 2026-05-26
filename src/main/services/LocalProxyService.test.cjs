@@ -421,6 +421,55 @@ test('doctorScan reports environment conflict when managed proxy keys are incomp
   assert.match(envLayer.currentValue, /HTTP_PROXY=http:\/\/127\.0\.0\.1:7897/)
 })
 
+test('doctorScan reads proxy environment keys with case-sensitive PowerShell storage', async () => {
+  const powershellScripts = []
+  const winInetJson = {
+    enabled: false,
+    server: '',
+    override: '',
+    autoConfigUrl: null
+  }
+  const envJson = {
+    HTTP_PROXY: 'http://127.0.0.1:7897',
+    HTTPS_PROXY: 'http://127.0.0.1:7897',
+    ALL_PROXY: 'http://127.0.0.1:7897',
+    http_proxy: 'http://127.0.0.1:7897',
+    https_proxy: 'http://127.0.0.1:7897',
+    all_proxy: 'http://127.0.0.1:7897'
+  }
+
+  const deps = {
+    execPowerShellEncoded: async (script) => {
+      powershellScripts.push(script)
+      if (script.includes('LOCAL_PROXY_ENV_JSON_START')) {
+        return `---LOCAL_PROXY_ENV_JSON_START---\n${JSON.stringify(envJson)}\n---LOCAL_PROXY_ENV_JSON_END---`
+      }
+
+      return `---LOCAL_PROXY_JSON_START---\n${JSON.stringify(winInetJson)}\n---LOCAL_PROXY_JSON_END---`
+    },
+    execCommand: async (command) => {
+      if (command === 'netsh winhttp show proxy') {
+        return 'Direct access (no proxy server).'
+      }
+
+      return ''
+    },
+    connectToPort: async () => false,
+    processEnv: {}
+  }
+  const { LocalProxyService } = loadLocalProxyServiceModule()
+  const service = new LocalProxyService(deps)
+
+  const result = await service.doctorScan('7897')
+  const envScript = powershellScripts.find((script) =>
+    script.includes('LOCAL_PROXY_ENV_JSON_START')
+  )
+
+  assert.equal(result.success, true)
+  assert.match(envScript, /OrderedDictionary\]::new\(\[System\.StringComparer\]::Ordinal\)/)
+  assert.doesNotMatch(envScript, /\$result = @\{\}/)
+})
+
 test('doctorScan accepts Windows fallback proxy server syntax', async () => {
   const winInetJson = {
     enabled: true,
