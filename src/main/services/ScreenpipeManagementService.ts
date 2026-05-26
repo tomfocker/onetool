@@ -360,7 +360,7 @@ export class ScreenpipeManagementService {
 
   private getLegacyScreenpipeRuntimeArgs(): string[] {
     const config = this.getState().config
-    const args = ['--fps', '1', '--ocr-engine', 'windows-native']
+    const args = ['--fps', '1', '--ocr-engine', 'windows-native', '--disable-telemetry']
     if (!config.includeAudio) {
       args.push('--disable-audio')
     }
@@ -370,11 +370,12 @@ export class ScreenpipeManagementService {
 
   private getModernScreenpipeRecordArgs(): string[] {
     const config = this.getState().config
+    const args = ['--disable-telemetry']
     if (!config.includeAudio) {
-      return ['--disable-audio']
+      args.push('--disable-audio')
     }
 
-    return []
+    return args
   }
 
   private getNpmGlobalPrefix(): Promise<string> {

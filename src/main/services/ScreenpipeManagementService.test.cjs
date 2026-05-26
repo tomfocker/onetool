@@ -267,7 +267,7 @@ test('start and stop only manage the process launched by onetool', async () => {
         callback(null, 'Usage: screenpipe record\n', '')
       },
       spawn: (_cmd, args) => {
-        assert.deepEqual(Array.from(args), ['record', '--disable-audio'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--disable-audio'])
         return child
       }
     },
@@ -288,7 +288,7 @@ test('start and stop only manage the process launched by onetool', async () => {
   assert.equal(killed, true)
 })
 
-test('start falls back to legacy no-argument launch when record subcommand is unavailable', async () => {
+test('start falls back to legacy launch when record subcommand is unavailable', async () => {
   const state = createState()
   const recordError = new Error("error: unrecognized subcommand 'record'")
   const child = {
@@ -307,6 +307,7 @@ test('start falls back to legacy no-argument launch when record subcommand is un
           '1',
           '--ocr-engine',
           'windows-native',
+          '--disable-telemetry',
           '--disable-audio'
         ])
         return child
@@ -341,7 +342,7 @@ test('start uses configured screenpipe executable path', async () => {
       },
       spawn: (cmd, args) => {
         assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
-        assert.deepEqual(Array.from(args), ['record', '--disable-audio'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--disable-audio'])
         return child
       }
     },
