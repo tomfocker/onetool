@@ -35,6 +35,7 @@ function loadModule(overrides = {}) {
     console,
     Buffer,
     process,
+    URL,
     setTimeout,
     clearTimeout
   }, { filename: filePath })
@@ -267,7 +268,7 @@ test('start and stop only manage the process launched by onetool', async () => {
         callback(null, 'Usage: screenpipe record\n', '')
       },
       spawn: (_cmd, args) => {
-        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--disable-audio'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--port', '3030', '--disable-audio'])
         return child
       }
     },
@@ -342,7 +343,38 @@ test('start uses configured screenpipe executable path', async () => {
       },
       spawn: (cmd, args) => {
         assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
-        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--disable-audio'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--port', '3030', '--disable-audio'])
+        return child
+      }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.start()
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.state, 'starting')
+})
+
+test('start passes the configured api port to modern screenpipe', async () => {
+  const state = createState()
+  state.memoryDiary.config.apiUrl = 'http://127.0.0.1:3059'
+  const child = {
+    on() {},
+    kill() {}
+  }
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (_cmd, args, _options, callback) => {
+        assert.deepEqual(Array.from(args), ['record', '--help'])
+        callback(null, 'Usage: screenpipe record\n', '')
+      },
+      spawn: (_cmd, args) => {
+        assert.deepEqual(Array.from(args), ['record', '--disable-telemetry', '--port', '3059', '--disable-audio'])
         return child
       }
     },

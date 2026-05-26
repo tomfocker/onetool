@@ -92,6 +92,20 @@ function resolveGlobalScreenpipeExecutablePath(npmPrefix: string): string {
   return path.join(trimmedPrefix, 'bin', 'screenpipe')
 }
 
+function getExplicitApiPort(apiUrl: string): string | null {
+  try {
+    const port = new URL(apiUrl).port
+    if (!/^\d+$/.test(port)) {
+      return null
+    }
+
+    const portNumber = Number(port)
+    return portNumber > 0 && portNumber <= 65535 ? port : null
+  } catch {
+    return null
+  }
+}
+
 export class ScreenpipeManagementService {
   private readonly store: StoreServiceLike
   private readonly execFileFn: ExecFileLike
@@ -371,6 +385,10 @@ export class ScreenpipeManagementService {
   private getModernScreenpipeRecordArgs(): string[] {
     const config = this.getState().config
     const args = ['--disable-telemetry']
+    const port = getExplicitApiPort(config.apiUrl)
+    if (port) {
+      args.push('--port', port)
+    }
     if (!config.includeAudio) {
       args.push('--disable-audio')
     }
