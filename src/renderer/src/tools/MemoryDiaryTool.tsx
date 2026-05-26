@@ -323,7 +323,7 @@ export default function MemoryDiaryTool() {
   }
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-6 pb-16">
+    <div className="mx-auto min-w-0 max-w-[1500px] space-y-6 pb-16">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-600 dark:text-emerald-300">
@@ -348,8 +348,8 @@ export default function MemoryDiaryTool() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-12">
-        <div className="space-y-5 xl:col-span-4">
+      <div className="grid min-w-0 grid-cols-1 gap-5 xl:grid-cols-12">
+        <div className="min-w-0 space-y-5 xl:col-span-4">
           <Card className={panelClassName()}>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -473,8 +473,8 @@ export default function MemoryDiaryTool() {
           </Card>
         </div>
 
-        <div className="space-y-5 xl:col-span-5">
-          <Card className={panelClassName('min-h-[620px]')}>
+        <div className="min-w-0 space-y-5 xl:col-span-5">
+          <Card className={panelClassName('min-h-[620px] overflow-hidden')}>
             <CardHeader className="pb-4">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -534,17 +534,19 @@ export default function MemoryDiaryTool() {
                     暂无时间线数据
                   </div>
                 ) : timeline.map((bucket) => (
-                  <div key={bucket.id} className="relative grid grid-cols-[72px_1fr] gap-3">
+                  <div key={bucket.id} className="relative grid min-w-0 grid-cols-[64px_minmax(0,1fr)] gap-3">
                     <div className="pt-1 text-right text-xs font-semibold text-muted-foreground">
                       {formatTime(bucket.start)}
                     </div>
-                    <div className="rounded-lg border border-white/25 bg-white/35 p-4 dark:border-white/10 dark:bg-white/5">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                    <div className="min-w-0 overflow-hidden rounded-lg border border-white/25 bg-white/35 p-4 dark:border-white/10 dark:bg-white/5">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
                           <div className="truncate font-semibold">{bucket.title}</div>
-                          <div className="mt-1 text-sm text-muted-foreground">{bucket.summary}</div>
+                          <div className="mt-1 line-clamp-2 break-words text-sm text-muted-foreground">
+                            {bucket.summary}
+                          </div>
                         </div>
-                        <Badge variant="outline">{bucket.items.length}</Badge>
+                        <Badge variant="outline" className="shrink-0">{bucket.items.length}</Badge>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {bucket.contentTypes.map((type) => (
@@ -554,7 +556,7 @@ export default function MemoryDiaryTool() {
                       {bucket.keyTexts.length > 0 ? (
                         <div className="mt-3 space-y-1 text-xs text-muted-foreground">
                           {bucket.keyTexts.slice(0, 3).map((text) => (
-                            <div key={text} className="truncate">{text}</div>
+                            <div key={text} className="truncate" title={text}>{text}</div>
                           ))}
                         </div>
                       ) : null}
@@ -566,7 +568,7 @@ export default function MemoryDiaryTool() {
           </Card>
         </div>
 
-        <div className="space-y-5 xl:col-span-3">
+        <div className="min-w-0 space-y-5 xl:col-span-3">
           <Card className={panelClassName()}>
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -643,7 +645,7 @@ export default function MemoryDiaryTool() {
                       <Trash2 className="h-4 w-4" />
                     </Button>
                   </div>
-                  <div className="mt-2 line-clamp-2 text-xs text-muted-foreground">{item.summary}</div>
+                  <div className="mt-2 line-clamp-2 break-words text-xs text-muted-foreground">{item.summary}</div>
                 </div>
               ))}
             </CardContent>
@@ -661,7 +663,7 @@ export default function MemoryDiaryTool() {
                   <div className={cn('text-xs font-semibold', statusTone(log.level))}>
                     {formatDateTime(log.timestamp)}
                   </div>
-                  <div className="mt-1 text-sm text-muted-foreground">{log.message}</div>
+                  <div className="mt-1 line-clamp-3 break-words text-sm text-muted-foreground">{log.message}</div>
                 </div>
               ))}
             </CardContent>

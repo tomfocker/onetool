@@ -12,6 +12,8 @@ import { storeService } from './StoreService'
 import { screenpipeClient, type ScreenpipeClient } from './ScreenpipeClient'
 
 type StoreLike = Pick<typeof storeService, 'get'>
+const TIMELINE_SUMMARY_MAX_LENGTH = 160
+const TIMELINE_KEY_TEXT_MAX_LENGTH = 140
 
 export interface MemoryTimelineQuery {
   date: string
@@ -145,14 +147,20 @@ export class MemoryTimelineService {
         const windowNames = this.unique(bucketItems.map((item) => item.windowName).filter(Boolean))
         const urls = this.unique(bucketItems.map((item) => item.url).filter(Boolean))
         const contentTypes = this.unique(bucketItems.map((item) => item.contentType))
-        const keyTexts = this.unique(bucketItems.map((item) => item.text).filter(Boolean)).slice(0, 5)
+        const keyTexts = this.unique(
+          bucketItems
+            .map((item) => this.compactTimelineText(item.text, TIMELINE_KEY_TEXT_MAX_LENGTH))
+            .filter(Boolean)
+        ).slice(0, 5)
 
         return {
           id: start,
           start,
           end,
           title: appNames.length > 0 ? appNames.join(' / ') : '未命名活动',
-          summary: keyTexts[0] || '此时间段有活动记录',
+          summary: keyTexts[0]
+            ? this.compactTimelineText(keyTexts[0], TIMELINE_SUMMARY_MAX_LENGTH)
+            : '此时间段有活动记录',
           appNames,
           windowNames,
           urls,
@@ -165,6 +173,15 @@ export class MemoryTimelineService {
 
   private unique<T>(items: T[]): T[] {
     return Array.from(new Set(items))
+  }
+
+  private compactTimelineText(value: string, maxLength: number): string {
+    const normalized = value.replace(/\s+/g, ' ').trim()
+    if (normalized.length <= maxLength) {
+      return normalized
+    }
+
+    return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`
   }
 }
 
