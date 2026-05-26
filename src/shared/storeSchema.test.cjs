@@ -79,6 +79,9 @@ function loadStoreSchemaModule() {
     if (specifier === './downloadOrganizer') {
       return require(path.join(__dirname, 'downloadOrganizer.ts'))
     }
+    if (specifier === './memoryDiary') {
+      return require(path.join(__dirname, 'memoryDiary.ts'))
+    }
     if (specifier === './devEnvironment') {
       return require(path.join(__dirname, 'devEnvironment.ts'))
     }
