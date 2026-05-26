@@ -68,6 +68,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
       getStoredState: () => ({ success: true, data: { config: { apiUrl: 'http://localhost:3030' } } }),
       getCliStatus: async () => ({ success: true, data: { installed: true } }),
       updateConfig: (updates) => ({ success: true, data: { config: updates } }),
+      installLatest: async () => ({ success: true, data: { config: { screenpipeExecutablePath: 'screenpipe.cmd' } } }),
       start: async () => ({ success: true, data: { state: 'starting' } }),
       stop: async () => ({ success: true, data: { state: 'stopped' } }),
       getAuthToken: async () => ({ success: true, data: { apiKey: 'token' } }),
@@ -89,6 +90,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
   assert.equal((await handlers['memory-screenpipe-get-state']()).data.config.apiUrl, 'http://localhost:3030')
   assert.equal((await handlers['memory-screenpipe-get-cli-status']()).data.installed, true)
   assert.equal((await handlers['memory-screenpipe-update-config']({}, { apiUrl: 'http://127.0.0.1:3030' })).data.config.apiUrl, 'http://127.0.0.1:3030')
+  assert.equal((await handlers['memory-screenpipe-install-latest']()).data.config.screenpipeExecutablePath, 'screenpipe.cmd')
   assert.equal((await handlers['memory-screenpipe-start']()).data.state, 'starting')
   assert.equal((await handlers['memory-screenpipe-stop']()).data.state, 'stopped')
   assert.equal((await handlers['memory-screenpipe-get-token']()).data.apiKey, 'token')

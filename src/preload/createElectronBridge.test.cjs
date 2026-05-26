@@ -169,6 +169,7 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.memoryDiary.getState, 'function')
   assert.equal(typeof bridge.memoryDiary.getCliStatus, 'function')
   assert.equal(typeof bridge.memoryDiary.updateConfig, 'function')
+  assert.equal(typeof bridge.memoryDiary.installLatest, 'function')
   assert.equal(typeof bridge.memoryDiary.startScreenpipe, 'function')
   assert.equal(typeof bridge.memoryDiary.stopScreenpipe, 'function')
   assert.equal(typeof bridge.memoryDiary.getToken, 'function')
@@ -478,6 +479,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.memoryDiary.getState()
   await bridge.memoryDiary.getCliStatus()
   await bridge.memoryDiary.updateConfig({ apiUrl: 'http://127.0.0.1:3030' })
+  await bridge.memoryDiary.installLatest()
   await bridge.memoryDiary.startScreenpipe()
   await bridge.memoryDiary.stopScreenpipe()
   await bridge.memoryDiary.getToken()
@@ -584,6 +586,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['memory-screenpipe-get-state'],
     ['memory-screenpipe-get-cli-status'],
     ['memory-screenpipe-update-config', { apiUrl: 'http://127.0.0.1:3030' }],
+    ['memory-screenpipe-install-latest'],
     ['memory-screenpipe-start'],
     ['memory-screenpipe-stop'],
     ['memory-screenpipe-get-token'],

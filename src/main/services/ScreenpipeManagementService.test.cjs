@@ -3,6 +3,7 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
+const { EventEmitter } = require('node:events')
 const ts = require('typescript')
 
 function loadModule(overrides = {}) {
@@ -33,6 +34,7 @@ function loadModule(overrides = {}) {
     __filename: filePath,
     console,
     Buffer,
+    process,
     setTimeout,
     clearTimeout
   }, { filename: filePath })
@@ -158,6 +160,97 @@ test('getAuthToken runs screenpipe auth token and stores api key', async () => {
   assert.equal(writes.at(-1)[1].config.apiKey, 'secret-token')
 })
 
+test('installLatest installs screenpipe with npm and stores global executable path', async () => {
+  const writes = []
+  const state = createState()
+  let spawnArgs = null
+  const execCalls = []
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (cmd, args, _options, callback) => {
+        execCalls.push([cmd, Array.from(args)])
+        if (Array.from(args).join(' ') === 'prefix -g') {
+          callback(null, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\n', '')
+          return
+        }
+
+        assert.equal(cmd, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
+        assert.deepEqual(Array.from(args), ['--version'])
+        callback(null, 'screenpipe 0.3.346\n', '')
+      },
+      spawn: (cmd, args) => {
+        assert.equal(cmd, 'npm.cmd')
+        spawnArgs = Array.from(args)
+        const child = new EventEmitter()
+        child.stdout = new EventEmitter()
+        child.stderr = new EventEmitter()
+        setImmediate(() => {
+          child.stdout.emit('data', 'installed screenpipe\n')
+          child.emit('close', 0)
+        })
+        return child
+      }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => {
+        writes.push([key, value])
+        state[key] = value
+      }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.installLatest()
+
+  assert.equal(result.success, true)
+  assert.deepEqual(spawnArgs, [
+    'install',
+    '-g',
+    'screenpipe@latest',
+    '--registry=https://registry.npmjs.org'
+  ])
+  assert.deepEqual(execCalls, [
+    ['npm.cmd', ['prefix', '-g']],
+    ['C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd', ['--version']]
+  ])
+  assert.equal(result.data.config.screenpipeExecutablePath, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
+  assert.equal(writes.at(-1)[1].config.screenpipeExecutablePath, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\\screenpipe.cmd')
+})
+
+test('installLatest reports npm installation failures', async () => {
+  const state = createState()
+  const { ScreenpipeManagementService } = loadModule({
+    childProcess: {
+      execFile: (_cmd, args, _options, callback) => {
+        assert.deepEqual(Array.from(args), ['prefix', '-g'])
+        callback(null, 'C:\\Users\\Admin\\AppData\\Roaming\\npm\n', '')
+      },
+      spawn: () => {
+        const child = new EventEmitter()
+        child.stdout = new EventEmitter()
+        child.stderr = new EventEmitter()
+        setImmediate(() => {
+          child.stderr.emit('data', 'network failed\n')
+          child.emit('close', 1)
+        })
+        return child
+      }
+    },
+    storeService: {
+      get: (key) => state[key],
+      set: (key, value) => { state[key] = value }
+    }
+  })
+
+  const service = new ScreenpipeManagementService()
+  const result = await service.installLatest()
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /安装失败/)
+  assert.match(state.memoryDiary.deploymentLogs[0].message, /network failed/)
+})
+
 test('start and stop only manage the process launched by onetool', async () => {
   const state = createState()
   let killed = false
@@ -174,7 +267,7 @@ test('start and stop only manage the process launched by onetool', async () => {
         callback(null, 'Usage: screenpipe record\n', '')
       },
       spawn: (_cmd, args) => {
-        assert.deepEqual(Array.from(args), ['record'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-audio'])
         return child
       }
     },
@@ -209,7 +302,13 @@ test('start falls back to legacy no-argument launch when record subcommand is un
         callback(recordError, '', "error: unrecognized subcommand 'record'")
       },
       spawn: (_cmd, args) => {
-        assert.deepEqual(Array.from(args), [])
+        assert.deepEqual(Array.from(args), [
+          '--fps',
+          '1',
+          '--ocr-engine',
+          'windows-native',
+          '--disable-audio'
+        ])
         return child
       }
     },
@@ -242,7 +341,7 @@ test('start uses configured screenpipe executable path', async () => {
       },
       spawn: (cmd, args) => {
         assert.equal(cmd, 'C:\\Tools\\screenpipe.exe')
-        assert.deepEqual(Array.from(args), ['record'])
+        assert.deepEqual(Array.from(args), ['record', '--disable-audio'])
         return child
       }
     },

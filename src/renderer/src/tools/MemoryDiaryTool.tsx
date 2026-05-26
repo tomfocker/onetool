@@ -3,6 +3,7 @@ import {
   Activity,
   Brain,
   CalendarDays,
+  Download,
   FileText,
   KeyRound,
   Play,
@@ -188,6 +189,18 @@ export default function MemoryDiaryTool() {
     }
   })
 
+  const installLatest = () => runTask('install', async () => {
+    const result = await api!.installLatest()
+    if (result.success && result.data) {
+      setConfig(result.data.config)
+      await refreshAll()
+      setMessage('ScreenPipe 已安装或更新')
+    } else {
+      await refreshAll()
+      setMessage(result.error || '安装失败')
+    }
+  })
+
   const startScreenpipe = () => runTask('start', async () => {
     const result = await api!.startScreenpipe()
     if (result.data) setRuntimeStatus(result.data)
@@ -302,6 +315,10 @@ export default function MemoryDiaryTool() {
                 <Button variant="outline" onClick={refreshStatus} disabled={activeTask === 'refresh'}>
                   <RefreshCw className="h-4 w-4" />
                   刷新
+                </Button>
+                <Button variant="outline" onClick={installLatest} disabled={activeTask === 'install'}>
+                  <Download className="h-4 w-4" />
+                  安装/更新
                 </Button>
                 <Button variant="outline" onClick={getToken} disabled={activeTask === 'token'}>
                   <KeyRound className="h-4 w-4" />
