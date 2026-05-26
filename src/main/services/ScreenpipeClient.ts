@@ -82,7 +82,7 @@ export class ScreenpipeClient {
   private buildHeaders(apiKey: string): Record<string, string> {
     const headers: Record<string, string> = { Accept: 'application/json' }
     if (apiKey.trim()) {
-      headers['x-api-key'] = apiKey.trim()
+      headers.Authorization = `Bearer ${apiKey.trim()}`
     }
     return headers
   }

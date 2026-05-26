@@ -44,7 +44,7 @@ function loadModule() {
   return module.exports
 }
 
-test('health calls the configured api url with x-api-key', async () => {
+test('health calls the configured api url with bearer auth', async () => {
   const calls = []
   const { ScreenpipeClient } = loadModule()
   const client = new ScreenpipeClient({
@@ -61,7 +61,35 @@ test('health calls the configured api url with x-api-key', async () => {
 
   assert.equal(result.success, true)
   assert.equal(calls[0][0], 'http://localhost:3030/health')
-  assert.equal(calls[0][1]['x-api-key'], 'token')
+  assert.equal(calls[0][1].Authorization, 'Bearer token')
+  assert.equal(calls[0][1]['x-api-key'], undefined)
+})
+
+test('search calls the configured api url with bearer auth', async () => {
+  const calls = []
+  const { ScreenpipeClient } = loadModule()
+  const client = new ScreenpipeClient({
+    fetch: async (url, init) => {
+      calls.push([url, init.headers])
+      return {
+        ok: true,
+        json: async () => ({ data: [] })
+      }
+    }
+  })
+
+  const result = await client.search({
+    apiUrl: 'http://localhost:3030',
+    apiKey: 'token',
+    startTime: '2026-05-26T00:00:00.000Z',
+    endTime: '2026-05-26T23:59:59.999Z',
+    contentTypes: ['ocr']
+  })
+
+  assert.equal(result.success, true)
+  assert.match(calls[0][0], /^http:\/\/localhost:3030\/search\?/)
+  assert.equal(calls[0][1].Authorization, 'Bearer token')
+  assert.equal(calls[0][1]['x-api-key'], undefined)
 })
 
 test('search normalizes screenpipe payload items into MemoryDiaryItem records', async () => {

@@ -238,7 +238,8 @@ test('getRuntimeStatus reports healthy external ScreenPipe API', async () => {
   assert.equal(result.data.todayItemCount, 177)
   assert.equal(result.data.message, 'ScreenPipe API healthy')
   assert.equal(fetchCalls[0][0], 'http://localhost:3030/health')
-  assert.equal(fetchCalls[0][1].headers['x-api-key'], 'secret-token')
+  assert.equal(fetchCalls[0][1].headers.Authorization, 'Bearer secret-token')
+  assert.equal(fetchCalls[0][1].headers['x-api-key'], undefined)
 })
 
 test('installLatest installs screenpipe with npm and stores global executable path', async () => {
