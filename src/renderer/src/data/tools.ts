@@ -114,6 +114,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'TableOcrTool'
   },
   {
+    id: 'pdf-tool',
+    name: 'PDF 处理',
+    description: 'PDF 与图片互转、合并文件的本地处理工具',
+    category: '日常办公',
+    icon: 'FileText',
+    componentPath: 'PdfTool'
+  },
+  {
     id: 'screenshot-tool',
     name: '叠加截图',
     description: '支持聚焦叠加的高级截图工具',

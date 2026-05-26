@@ -232,3 +232,32 @@ test('local proxy manager keeps its route id while adopting Proxy Doctor naming'
   assert.equal(proxyTool.name, '代理医生')
   assert.match(proxyTool.description, /系统代理|Git|npm/)
 })
+
+test('tools registry exposes the PDF tool through the main shell route map', () => {
+  const pdfTool = actualTools.find((tool) => tool.id === 'pdf-tool')
+
+  assert.ok(pdfTool)
+  assert.deepEqual(
+    toPlainObject(pdfTool),
+    {
+      id: 'pdf-tool',
+      name: 'PDF 处理',
+      description: 'PDF 与图片互转、合并文件的本地处理工具',
+      category: '日常办公',
+      icon: 'FileText',
+      componentPath: 'PdfTool'
+    }
+  )
+
+  const { result: map, warnings } = captureWarnings(() => createToolRouteModuleMap([pdfTool], {
+    './components/ConfigChecker.tsx': () => 'config',
+    './components/SettingsPage.tsx': () => 'settings',
+    './components/WebActivator.tsx': () => 'web-activator'
+  }, {
+    './tools/PdfTool.tsx': () => 'pdf-tool'
+  }))
+
+  assert.equal(typeof map['pdf-tool'], 'function')
+  assert.equal(typeof map.settings, 'function')
+  assert.equal(warnings.length, 0)
+})

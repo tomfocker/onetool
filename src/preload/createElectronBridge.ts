@@ -25,6 +25,13 @@ import type {
   TableOcrRuntimeStatus
 } from '../shared/tableOcr'
 import type {
+  PdfToolChooseDirectoryResult,
+  PdfToolChooseFilesResult,
+  PdfToolConvertRequest,
+  PdfToolConvertResult,
+  PdfToolMode
+} from '../shared/pdfTools'
+import type {
   SpaceCleanupDriveRoot,
   SpaceCleanupNode,
   SpaceCleanupSession,
@@ -655,6 +662,29 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       onChannel('table-ocr-state-changed', callback)
   }
 
+  const pdfToolsAPI = {
+    chooseFiles: (mode: PdfToolMode) => {
+      return ipcRenderer.invoke('pdf-tools-choose-files', mode) as Promise<
+        IpcResponse<PdfToolChooseFilesResult>
+      >
+    },
+    chooseOutputDirectory: () => {
+      return ipcRenderer.invoke('pdf-tools-choose-output-dir') as Promise<
+        IpcResponse<PdfToolChooseDirectoryResult>
+      >
+    },
+    convert: (request: PdfToolConvertRequest) => {
+      return ipcRenderer.invoke('pdf-tools-convert', request) as Promise<
+        IpcResponse<PdfToolConvertResult>
+      >
+    },
+    openPath: (targetPath: string) => {
+      return ipcRenderer.invoke('pdf-tools-open-path', targetPath) as Promise<
+        IpcResponse<{ targetPath: string }>
+      >
+    }
+  }
+
   const bilibiliDownloaderAPI = {
     getSession: () =>
       ipcRenderer.invoke('bilibili-downloader-get-session') as Promise<
@@ -726,6 +756,7 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     downloadOrganizer: downloadOrganizerAPI,
     modelDownload: modelDownloadAPI,
     tableOcr: tableOcrAPI,
+    pdfTools: pdfToolsAPI,
     spaceCleanup: spaceCleanupAPI,
     updates: updatesAPI,
     webUtils: webUtilsAPI,

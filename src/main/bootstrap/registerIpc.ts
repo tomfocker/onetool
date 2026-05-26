@@ -31,6 +31,7 @@ export type MainProcessIpcRegistrars = {
   registerModelDownloadIpc(getMainWindow: () => BrowserWindow | null): void
   registerTableOcrIpc(getMainWindow: () => BrowserWindow | null): void
   registerBilibiliDownloaderIpc(getMainWindow: () => BrowserWindow | null): void
+  registerPdfToolsIpc(getMainWindow: () => BrowserWindow | null): void
 }
 
 export function registerIpc(input: {
@@ -69,4 +70,5 @@ export function registerIpc(input: {
   registrars.registerModelDownloadIpc(mainWindowProvider)
   registrars.registerTableOcrIpc(mainWindowProvider)
   registrars.registerBilibiliDownloaderIpc(mainWindowProvider)
+  registrars.registerPdfToolsIpc(mainWindowProvider)
 }

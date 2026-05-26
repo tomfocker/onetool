@@ -70,7 +70,8 @@ test('registerIpc registers both plain and window-aware handlers through one acc
       registerDownloadOrganizerIpc: (getMainWindow) => calls.push(['registerDownloadOrganizerIpc', getMainWindow()]),
       registerModelDownloadIpc: (getMainWindow) => calls.push(['registerModelDownloadIpc', getMainWindow()]),
       registerTableOcrIpc: (getMainWindow) => calls.push(['registerTableOcrIpc', getMainWindow()]),
-      registerBilibiliDownloaderIpc: (getMainWindow) => calls.push(['registerBilibiliDownloaderIpc', getMainWindow()])
+      registerBilibiliDownloaderIpc: (getMainWindow) => calls.push(['registerBilibiliDownloaderIpc', getMainWindow()]),
+      registerPdfToolsIpc: (getMainWindow) => calls.push(['registerPdfToolsIpc', getMainWindow()])
     }
   })
 
@@ -86,7 +87,8 @@ test('registerIpc registers both plain and window-aware handlers through one acc
     ['registerDownloadOrganizerIpc', 'main-window'],
     ['registerModelDownloadIpc', 'main-window'],
     ['registerTableOcrIpc', 'main-window'],
-    ['registerBilibiliDownloaderIpc', 'main-window']
+    ['registerBilibiliDownloaderIpc', 'main-window'],
+    ['registerPdfToolsIpc', 'main-window']
   ])
   assert.ok(calls.some(([label]) => label === 'registerScreenOverlayIpc'))
   assert.ok(calls.some(([label]) => label === 'registerLlmIpc'))

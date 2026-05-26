@@ -155,6 +155,10 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.tableOcr.cancelPrepare, 'function')
   assert.equal(typeof bridge.tableOcr.onStateChanged, 'function')
   assert.equal(typeof bridge.tableOcr.recognize, 'function')
+  assert.equal(typeof bridge.pdfTools.chooseFiles, 'function')
+  assert.equal(typeof bridge.pdfTools.chooseOutputDirectory, 'function')
+  assert.equal(typeof bridge.pdfTools.convert, 'function')
+  assert.equal(typeof bridge.pdfTools.openPath, 'function')
 })
 
 test('createElectronBridge exposes explicit float ball drag lifecycle APIs', () => {
@@ -433,6 +437,14 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.screenshot.openSelection(null, true)
   await bridge.screenshot.closeSelection(null)
   await bridge.floatBall.setHotkey('Alt+Shift+F')
+  await bridge.pdfTools.chooseFiles('merge-pdfs')
+  await bridge.pdfTools.chooseOutputDirectory()
+  await bridge.pdfTools.convert({
+    mode: 'merge-pdfs',
+    inputPaths: ['D:\\Docs\\a.pdf'],
+    outputDirectory: 'D:\\Exports'
+  })
+  await bridge.pdfTools.openPath('D:\\Exports')
 
   assert.deepEqual(mocks.invokeCalls, [
     ['doctor-run-audit'],
@@ -505,7 +517,18 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['screen-recorder-hide-selection-preview'],
     ['screenshot-selection-open', null, true],
     ['screenshot-selection-close', null],
-    ['settings-set-floatball-hotkey', 'Alt+Shift+F']
+    ['settings-set-floatball-hotkey', 'Alt+Shift+F'],
+    ['pdf-tools-choose-files', 'merge-pdfs'],
+    ['pdf-tools-choose-output-dir'],
+    [
+      'pdf-tools-convert',
+      {
+        mode: 'merge-pdfs',
+        inputPaths: ['D:\\Docs\\a.pdf'],
+        outputDirectory: 'D:\\Exports'
+      }
+    ],
+    ['pdf-tools-open-path', 'D:\\Exports']
   ])
 })
 

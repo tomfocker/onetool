@@ -44,6 +44,13 @@ import type {
   TableOcrRuntimeStatus
 } from '../../../shared/tableOcr'
 import type {
+  PdfToolChooseDirectoryResult,
+  PdfToolChooseFilesResult,
+  PdfToolConvertRequest,
+  PdfToolConvertResult,
+  PdfToolMode
+} from '../../../shared/pdfTools'
+import type {
   RecorderBounds,
   RecorderSelectionPreview,
   RecorderSessionUpdate
@@ -128,6 +135,12 @@ declare global {
         chooseOutputDirectory: () => Promise<IpcResponse<TableOcrChoosePathResult>>
         openPath: (targetPath: string) => Promise<IpcResponse<{ targetPath: string }>>
         onStateChanged: (callback: (state: TableOcrRuntimeStatus) => void) => () => void
+      }
+      pdfTools: {
+        chooseFiles: (mode: PdfToolMode) => Promise<IpcResponse<PdfToolChooseFilesResult>>
+        chooseOutputDirectory: () => Promise<IpcResponse<PdfToolChooseDirectoryResult>>
+        convert: (request: PdfToolConvertRequest) => Promise<IpcResponse<PdfToolConvertResult>>
+        openPath: (targetPath: string) => Promise<IpcResponse<{ targetPath: string }>>
       }
       spaceCleanup: {
         chooseRoot: () => Promise<IpcResponse<{ canceled: boolean; path: string | null }>>
