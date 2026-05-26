@@ -93,6 +93,9 @@ function loadStoreServiceModule(overrides = {}) {
       if (specifier === './downloadOrganizer') {
         return require(path.join(__dirname, '../../shared/downloadOrganizer.ts'))
       }
+      if (specifier === './memoryDiary') {
+        return require(path.join(__dirname, '../../shared/memoryDiary.ts'))
+      }
       if (specifier === './devEnvironment') {
         return require(path.join(__dirname, '../../shared/devEnvironment.ts'))
       }
