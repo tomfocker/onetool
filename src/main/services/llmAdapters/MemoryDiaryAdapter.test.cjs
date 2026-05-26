@@ -18,10 +18,17 @@ function loadModule() {
   }).outputText
 
   const module = { exports: {} }
+  const customRequire = (specifier) => {
+    if (specifier === '../../../shared/memoryDiary') {
+      return require(path.join(__dirname, '../../../shared/memoryDiary.ts'))
+    }
+    return require(specifier)
+  }
+
   vm.runInNewContext(transpiled, {
     module,
     exports: module.exports,
-    require,
+    require: customRequire,
     __dirname,
     __filename: filePath,
     console,
@@ -42,18 +49,33 @@ function createRequest(overrides = {}) {
         id: 'bucket-1',
         start: '2026-05-26T01:00:00.000Z',
         end: '2026-05-26T01:15:00.000Z',
-        title: 'Code / Chrome',
-        summary: 'timeline implementation',
-        appNames: ['Code', 'Chrome'],
-        windowNames: ['memoryDiary.ts', 'ScreenPipe docs'],
+        title: 'Code',
+        summary: 'Implement ScreenPipe data understanding',
+        appNames: ['Code'],
+        windowNames: ['MemoryTimelineService.ts - OneTool'],
         urls: ['https://docs.screenpi.pe'],
-        contentTypes: ['ocr', 'accessibility'],
-        keyTexts: ['timeline implementation', 'search api docs'],
-        items: []
+        contentTypes: ['accessibility', 'ocr'],
+        keyTexts: ['Implement ScreenPipe data understanding'],
+        items: [],
+        insight: {
+          activityKind: 'development',
+          activityLabel: '开发',
+          confidence: 0.85,
+          dominantAppName: 'Code',
+          dominantWindowName: 'MemoryTimelineService.ts - OneTool',
+          projectHints: ['OneTool', 'ScreenPipe'],
+          keywords: ['implement', 'timeline'],
+          sourceCounts: { accessibility: 8, ocr: 12, audio: 0, input: 0 },
+          uniqueTextCount: 4,
+          duplicateTextCount: 16,
+          duplicateRatio: 0.8,
+          evidenceTexts: ['Implement ScreenPipe data understanding']
+        }
       }
     ],
     config: {
       apiUrl: 'http://localhost:3030',
+      screenpipeExecutablePath: '',
       apiKey: 'token',
       enabledContentTypes: ['accessibility', 'ocr'],
       includeAudio: false,
@@ -80,8 +102,25 @@ test('buildCompletion includes date, privacy flags and timeline bucket summaries
   assert.match(completion.userPrompt, /时区：Asia\/Shanghai/)
   assert.match(completion.userPrompt, /包含音频：否/)
   assert.match(completion.userPrompt, /包含 input：否/)
-  assert.match(completion.userPrompt, /timeline implementation/)
+  assert.match(completion.userPrompt, /Implement ScreenPipe data understanding/)
   assert.match(completion.userPrompt, /重点写清楚 ScreenPipe 管理功能/)
+})
+
+test('buildCompletion includes structured understanding before raw timeline snippets', () => {
+  const { MemoryDiaryAdapter } = loadModule()
+  const adapter = new MemoryDiaryAdapter()
+
+  const completion = adapter.buildCompletion(createRequest({
+    userNotes: '突出数据理解层'
+  }))
+
+  assert.match(completion.userPrompt, /\[今日概览\]/)
+  assert.match(completion.userPrompt, /\[理解后的活动\]/)
+  assert.match(completion.userPrompt, /活动：开发/)
+  assert.match(completion.userPrompt, /主应用：Code/)
+  assert.match(completion.userPrompt, /项目线索：OneTool, ScreenPipe/)
+  assert.match(completion.userPrompt, /重复率：80%/)
+  assert.match(completion.userPrompt, /\[原始时间线摘要\]/)
 })
 
 test('mapDiaryResult fills safe markdown defaults when the model payload is partial', () => {

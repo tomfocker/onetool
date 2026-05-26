@@ -20,6 +20,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 import {
+  buildMemoryDiaryDailyInsight,
   countMemoryDiaryItemsByType,
   createDefaultMemoryDiaryConfig,
   type MemoryDiaryCliStatus,
@@ -140,6 +141,7 @@ export default function MemoryDiaryTool() {
   const sourceCounts = useMemo(() => (
     countMemoryDiaryItemsByType(timeline.flatMap((bucket) => bucket.items))
   ), [timeline])
+  const dailyInsight = useMemo(() => buildMemoryDiaryDailyInsight(timeline), [timeline])
   const latestLog = logs[0]
   const screenpipePrimaryAction = useMemo(
     () => getMemoryDiaryScreenpipePrimaryAction(runtimeStatus),
@@ -522,7 +524,7 @@ export default function MemoryDiaryTool() {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-lg border border-white/25 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
                   <div className="text-xs text-muted-foreground">时间段</div>
                   <div className="mt-1 text-xl font-black">{timeline.length}</div>
@@ -534,6 +536,10 @@ export default function MemoryDiaryTool() {
                 <div className="rounded-lg border border-white/25 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
                   <div className="text-xs text-muted-foreground">颗粒度</div>
                   <div className="mt-1 text-xl font-black">{config.timelineBucketMinutes}</div>
+                </div>
+                <div className="rounded-lg border border-white/25 bg-white/30 p-3 dark:border-white/10 dark:bg-white/5">
+                  <div className="text-xs text-muted-foreground">活跃</div>
+                  <div className="mt-1 text-xl font-black">{dailyInsight.activeMinutes}</div>
                 </div>
               </div>
 
@@ -556,6 +562,40 @@ export default function MemoryDiaryTool() {
                   ))}
                 </div>
               </div>
+
+              {timeline.length > 0 ? (
+                <div className="space-y-3 border-b border-white/20 pb-4 dark:border-white/10">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-semibold">理解层</div>
+                    <Badge variant="outline">重复率 {Math.round(dailyInsight.duplicateRatio * 100)}%</Badge>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {dailyInsight.activityMix.slice(0, 4).map((item) => (
+                      <Badge key={item.kind} variant="secondary">
+                        {item.label} {Math.round(item.share * 100)}%
+                      </Badge>
+                    ))}
+                    {dailyInsight.topApps.slice(0, 4).map((item) => (
+                      <Badge key={item.label} variant="outline">
+                        {item.label} {item.count}
+                      </Badge>
+                    ))}
+                  </div>
+                  {dailyInsight.focusBlocks.length > 0 ? (
+                    <div className="grid gap-2">
+                      {dailyInsight.focusBlocks.slice(0, 3).map((block) => (
+                        <div key={`${block.start}-${block.title}`} className="min-w-0 rounded-lg border border-white/20 bg-white/25 px-3 py-2 text-sm dark:border-white/10 dark:bg-white/5">
+                          <div className="truncate font-semibold">{block.title}</div>
+                          <div className="mt-1 truncate text-xs text-muted-foreground">
+                            {formatTime(block.start)} - {formatTime(block.end)}
+                            {block.projectHints.length > 0 ? ` · ${block.projectHints.join(' / ')}` : ''}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               <div className="flex flex-wrap gap-2">
                 {BUCKET_OPTIONS.map((minutes) => (
@@ -595,8 +635,12 @@ export default function MemoryDiaryTool() {
                         <Badge variant="outline" className="shrink-0">{bucket.items.length}</Badge>
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
+                        <Badge variant="outline">{bucket.insight.activityLabel}</Badge>
                         {bucket.contentTypes.map((type) => (
                           <Badge key={type} variant="secondary">{CONTENT_TYPE_LABELS[type]}</Badge>
+                        ))}
+                        {bucket.insight.projectHints.slice(0, 3).map((hint) => (
+                          <Badge key={hint} variant="secondary">{hint}</Badge>
                         ))}
                       </div>
                       {bucket.keyTexts.length > 0 ? (
