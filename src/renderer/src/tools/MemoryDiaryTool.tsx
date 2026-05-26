@@ -31,6 +31,7 @@ import {
   type MemoryDiaryRuntimeStatus,
   type MemoryDiaryTimelineBucket
 } from '../../../shared/memoryDiary'
+import { getMemoryDiaryScreenpipePrimaryAction } from './memoryDiaryViewModel'
 
 const CONTENT_TYPE_LABELS: Record<MemoryDiaryContentType, string> = {
   accessibility: 'Accessibility',
@@ -140,6 +141,10 @@ export default function MemoryDiaryTool() {
     countMemoryDiaryItemsByType(timeline.flatMap((bucket) => bucket.items))
   ), [timeline])
   const latestLog = logs[0]
+  const screenpipePrimaryAction = useMemo(
+    () => getMemoryDiaryScreenpipePrimaryAction(runtimeStatus),
+    [runtimeStatus]
+  )
 
   const runTask = async (task: string, work: () => Promise<void>) => {
     if (!api) {
@@ -158,15 +163,26 @@ export default function MemoryDiaryTool() {
     }
   }
 
+  const refreshRuntimeStatus = async () => {
+    if (!api) {
+      return
+    }
+
+    const runtimeResult = await api.getRuntimeStatus()
+    if (runtimeResult.success && runtimeResult.data) {
+      setRuntimeStatus(runtimeResult.data)
+    }
+  }
+
   const refreshAll = async () => {
     if (!api) {
       return
     }
 
-    const [stateResult, statusResult, runtimeResult, logsResult, historyResult] = await Promise.all([
+    const runtimeStatusTask = refreshRuntimeStatus()
+    const [stateResult, statusResult, logsResult, historyResult] = await Promise.all([
       api.getState(),
       api.getCliStatus(),
-      api.getRuntimeStatus(),
       api.getLogs(),
       api.listDiaries()
     ])
@@ -177,15 +193,14 @@ export default function MemoryDiaryTool() {
     if (statusResult.success && statusResult.data) {
       setCliStatus(statusResult.data)
     }
-    if (runtimeResult.success && runtimeResult.data) {
-      setRuntimeStatus(runtimeResult.data)
-    }
     if (logsResult.success && logsResult.data) {
       setLogs(logsResult.data)
     }
     if (historyResult.success && historyResult.data) {
       setHistory(historyResult.data)
     }
+
+    await runtimeStatusTask
   }
 
   useEffect(() => {
@@ -375,9 +390,16 @@ export default function MemoryDiaryTool() {
                   <KeyRound className="h-4 w-4" />
                   Token
                 </Button>
-                <Button onClick={startScreenpipe} disabled={activeTask === 'start'}>
-                  <Play className="h-4 w-4" />
-                  启动
+                <Button
+                  onClick={screenpipePrimaryAction.action === 'refresh' ? refreshStatus : startScreenpipe}
+                  disabled={activeTask === screenpipePrimaryAction.action}
+                >
+                  {screenpipePrimaryAction.action === 'refresh' ? (
+                    <RefreshCw className="h-4 w-4" />
+                  ) : (
+                    <Play className="h-4 w-4" />
+                  )}
+                  {screenpipePrimaryAction.label}
                 </Button>
                 <Button variant="outline" onClick={stopScreenpipe} disabled={activeTask === 'stop'}>
                   <Square className="h-4 w-4" />
