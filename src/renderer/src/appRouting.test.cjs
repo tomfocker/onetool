@@ -261,3 +261,32 @@ test('tools registry exposes the PDF tool through the main shell route map', () 
   assert.equal(typeof map.settings, 'function')
   assert.equal(warnings.length, 0)
 })
+
+test('tools registry exposes the memory diary tool through the main shell route map', () => {
+  const memoryTool = actualTools.find((tool) => tool.id === 'memory-diary')
+
+  assert.ok(memoryTool)
+  assert.deepEqual(
+    toPlainObject(memoryTool),
+    {
+      id: 'memory-diary',
+      name: '记忆日报',
+      description: '管理 ScreenPipe 本地采集，生成今日时间线与 AI 日报',
+      category: '日常办公',
+      icon: 'Brain',
+      componentPath: 'MemoryDiaryTool'
+    }
+  )
+
+  const { result: map, warnings } = captureWarnings(() => createToolRouteModuleMap([memoryTool], {
+    './components/ConfigChecker.tsx': () => 'config',
+    './components/SettingsPage.tsx': () => 'settings',
+    './components/WebActivator.tsx': () => 'web-activator'
+  }, {
+    './tools/MemoryDiaryTool.tsx': () => 'memory-diary'
+  }))
+
+  assert.equal(typeof map['memory-diary'], 'function')
+  assert.equal(typeof map.settings, 'function')
+  assert.equal(warnings.length, 0)
+})

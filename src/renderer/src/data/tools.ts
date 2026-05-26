@@ -98,6 +98,14 @@ export const tools: ToolDefinition[] = [
     componentPath: 'CalendarTool'
   },
   {
+    id: 'memory-diary',
+    name: '记忆日报',
+    description: '管理 ScreenPipe 本地采集，生成今日时间线与 AI 日报',
+    category: '日常办公',
+    icon: 'Brain',
+    componentPath: 'MemoryDiaryTool'
+  },
+  {
     id: 'model-download',
     name: '模型下载',
     description: '内置 HuggingFace 与 ModelScope 模型下载器',
