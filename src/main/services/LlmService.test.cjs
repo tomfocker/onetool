@@ -272,6 +272,30 @@ function loadLlmServiceModule(overrides = {}) {
       }
     }
 
+    if (specifier === './llmAdapters/MemoryDiaryAdapter') {
+      return {
+        MemoryDiaryAdapter: overrides.MemoryDiaryAdapter || class MemoryDiaryAdapter {
+          buildCompletion(input) {
+            return {
+              systemPrompt: 'memory-diary-system',
+              userPrompt: `date:${input.date}`
+            }
+          }
+
+          mapDiaryResult(input, payload) {
+            return {
+              id: `${input.date}-test`,
+              date: input.date,
+              title: payload.title || `${input.date} 工作日报`,
+              summary: payload.summary || '已生成当天工作日报',
+              markdown: payload.markdown || '# 工作日报',
+              createdAt: '2026-05-26T12:00:00.000Z'
+            }
+          }
+        }
+      }
+    }
+
     if (specifier === '../../shared/types' || specifier === '../../shared/llm') {
       return {}
     }
@@ -578,6 +602,83 @@ test('parseCalendarAssistant delegates natural language parsing to the shared ll
   assert.equal(result.data.type, 'create')
   assert.equal(result.data.event.title, '方案会')
   assert.equal(result.data.event.description, 'source:明天下午三点和林澈开方案会，地点湖景会议室')
+})
+
+test('generateMemoryDiary delegates timeline diary drafting to the memory diary adapter', async () => {
+  const adapterCalls = []
+  const { LlmService } = loadLlmServiceModule({
+    MemoryDiaryAdapter: class MemoryDiaryAdapter {
+      buildCompletion(input) {
+        adapterCalls.push(input)
+        return {
+          systemPrompt: 'diary-system',
+          userPrompt: 'diary-user'
+        }
+      }
+
+      mapDiaryResult(input, payload) {
+        return {
+          id: `${input.date}-draft`,
+          date: input.date,
+          title: payload.title,
+          summary: payload.summary,
+          markdown: payload.markdown,
+          createdAt: '2026-05-26T12:00:00.000Z'
+        }
+      }
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body)
+      assert.deepEqual(body.messages, [
+        { role: 'system', content: 'diary-system' },
+        { role: 'user', content: 'diary-user' }
+      ])
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    title: '今日工作简报',
+                    summary: '完成 ScreenPipe 日报管线',
+                    markdown: '# 今日工作简报'
+                  })
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const input = {
+    date: '2026-05-26',
+    timezone: 'Asia/Shanghai',
+    buckets: [],
+    config: {
+      apiUrl: 'http://localhost:3030',
+      apiKey: 'token',
+      enabledContentTypes: ['accessibility', 'ocr'],
+      includeAudio: false,
+      includeInput: false,
+      sensitiveAppPatterns: [],
+      sensitiveWindowPatterns: [],
+      timelineBucketMinutes: 15,
+      diaryStyle: 'worklog'
+    },
+    userNotes: '突出时间线能力'
+  }
+
+  const service = new LlmService()
+  const result = await service.generateMemoryDiary(input)
+
+  assert.equal(result.success, true)
+  assert.deepEqual(adapterCalls, [input])
+  assert.equal(result.data.title, '今日工作简报')
+  assert.equal(result.data.markdown, '# 今日工作简报')
 })
 
 function normalize(value) {

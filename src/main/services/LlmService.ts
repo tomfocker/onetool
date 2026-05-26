@@ -13,6 +13,10 @@ import type {
   LlmSpaceCleanupSuggestionRequest,
   LlmSystemAnalysisRequest
 } from '../../shared/llm'
+import type {
+  MemoryDiaryGenerateRequest,
+  MemoryDiaryGenerateResult
+} from '../../shared/memoryDiary'
 import { settingsService } from './SettingsService'
 import { ocrService, type OcrLine } from './OcrService'
 import { ScreenshotInsightAdapter } from './llmAdapters/ScreenshotInsightAdapter'
@@ -20,6 +24,7 @@ import { RenameSuggestionAdapter } from './llmAdapters/RenameSuggestionAdapter'
 import { SpaceCleanupAdapter } from './llmAdapters/SpaceCleanupAdapter'
 import { SystemDiagnosisAdapter } from './llmAdapters/SystemDiagnosisAdapter'
 import { CalendarAssistantAdapter } from './llmAdapters/CalendarAssistantAdapter'
+import { MemoryDiaryAdapter } from './llmAdapters/MemoryDiaryAdapter'
 import { OpenAiCompatibleClient } from './OpenAiCompatibleClient'
 
 type SettingsLike = Pick<typeof settingsService, 'getSettings'>
@@ -51,6 +56,7 @@ export class LlmService {
   private readonly systemDiagnosisAdapter: SystemDiagnosisAdapter
   private readonly spaceCleanupAdapter: SpaceCleanupAdapter
   private readonly calendarAssistantAdapter: CalendarAssistantAdapter
+  private readonly memoryDiaryAdapter: MemoryDiaryAdapter
 
   constructor(dependencies: LlmServiceDependencies = {}) {
     this.settings = dependencies.settingsService ?? settingsService
@@ -61,6 +67,7 @@ export class LlmService {
     this.systemDiagnosisAdapter = new SystemDiagnosisAdapter()
     this.spaceCleanupAdapter = new SpaceCleanupAdapter()
     this.calendarAssistantAdapter = new CalendarAssistantAdapter()
+    this.memoryDiaryAdapter = new MemoryDiaryAdapter()
   }
 
   getConfigStatus(): IpcResponse<LlmConfigStatus> {
@@ -202,6 +209,20 @@ export class LlmService {
         event?: Record<string, unknown>
       }>(this.calendarAssistantAdapter.buildCompletion(input))
       return { success: true, data: this.calendarAssistantAdapter.mapAssistantResult(input, payload) }
+    } catch (error) {
+      return { success: false, error: this.toErrorMessage(error) }
+    }
+  }
+
+  async generateMemoryDiary(input: MemoryDiaryGenerateRequest): Promise<IpcResponse<MemoryDiaryGenerateResult>> {
+    try {
+      const payload = await this.createStructuredCompletion<Partial<MemoryDiaryGenerateResult>>(
+        this.memoryDiaryAdapter.buildCompletion(input)
+      )
+      return {
+        success: true,
+        data: this.memoryDiaryAdapter.mapDiaryResult(input, payload)
+      }
     } catch (error) {
       return { success: false, error: this.toErrorMessage(error) }
     }
