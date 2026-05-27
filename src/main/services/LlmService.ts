@@ -14,8 +14,10 @@ import type {
   LlmSystemAnalysisRequest
 } from '../../shared/llm'
 import type {
+  MemoryDiaryEventOptimizationRequest,
   MemoryDiaryGenerateRequest,
-  MemoryDiaryGenerateResult
+  MemoryDiaryGenerateResult,
+  MemoryDiaryTimelineBucket
 } from '../../shared/memoryDiary'
 import { settingsService } from './SettingsService'
 import { ocrService, type OcrLine } from './OcrService'
@@ -222,6 +224,28 @@ export class LlmService {
       return {
         success: true,
         data: this.memoryDiaryAdapter.mapDiaryResult(input, payload)
+      }
+    } catch (error) {
+      return { success: false, error: this.toErrorMessage(error) }
+    }
+  }
+
+  async optimizeMemoryDiaryEvents(
+    input: MemoryDiaryEventOptimizationRequest
+  ): Promise<IpcResponse<MemoryDiaryTimelineBucket[]>> {
+    try {
+      const payload = await this.createStructuredCompletion<{
+        events?: Array<{
+          id?: unknown
+          title?: unknown
+          summary?: unknown
+          activityLabel?: unknown
+          topics?: unknown
+        }>
+      }>(this.memoryDiaryAdapter.buildEventOptimizationCompletion(input))
+      return {
+        success: true,
+        data: this.memoryDiaryAdapter.mapEventOptimizationResult(input, payload)
       }
     } catch (error) {
       return { success: false, error: this.toErrorMessage(error) }

@@ -158,6 +158,7 @@ declare global {
           request: MemoryDiaryGenerateRequest
         ) => Promise<IpcResponse<MemoryDiaryGenerateResult>>
         listDiaries: () => Promise<IpcResponse<MemoryDiaryHistoryEntry[]>>
+        openDiary: (id: string) => Promise<IpcResponse<MemoryDiaryGenerateResult>>
         saveDiary: (
           request: MemoryDiaryGenerateResult
         ) => Promise<IpcResponse<MemoryDiaryHistoryEntry>>

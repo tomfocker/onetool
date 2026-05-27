@@ -697,6 +697,8 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
       >,
     listDiaries: () =>
       ipcRenderer.invoke('memory-diary-list') as Promise<IpcResponse<MemoryDiaryHistoryEntry[]>>,
+    openDiary: (id: string) =>
+      ipcRenderer.invoke('memory-diary-open', id) as Promise<IpcResponse<MemoryDiaryGenerateResult>>,
     saveDiary: (request: MemoryDiaryGenerateResult) =>
       ipcRenderer.invoke('memory-diary-save', request) as Promise<
         IpcResponse<MemoryDiaryHistoryEntry>

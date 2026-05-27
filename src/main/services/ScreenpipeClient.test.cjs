@@ -146,6 +146,75 @@ test('search queries each requested content type separately before merging resul
   ])
 })
 
+test('search paginates a content type when ScreenPipe returns a full page', async () => {
+  const calls = []
+  const { ScreenpipeClient } = loadModule()
+  const client = new ScreenpipeClient({
+    fetch: async (url) => {
+      calls.push(url)
+      const parsedUrl = new URL(url)
+      const offset = Number(parsedUrl.searchParams.get('offset') || '0')
+      const rows = offset === 0
+        ? [
+            {
+              type: 'UI',
+              content: {
+                id: 'latest-1',
+                text: 'latest activity',
+                app_name: 'Codex',
+                window_name: 'Memory diary',
+                timestamp: '2026-05-27T12:45:00.000Z'
+              }
+            },
+            {
+              type: 'UI',
+              content: {
+                id: 'latest-2',
+                text: 'latest activity continued',
+                app_name: 'Codex',
+                window_name: 'Memory diary',
+                timestamp: '2026-05-27T12:44:00.000Z'
+              }
+            }
+          ]
+        : [
+            {
+              type: 'UI',
+              content: {
+                id: 'morning-1',
+                text: 'morning activity',
+                app_name: 'Codex',
+                window_name: 'Memory diary',
+                timestamp: '2026-05-27T08:45:00.000Z'
+              }
+            }
+          ]
+
+      return {
+        ok: true,
+        json: async () => ({ data: rows })
+      }
+    }
+  })
+
+  const result = await client.search({
+    apiUrl: 'http://localhost:3030',
+    apiKey: 'token',
+    startTime: '2026-05-26T16:00:00.000Z',
+    endTime: '2026-05-27T15:59:59.999Z',
+    contentTypes: ['accessibility'],
+    limit: 2
+  })
+
+  assert.equal(result.success, true)
+  assert.deepEqual(calls.map((url) => new URL(url).searchParams.get('offset')), ['0', '2'])
+  assert.deepEqual(toPlainObject(result.data.map((item) => [item.id, item.text])), [
+    ['accessibility-morning-1', 'morning activity'],
+    ['accessibility-latest-2', 'latest activity continued'],
+    ['accessibility-latest-1', 'latest activity']
+  ])
+})
+
 test('search normalizes screenpipe payload items into MemoryDiaryItem records', async () => {
   const { ScreenpipeClient } = loadModule()
   const client = new ScreenpipeClient({

@@ -81,6 +81,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
     diaryService: {
       generate: async (request) => ({ success: true, data: { markdown: request.userNotes } }),
       list: () => ({ success: true, data: [] }),
+      open: async (id) => ({ success: true, data: { id, markdown: '# saved' } }),
       save: async (request) => ({ success: true, data: { id: request.id } }),
       delete: async (id) => ({ success: true, data: { id } })
     }
@@ -100,6 +101,7 @@ test('registerMemoryDiaryIpc wires screenpipe management, timeline and diary han
   assert.equal((await handlers['memory-timeline-query']({}, { date: '2026-05-26' })).data[0].id, '2026-05-26')
   assert.equal((await handlers['memory-diary-generate']({}, { userNotes: '# diary' })).data.markdown, '# diary')
   assert.deepEqual((await handlers['memory-diary-list']()).data, [])
+  assert.equal((await handlers['memory-diary-open']({}, 'draft-1')).data.markdown, '# saved')
   assert.equal((await handlers['memory-diary-save']({}, { id: 'draft-1' })).data.id, 'draft-1')
   assert.equal((await handlers['memory-diary-delete']({}, 'draft-1')).data.id, 'draft-1')
 })

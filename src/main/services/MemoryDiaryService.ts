@@ -19,7 +19,7 @@ type StoreLike = {
 
 type LlmLike = Pick<typeof llmService, 'generateMemoryDiary'>
 type AppLike = Pick<typeof app, 'getPath'>
-type FsPromisesLike = Pick<typeof fs.promises, 'mkdir' | 'writeFile' | 'unlink'>
+type FsPromisesLike = Pick<typeof fs.promises, 'mkdir' | 'writeFile' | 'readFile' | 'unlink'>
 
 type MemoryDiaryServiceDependencies = {
   appModule?: AppLike
@@ -57,6 +57,36 @@ export class MemoryDiaryService {
       data: [...this.getState().diaryHistory].sort((left, right) =>
         right.createdAt.localeCompare(left.createdAt)
       )
+    }
+  }
+
+  async open(id: string): Promise<IpcResponse<MemoryDiaryGenerateResult>> {
+    try {
+      const entry = this.getState().diaryHistory.find((item) => item.id === id)
+      if (!entry) {
+        return {
+          success: false,
+          error: '找不到已保存的日报'
+        }
+      }
+
+      const markdown = await this.fsPromises.readFile(entry.markdownPath, 'utf8')
+      return {
+        success: true,
+        data: {
+          id: entry.id,
+          date: entry.date,
+          title: entry.title,
+          summary: entry.summary,
+          markdown: String(markdown),
+          createdAt: entry.createdAt
+        }
+      }
+    } catch (error) {
+      return {
+        success: false,
+        error: this.toErrorMessage(error)
+      }
     }
   }
 

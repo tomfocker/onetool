@@ -18,6 +18,8 @@ export type MemoryDiaryActivityKind =
   | 'operations'
   | 'browsing'
   | 'other'
+export type MemoryDiaryStyle = 'brief' | 'worklog' | 'blog'
+export type MemoryDiaryTone = 'daily' | 'professional'
 
 export interface MemoryDiaryConfig {
   apiUrl: string
@@ -26,10 +28,14 @@ export interface MemoryDiaryConfig {
   enabledContentTypes: MemoryDiaryContentType[]
   includeAudio: boolean
   includeInput: boolean
+  aiEventOptimizationEnabled: boolean
   sensitiveAppPatterns: string[]
   sensitiveWindowPatterns: string[]
   timelineBucketMinutes: 5 | 15 | 30 | 60
-  diaryStyle: 'brief' | 'worklog' | 'blog'
+  diaryStyle: MemoryDiaryStyle
+  diaryTone: MemoryDiaryTone
+  autoDailySummaryEnabled: boolean
+  autoDailySummaryTime: string
 }
 
 export interface MemoryDiaryCliStatus {
@@ -82,6 +88,19 @@ export interface MemoryDiaryTimelineInsight {
   evidenceTexts: string[]
 }
 
+export interface MemoryDiaryWorkEvent {
+  title: string
+  summary: string
+  activityKind: MemoryDiaryActivityKind
+  activityLabel: string
+  primaryApp: string
+  primaryProject: string
+  topics: string[]
+  keywords: string[]
+  confidence: number
+  evidenceTexts: string[]
+}
+
 export interface MemoryDiaryTimelineBucket {
   id: string
   start: string
@@ -95,6 +114,13 @@ export interface MemoryDiaryTimelineBucket {
   keyTexts: string[]
   items: MemoryDiaryItem[]
   insight: MemoryDiaryTimelineInsight
+  event: MemoryDiaryWorkEvent
+}
+
+export interface MemoryDiaryEventOptimizationRequest {
+  date: string
+  timezone: string
+  buckets: MemoryDiaryTimelineBucket[]
 }
 
 export interface MemoryDiaryTopEntry {
@@ -183,10 +209,14 @@ export function createDefaultMemoryDiaryConfig(): MemoryDiaryConfig {
     enabledContentTypes: ['accessibility', 'ocr'],
     includeAudio: false,
     includeInput: false,
+    aiEventOptimizationEnabled: true,
     sensitiveAppPatterns: ['1Password', 'Bitwarden', 'KeePass'],
     sensitiveWindowPatterns: ['password', 'login', '支付', '密码'],
     timelineBucketMinutes: 15,
-    diaryStyle: 'worklog'
+    diaryStyle: 'brief',
+    diaryTone: 'daily',
+    autoDailySummaryEnabled: false,
+    autoDailySummaryTime: '21:30'
   }
 }
 
@@ -228,12 +258,25 @@ export function filterMemoryDiaryItems(
   config: MemoryDiaryConfig
 ): MemoryDiaryItem[] {
   const allowedTypes = new Set(getAllowedMemoryDiaryContentTypes(config))
-  return items.filter((item) => {
+  return items.map(normalizeMemoryDiaryItem).filter((item) => {
     if (!allowedTypes.has(item.contentType)) return false
     if (matchesAnyPattern(item.appName, config.sensitiveAppPatterns)) return false
     if (matchesAnyPattern(item.windowName, config.sensitiveWindowPatterns)) return false
     return item.text.trim().length > 0
   })
+}
+
+export function normalizeMemoryDiaryItem(item: MemoryDiaryItem): MemoryDiaryItem {
+  const text = sanitizeMemoryDiaryText(item.text)
+  const windowName = sanitizeMemoryDiaryTitle(item.windowName)
+  const url = sanitizeMemoryDiaryUrl(item.url)
+  return {
+    ...item,
+    appName: normalizeMemoryDiaryAppName(item.appName, windowName, text),
+    windowName,
+    url,
+    text
+  }
 }
 
 export function countMemoryDiaryItemsByType(
@@ -277,9 +320,9 @@ const MEMORY_DIARY_ACTIVITY_KEYWORDS: Array<{
   {
     kind: 'development',
     keywords: [
-      'code', 'codex', 'electron', 'vscode', 'visual studio code', 'terminal',
+      'code', 'codex', 'vscode', 'visual studio code', 'terminal',
       'powershell', 'typescript', 'javascript', 'github', 'git', 'pull request',
-      'commit', 'tsx', '.ts', '.js', '.tsx', 'api', 'service', 'test', 'npm',
+      'commit', 'tsx', '.ts', '.js', '.tsx', 'service', 'test', 'npm',
       '开发', '代码', '接口', '测试', '编译'
     ]
   },
@@ -332,7 +375,16 @@ const MEMORY_DIARY_GENERIC_PROJECT_WORDS = new Set([
   'edge',
   'codex',
   'electron',
+  'electron.exe',
+  'api',
+  'ocr',
+  'token',
+  'input',
+  'accessibility',
+  'screenpipe',
+  'localhost',
   'implement',
+  'codex',
   'file',
   'edit',
   'view',
@@ -344,21 +396,75 @@ const MEMORY_DIARY_GENERIC_PROJECT_WORDS = new Set([
 const MEMORY_DIARY_STOP_WORDS = new Set([
   'this', 'that', 'with', 'from', 'have', 'will', 'your', 'screen', 'window',
   'file', 'edit', 'view', 'help', 'true', 'false', 'null', 'undefined',
-  '正在', '最大化', '最小化', '关闭', '文件', '编辑', '查看', '窗口', '帮助'
+  'api', 'url_with_credentials', 'localhost', 'token', 'screenpipe', 'codex',
+  'electron', 'accessibility', 'ocr', 'records', 'record', 'reads', 'read', 'now',
+  '正在', '最大化', '最小化', '关闭', '文件', '编辑', '查看', '窗口', '帮助',
+  '隐藏边栏', '返回', '前进', '保存设置', '高级设置'
 ])
+
+const MEMORY_DIARY_LOW_VALUE_PATTERNS = [
+  /file\s+edit\s+(?:selection\s+)?view\s+window\s+help/i,
+  /file\s+edit\s+(?:selection\s+)?view\s+terminal\s+help/i,
+  /minimi[sz]e\s+maximi[sz]e\s+close/i,
+  /隐藏边栏\s+返回\s+前进\s+文件\s+编辑\s+查看\s+窗口\s+帮助/,
+  /screenpipe\s+路径\s+api\s+地址\s+api\s+token/i,
+  /api\s+地址\s+api\s+token/i,
+  /保存设置\s+accessibility\s+accessibility\s+ocr\s+ocr/i,
+  /screenpipe\s+管理\s+今日时间线\s+数据来源\s+原始重复度\s+记忆日报/i,
+  /\[url_with_credentials\]/i
+]
+
+const MEMORY_DIARY_SHELL_APP_ALIASES = new Map([
+  ['electron.exe', 'Electron'],
+  ['electron', 'Electron'],
+  ['gameviewer.exe', 'GameViewer'],
+  ['dwm.exe', '桌面窗口管理器'],
+  ['explorer.exe', '资源管理器']
+])
+
+const MEMORY_DIARY_CONTEXT_APP_ALIASES: Array<{
+  app: string
+  patterns: RegExp[]
+}> = [
+  {
+    app: 'OneTool',
+    patterns: [/onetool/i, /记忆日报/, /高颜值本地小工具箱/, /screenpipe\s+memory/i]
+  },
+  {
+    app: 'Codex',
+    patterns: [/codex/i]
+  },
+  {
+    app: '豆包',
+    patterns: [/doubao/i, /豆包/]
+  },
+  {
+    app: 'PixPin',
+    patterns: [/pixpin/i]
+  }
+]
+
+const MEMORY_DIARY_FEATURE_TOPICS: Array<{ label: string, patterns: RegExp[] }> = [
+  { label: 'ScreenPipe', patterns: [/screenpipe/i] },
+  { label: '时间线', patterns: [/时间线/, /timeline/i] },
+  { label: '数据理解层', patterns: [/数据理解层/, /理解层/, /work\s*event/i] },
+  { label: '数据来源', patterns: [/数据来源/, /采集诊断/, /来源/] },
+  { label: '界面', patterns: [/界面/, /\bui\b/i, /布局/, /展示/] }
+]
 
 export function buildMemoryDiaryTimelineInsight(items: MemoryDiaryItem[]): MemoryDiaryTimelineInsight {
   const sourceCounts = countMemoryDiaryItemsByType(items)
-  const textItems = items.filter((item) => item.text.trim().length > 0)
+  const normalizedItems = items.map(normalizeMemoryDiaryItem)
+  const textItems = normalizedItems.filter((item) => item.text.trim().length > 0)
   const readableItems = [...textItems].sort((left, right) => (
     MEMORY_DIARY_TEXT_SOURCE_PRIORITY[left.contentType] - MEMORY_DIARY_TEXT_SOURCE_PRIORITY[right.contentType]
   ))
-  const evidenceTexts = dedupeMemoryDiaryTexts(readableItems.map((item) => item.text)).slice(0, 6)
+  const evidenceTexts = selectMemoryDiaryEvidenceTexts(readableItems).slice(0, 6)
   const duplicateTextCount = Math.max(0, textItems.length - evidenceTexts.length)
   const duplicateRatio = textItems.length === 0 ? 0 : roundMemoryDiaryRatio(duplicateTextCount / textItems.length)
-  const dominantAppName = getDominantMemoryDiaryValue(items.map((item) => item.appName)) || '未知应用'
-  const dominantWindowName = getDominantMemoryDiaryValue(items.map((item) => item.windowName)) || '未知窗口'
-  const activity = classifyMemoryDiaryActivity(items, evidenceTexts)
+  const dominantAppName = getDominantMemoryDiaryValue(normalizedItems.map((item) => item.appName)) || '未知应用'
+  const dominantWindowName = getDominantMemoryDiaryValue(normalizedItems.map((item) => item.windowName)) || '未知窗口'
+  const activity = classifyMemoryDiaryActivity(normalizedItems, evidenceTexts)
 
   return {
     activityKind: activity.kind,
@@ -366,13 +472,45 @@ export function buildMemoryDiaryTimelineInsight(items: MemoryDiaryItem[]): Memor
     confidence: activity.confidence,
     dominantAppName,
     dominantWindowName,
-    projectHints: extractMemoryDiaryProjectHints(items, evidenceTexts),
+    projectHints: extractMemoryDiaryProjectHints(normalizedItems, evidenceTexts),
     keywords: extractMemoryDiaryKeywords(evidenceTexts),
     sourceCounts,
     uniqueTextCount: evidenceTexts.length,
     duplicateTextCount,
     duplicateRatio,
     evidenceTexts
+  }
+}
+
+export function buildMemoryDiaryWorkEvent(
+  items: MemoryDiaryItem[],
+  providedInsight?: MemoryDiaryTimelineInsight
+): MemoryDiaryWorkEvent {
+  const normalizedItems = items.map(normalizeMemoryDiaryItem)
+  const insight = providedInsight ?? buildMemoryDiaryTimelineInsight(normalizedItems)
+  const primaryProject = getMemoryDiaryPrimaryProject(insight, normalizedItems)
+  const projectApp = primaryProject
+    ? normalizedItems.find((item) => item.appName === primaryProject)?.appName
+    : ''
+  const primaryApp = projectApp || (insight.dominantAppName !== '未知应用'
+    ? insight.dominantAppName
+    : normalizedItems.find((item) => item.appName)?.appName || '未知应用')
+  const topics = extractMemoryDiaryEventTopics(insight, normalizedItems, primaryProject)
+  const verb = getMemoryDiaryEventVerb(insight, topics)
+  const title = buildMemoryDiaryEventTitle(insight, verb, primaryProject, primaryApp, topics)
+  const summary = buildMemoryDiaryEventSummary(insight, verb, primaryApp, primaryProject, topics)
+
+  return {
+    title,
+    summary,
+    activityKind: insight.activityKind,
+    activityLabel: insight.activityLabel,
+    primaryApp,
+    primaryProject,
+    topics,
+    keywords: insight.keywords,
+    confidence: insight.confidence,
+    evidenceTexts: insight.evidenceTexts
   }
 }
 
@@ -409,14 +547,54 @@ export function buildMemoryDiaryDailyInsight(
   }
 }
 
+function selectMemoryDiaryEvidenceTexts(items: MemoryDiaryItem[]): string[] {
+  const ranked = items
+    .map((item) => ({
+      text: compactMemoryDiaryText(item.text, 220),
+      score: scoreMemoryDiaryEvidenceItem(item)
+    }))
+    .filter((item) => item.text.length > 0)
+  const meaningful = ranked.filter((item) => item.score > 0)
+  const candidates = meaningful.length > 0 ? meaningful : ranked
+
+  return dedupeMemoryDiaryTexts(
+    candidates
+      .sort((left, right) => right.score - left.score || left.text.length - right.text.length)
+      .map((item) => item.text)
+  )
+}
+
+function scoreMemoryDiaryEvidenceItem(item: MemoryDiaryItem): number {
+  const text = item.text.trim()
+  const key = normalizeMemoryDiaryTextKey(text)
+  let score = 0
+
+  if (item.contentType === 'accessibility') score += 4
+  if (item.contentType === 'audio') score += 4
+  if (item.contentType === 'input') score += 2
+  if (item.contentType === 'ocr') score += 1
+  if (text.length >= 20) score += 1
+  if (/[\u4e00-\u9fa5]/.test(text)) score += 1
+  if (/\b(?:fix|build|write|review|debug|implement|generate|安装|配置|生成|修复|调试|整理|阅读|优化|回退|开启|显示)\b/i.test(text)) {
+    score += 2
+  }
+  if (/\b[\w.-]+\.(?:ts|tsx|js|jsx|md|json|css|html|py|ps1|rs|go)\b/i.test(text)) {
+    score += 1
+  }
+  if (isLowValueMemoryDiaryText(text)) score -= 4
+  if (key.length < 10) score -= 2
+
+  return score
+}
+
 function dedupeMemoryDiaryTexts(values: string[]): string[] {
   const seen = new Set<string>()
   const result: string[] = []
 
   for (const value of values) {
-    const compacted = compactMemoryDiaryText(value, 220)
+    const compacted = compactMemoryDiaryText(sanitizeMemoryDiaryText(value), 220)
     const key = normalizeMemoryDiaryTextKey(compacted)
-    if (!key || seen.has(key)) continue
+    if (!key || hasSimilarMemoryDiaryTextKey(seen, key)) continue
     seen.add(key)
     result.push(compacted)
   }
@@ -425,7 +603,7 @@ function dedupeMemoryDiaryTexts(values: string[]): string[] {
 }
 
 function compactMemoryDiaryText(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, ' ').trim()
+  const normalized = sanitizeMemoryDiaryText(value)
   if (normalized.length <= maxLength) {
     return normalized
   }
@@ -434,13 +612,88 @@ function compactMemoryDiaryText(value: string, maxLength: number): string {
 }
 
 function normalizeMemoryDiaryTextKey(value: string): string {
-  return value
+  return sanitizeMemoryDiaryText(value)
     .toLowerCase()
     .replace(/https?:\/\/\S+/g, '')
+    .replace(/\[url_with_credentials\]/g, '')
     .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, '')
+    .replace(/\b\d{4}[/-]\d{1,2}[/-]\d{1,2}\b/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+}
+
+function hasSimilarMemoryDiaryTextKey(seen: Set<string>, key: string): boolean {
+  if (seen.has(key)) return true
+  if (key.length < 40) return false
+
+  for (const existing of seen) {
+    if (existing.length < 40) continue
+    if (existing.includes(key) || key.includes(existing)) return true
+    if (calculateMemoryDiaryTextSimilarity(existing, key) >= 0.82) return true
+  }
+
+  return false
+}
+
+function calculateMemoryDiaryTextSimilarity(left: string, right: string): number {
+  const leftTokens = new Set(left.split(/\s+/).filter((token) => token.length >= 3))
+  const rightTokens = new Set(right.split(/\s+/).filter((token) => token.length >= 3))
+  if (leftTokens.size === 0 || rightTokens.size === 0) return 0
+
+  let intersection = 0
+  for (const token of leftTokens) {
+    if (rightTokens.has(token)) intersection += 1
+  }
+  const union = new Set([...leftTokens, ...rightTokens]).size
+  return union === 0 ? 0 : intersection / union
+}
+
+function isLowValueMemoryDiaryText(value: string): boolean {
+  const normalized = sanitizeMemoryDiaryText(value)
+  return MEMORY_DIARY_LOW_VALUE_PATTERNS.some((pattern) => pattern.test(normalized))
+}
+
+function sanitizeMemoryDiaryText(value: string): string {
+  return value
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .replace(/\[URL_WITH_CREDENTIALS\]/gi, '')
+    .replace(/https?:\/\/localhost:\d+\S*/gi, '本地服务')
+    .replace(/\bsp-[A-Za-z0-9_-]{4,}\b/g, 'API_TOKEN')
+    .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+function sanitizeMemoryDiaryTitle(value: string): string {
+  return sanitizeMemoryDiaryText(value)
+    .replace(/\s+[-|—]\s+$/, '')
+    .trim()
+}
+
+function sanitizeMemoryDiaryUrl(value: string): string {
+  const trimmed = value.trim()
+  if (!trimmed || /\[URL_WITH_CREDENTIALS\]/i.test(trimmed)) return ''
+  return trimmed
+}
+
+function normalizeMemoryDiaryAppName(appName: string, windowName: string, text: string): string {
+  const raw = sanitizeMemoryDiaryTitle(appName)
+  const lowerRaw = raw.toLowerCase()
+  const context = `${raw} ${windowName} ${text}`.toLowerCase()
+  const shellAlias = MEMORY_DIARY_SHELL_APP_ALIASES.get(lowerRaw)
+
+  if (!raw || shellAlias) {
+    for (const alias of MEMORY_DIARY_CONTEXT_APP_ALIASES) {
+      if (alias.patterns.some((pattern) => pattern.test(context))) {
+        return alias.app
+      }
+    }
+  }
+
+  if (shellAlias) return shellAlias
+  if (lowerRaw.endsWith('.exe')) return raw.slice(0, -4) || raw
+  return raw
 }
 
 function getDominantMemoryDiaryValue(values: string[]): string {
@@ -499,10 +752,12 @@ function extractMemoryDiaryProjectHints(
   for (const item of items) {
     const parts = item.windowName.split(/\s[-|—]\s| - /).map((part) => part.trim()).filter(Boolean)
     for (const part of parts) {
-      if (/\.[a-z0-9]{1,6}\b/i.test(part)) {
-        fileHints.push(part)
+      const normalizedPart = normalizeMemoryDiaryProjectHint(part)
+      if (!normalizedPart) continue
+      if (/\.[a-z0-9]{1,6}\b/i.test(normalizedPart)) {
+        fileHints.push(normalizedPart)
       } else if (isUsefulMemoryDiaryProjectHint(part)) {
-        projectHints.push(part)
+        projectHints.push(normalizedPart)
       }
     }
   }
@@ -512,8 +767,9 @@ function extractMemoryDiaryProjectHints(
     if (fileHints.some((hint) => hint.toLowerCase().startsWith(`${match.toLowerCase()}.`))) {
       continue
     }
-    if (isUsefulMemoryDiaryProjectHint(match) && !/\.[a-z0-9]{1,6}$/i.test(match)) {
-      projectHints.push(match)
+    const normalizedMatch = normalizeMemoryDiaryProjectHint(match)
+    if (normalizedMatch && isUsefulMemoryDiaryProjectHint(normalizedMatch) && !/\.[a-z0-9]{1,6}$/i.test(normalizedMatch)) {
+      projectHints.push(normalizedMatch)
     }
   }
 
@@ -528,6 +784,14 @@ function isUsefulMemoryDiaryProjectHint(value: string): boolean {
   if (normalized.length < 3 || normalized.length > 80) return false
   if (MEMORY_DIARY_GENERIC_PROJECT_WORDS.has(normalized.toLowerCase())) return false
   return /[\p{L}\p{N}]/u.test(normalized)
+}
+
+function normalizeMemoryDiaryProjectHint(value: string): string {
+  const normalized = sanitizeMemoryDiaryTitle(value)
+  if (!normalized) return ''
+  if (/onetool/i.test(normalized)) return 'OneTool'
+  if (/screenpipe/i.test(normalized)) return 'ScreenPipe'
+  return normalized
 }
 
 function extractMemoryDiaryKeywords(evidenceTexts: string[]): string[] {
@@ -545,6 +809,159 @@ function extractMemoryDiaryKeywords(evidenceTexts: string[]): string[] {
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
     .map(([keyword]) => keyword)
     .slice(0, 8)
+}
+
+function getMemoryDiaryPrimaryProject(
+  insight: MemoryDiaryTimelineInsight,
+  items: MemoryDiaryItem[]
+): string {
+  const hint = insight.projectHints.find((value) => isPrimaryMemoryDiaryProjectHint(value))
+  if (hint) return hint
+
+  const context = [
+    ...items.flatMap((item) => [item.appName, item.windowName, item.text]),
+    ...insight.evidenceTexts
+  ].join(' ')
+  if (/onetool/i.test(context)) return 'OneTool'
+  if (/screenpipe/i.test(context)) return 'ScreenPipe'
+  return ''
+}
+
+function isPrimaryMemoryDiaryProjectHint(value: string): boolean {
+  const normalized = value.trim()
+  if (!normalized) return false
+  if (/\.[a-z0-9]{1,6}\b/i.test(normalized)) return false
+  if (MEMORY_DIARY_GENERIC_PROJECT_WORDS.has(normalized.toLowerCase())) return false
+  if (['记忆日报', '时间线', '数据来源', '数据理解层', '界面'].includes(normalized)) return false
+  return true
+}
+
+function extractMemoryDiaryEventTopics(
+  insight: MemoryDiaryTimelineInsight,
+  items: MemoryDiaryItem[],
+  primaryProject: string
+): string[] {
+  const context = [
+    ...items.flatMap((item) => [item.appName, item.windowName, item.url, item.text]),
+    ...insight.evidenceTexts,
+    ...insight.keywords,
+    ...insight.projectHints
+  ].join(' ')
+  const topics: string[] = []
+
+  for (const topic of MEMORY_DIARY_FEATURE_TOPICS) {
+    if (topic.label !== primaryProject && topic.patterns.some((pattern) => pattern.test(context))) {
+      topics.push(topic.label)
+    }
+  }
+
+  for (const hint of insight.projectHints) {
+    if (hint === primaryProject) continue
+    if (/\.[a-z0-9]{1,6}\b/i.test(hint)) {
+      topics.push(hint)
+    }
+  }
+
+  for (const keyword of insight.keywords) {
+    const normalized = normalizeMemoryDiaryTopicKeyword(keyword)
+    if (normalized && normalized !== primaryProject) {
+      topics.push(normalized)
+    }
+  }
+
+  return uniqueMemoryDiaryValues(topics).slice(0, 6)
+}
+
+function normalizeMemoryDiaryTopicKeyword(value: string): string {
+  const normalized = value.trim()
+  const lower = normalized.toLowerCase()
+  if (!normalized || MEMORY_DIARY_STOP_WORDS.has(lower)) return ''
+  if (/记忆日报|日报草稿/.test(normalized)) return ''
+  if (/相关内容|相关工作|不要|了解/.test(normalized)) return ''
+  if (/screenpipe/i.test(normalized)) return 'ScreenPipe'
+  if (/timeline/i.test(normalized)) return '时间线'
+  if (/memorydiary/i.test(normalized)) return ''
+  if (lower === 'bridge') return '桥接'
+  if (lower === 'understanding') return '数据理解层'
+  if (normalized.length > 24) return ''
+  return normalized
+}
+
+function getMemoryDiaryEventVerb(
+  insight: MemoryDiaryTimelineInsight,
+  topics: string[]
+): string {
+  const text = [...insight.evidenceTexts, ...insight.keywords, ...topics].join(' ').toLowerCase()
+  if (insight.activityKind === 'development') {
+    if (/screenpipe|数据理解层|调试|debug|修复|fix|失败|报错|启动/.test(text)) return '调试'
+    if (/界面|ui|布局|展示|优化/.test(text)) return '优化'
+    return '开发'
+  }
+  if (insight.activityKind === 'research') return '查阅'
+  if (insight.activityKind === 'writing') return '撰写'
+  if (insight.activityKind === 'communication') return '处理'
+  if (insight.activityKind === 'media') return '处理'
+  if (insight.activityKind === 'operations') return '配置'
+  if (insight.activityKind === 'browsing') return '浏览'
+  return '处理'
+}
+
+function buildMemoryDiaryEventTitle(
+  insight: MemoryDiaryTimelineInsight,
+  verb: string,
+  primaryProject: string,
+  primaryApp: string,
+  topics: string[]
+): string {
+  if (primaryProject) {
+    return `${verb} ${primaryProject}`
+  }
+  if (topics[0]) {
+    return `${verb} ${topics[0]}`
+  }
+  return `${insight.activityLabel} · ${primaryApp}`
+}
+
+function buildMemoryDiaryEventSummary(
+  insight: MemoryDiaryTimelineInsight,
+  verb: string,
+  primaryApp: string,
+  primaryProject: string,
+  topics: string[]
+): string {
+  const target = primaryProject || topics[0] || '当前任务'
+  const details = selectMemoryDiaryConcreteDetails(insight.evidenceTexts)
+
+  if (details.length > 0) {
+    const action = target === primaryApp ? verb : `${verb} ${target}`
+    return `主要在 ${primaryApp} ${action}：${details.slice(0, 2).join('；')}。`
+  }
+
+  const summaryTopics = topics.slice(0, 3)
+  return summaryTopics.length > 0
+    ? `围绕 ${summaryTopics.join('、')}进行${insight.activityLabel}，主要使用 ${primaryApp}。`
+    : `主要使用 ${primaryApp}进行${insight.activityLabel}。`
+}
+
+function selectMemoryDiaryConcreteDetails(values: string[]): string[] {
+  const details = values
+    .map((value) => compactMemoryDiaryText(value, 96))
+    .filter((value) => value.length >= 12)
+    .filter((value) => !isLowValueMemoryDiaryText(value))
+    .filter((value) => !/^在.+上.+了解.+相关内容。?$/.test(value))
+
+  return dedupeMemoryDiaryTexts(details).slice(0, 3)
+}
+
+function getMemoryDiaryBucketWorkSubject(bucket: MemoryDiaryTimelineBucket): string {
+  if (bucket.event?.primaryProject) return bucket.event.primaryProject
+  const project = bucket.insight.projectHints.find((hint) => isPrimaryMemoryDiaryProjectHint(hint))
+  if (project) return project
+  return bucket.insight.dominantAppName
+}
+
+function getMemoryDiaryFocusBlockSubject(block: MemoryDiaryFocusBlock): string {
+  return block.projectHints.find((hint) => isPrimaryMemoryDiaryProjectHint(hint)) || block.appName
 }
 
 function buildMemoryDiaryTopEntries(values: string[], total: number): MemoryDiaryTopEntry[] {
@@ -592,20 +1009,24 @@ function buildMemoryDiaryFocusBlocks(
   for (const bucket of buckets) {
     const insight = bucket.insight
     const previous = blocks.at(-1)
+    const subject = getMemoryDiaryBucketWorkSubject(bucket)
+    const previousSubject = previous ? getMemoryDiaryFocusBlockSubject(previous) : ''
     const sameActivity = previous?.activityKind === insight.activityKind
     const sameApp = previous?.appName === insight.dominantAppName
+    const sameSubject = previousSubject && subject && previousSubject === subject
     const touchesPrevious = previous?.end === bucket.start
 
-    if (previous && sameActivity && sameApp && touchesPrevious) {
+    if (previous && sameActivity && touchesPrevious && (sameSubject || sameApp)) {
       previous.end = bucket.end
       previous.bucketCount += 1
       previous.recordCount += bucket.items.length
       previous.projectHints = uniqueMemoryDiaryValues([...previous.projectHints, ...insight.projectHints]).slice(0, 4)
+      previous.title = `${insight.activityLabel} · ${sameSubject ? subject : insight.dominantAppName}`
       continue
     }
 
     blocks.push({
-      title: `${insight.activityLabel} · ${insight.dominantAppName}`,
+      title: `${insight.activityLabel} · ${subject || insight.dominantAppName}`,
       start: bucket.start,
       end: bucket.end,
       activityKind: insight.activityKind,
