@@ -681,6 +681,77 @@ test('generateMemoryDiary delegates timeline diary drafting to the memory diary 
   assert.equal(result.data.markdown, '# 今日工作简报')
 })
 
+test('optimizeMemoryDiaryEvents delegates timeline event cleanup to the memory diary adapter', async () => {
+  const adapterCalls = []
+  const { LlmService } = loadLlmServiceModule({
+    MemoryDiaryAdapter: class MemoryDiaryAdapter {
+      buildEventOptimizationCompletion(input) {
+        adapterCalls.push(input)
+        return {
+          systemPrompt: 'event-system',
+          userPrompt: 'event-user'
+        }
+      }
+
+      mapEventOptimizationResult(input, payload) {
+        return input.buckets.map((bucket) => ({
+          ...bucket,
+          title: payload.events[0].title,
+          event: {
+            ...bucket.event,
+            title: payload.events[0].title
+          }
+        }))
+      }
+    },
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body)
+      assert.deepEqual(body.messages, [
+        { role: 'system', content: 'event-system' },
+        { role: 'user', content: 'event-user' }
+      ])
+      return {
+        ok: true,
+        async json() {
+          return {
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    events: [
+                      { id: 'bucket-1', title: '整理 ScreenPipe 时间线' }
+                    ]
+                  })
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  })
+
+  const input = {
+    date: '2026-05-26',
+    timezone: 'Asia/Shanghai',
+    buckets: [
+      {
+        id: 'bucket-1',
+        title: '本地标题',
+        event: { title: '本地标题' }
+      }
+    ]
+  }
+
+  const service = new LlmService()
+  const result = await service.optimizeMemoryDiaryEvents(input)
+
+  assert.equal(result.success, true)
+  assert.deepEqual(adapterCalls, [input])
+  assert.equal(result.data[0].title, '整理 ScreenPipe 时间线')
+  assert.equal(result.data[0].event.title, '整理 ScreenPipe 时间线')
+})
+
 function normalize(value) {
   return JSON.parse(JSON.stringify(value))
 }

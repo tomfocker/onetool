@@ -171,6 +171,7 @@ test('createElectronBridge exposes explicit app APIs without raw ipcRenderer acc
   assert.equal(typeof bridge.memoryDiary.queryTimeline, 'function')
   assert.equal(typeof bridge.memoryDiary.generateDiary, 'function')
   assert.equal(typeof bridge.memoryDiary.listDiaries, 'function')
+  assert.equal(typeof bridge.memoryDiary.openDiary, 'function')
   assert.equal(typeof bridge.memoryDiary.saveDiary, 'function')
   assert.equal(typeof bridge.memoryDiary.deleteDiary, 'function')
 })
@@ -471,6 +472,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.memoryDiary.queryTimeline({ date: '2026-05-26' })
   await bridge.memoryDiary.generateDiary({ userNotes: 'summary' })
   await bridge.memoryDiary.listDiaries()
+  await bridge.memoryDiary.openDiary('draft-1')
   await bridge.memoryDiary.saveDiary({ id: 'draft-1' })
   await bridge.memoryDiary.deleteDiary('draft-1')
 
@@ -569,6 +571,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['memory-timeline-query', { date: '2026-05-26' }],
     ['memory-diary-generate', { userNotes: 'summary' }],
     ['memory-diary-list'],
+    ['memory-diary-open', 'draft-1'],
     ['memory-diary-save', { id: 'draft-1' }],
     ['memory-diary-delete', 'draft-1']
   ])

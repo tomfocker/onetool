@@ -52,6 +52,10 @@ export function registerMemoryDiaryIpc() {
     return memoryDiaryService.list()
   })
 
+  ipcMain.handle('memory-diary-open', (_event, id: string) => {
+    return memoryDiaryService.open(id)
+  })
+
   ipcMain.handle('memory-diary-save', (_event, request) => {
     return memoryDiaryService.save(request)
   })

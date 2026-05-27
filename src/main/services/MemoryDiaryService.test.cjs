@@ -74,10 +74,12 @@ function createState() {
         enabledContentTypes: ['accessibility', 'ocr'],
         includeAudio: false,
         includeInput: false,
+        aiEventOptimizationEnabled: true,
         sensitiveAppPatterns: [],
         sensitiveWindowPatterns: [],
         timelineBucketMinutes: 15,
-        diaryStyle: 'worklog'
+        diaryStyle: 'worklog',
+        diaryTone: 'daily'
       },
       diaryHistory: [],
       deploymentLogs: []
@@ -94,6 +96,10 @@ function createService(overrides = {}) {
     fsPromises: overrides.fsPromises || {
       mkdir: async (...args) => fsCalls.push(['mkdir', ...args]),
       writeFile: async (...args) => fsCalls.push(['writeFile', ...args]),
+      readFile: async (...args) => {
+        fsCalls.push(['readFile', ...args])
+        return ''
+      },
       unlink: async (...args) => fsCalls.push(['unlink', ...args])
     },
     storeService: overrides.storeService || {
@@ -197,6 +203,51 @@ test('list returns history newest first', () => {
 
   assert.equal(result.success, true)
   assert.deepEqual(JSON.parse(JSON.stringify(result.data.map((item) => item.id))), ['new', 'old'])
+})
+
+test('open reads a persisted markdown diary back into a draft result', async () => {
+  const state = createState()
+  state.memoryDiary.diaryHistory = [
+    {
+      id: 'draft-1',
+      date: '2026-05-26',
+      title: '日报',
+      summary: 'summary',
+      markdownPath: 'D:\\UserData\\memory-diary\\daily\\draft-1.md',
+      createdAt: '2026-05-26T12:00:00.000Z',
+      updatedAt: '2026-05-26T12:30:00.000Z'
+    }
+  ]
+  const fsCalls = []
+  const { service } = createService({
+    state,
+    fsPromises: {
+      mkdir: async () => undefined,
+      writeFile: async () => undefined,
+      unlink: async () => undefined,
+      readFile: async (...args) => {
+        fsCalls.push(args)
+        return '# 已保存日报'
+      }
+    }
+  })
+
+  const result = await service.open('draft-1')
+
+  assert.equal(result.success, true)
+  assert.equal(result.data.id, 'draft-1')
+  assert.equal(result.data.markdown, '# 已保存日报')
+  assert.equal(result.data.createdAt, '2026-05-26T12:00:00.000Z')
+  assert.deepEqual(fsCalls, [['D:\\UserData\\memory-diary\\daily\\draft-1.md', 'utf8']])
+})
+
+test('open returns an error when the history entry does not exist', async () => {
+  const { service } = createService()
+
+  const result = await service.open('missing')
+
+  assert.equal(result.success, false)
+  assert.match(result.error, /找不到/)
 })
 
 test('delete removes the history entry and attempts to unlink the markdown file', async () => {

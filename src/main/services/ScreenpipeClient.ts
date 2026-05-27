@@ -19,6 +19,7 @@ type ScreenpipePayloadItem = {
   type?: string
   content?: Record<string, unknown>
 }
+const SCREENPIPE_SEARCH_MAX_PAGES = 50
 
 export class ScreenpipeClient {
   private readonly fetchImpl: FetchLike
@@ -86,10 +87,49 @@ export class ScreenpipeClient {
     request: ScreenpipeSearchRequest,
     contentType: MemoryDiaryContentType
   ): Promise<IpcResponse<MemoryDiaryItem[]>> {
+    const pageSize = Math.max(1, request.limit ?? 1000)
+    const items: MemoryDiaryItem[] = []
+    const seenPageSignatures = new Set<string>()
+
+    for (let page = 0; page < SCREENPIPE_SEARCH_MAX_PAGES; page += 1) {
+      const offset = page * pageSize
+      const pageResult = await this.searchContentTypePage(request, contentType, pageSize, offset)
+      if (!pageResult.success) {
+        return pageResult
+      }
+
+      const pageItems = pageResult.data || []
+      if (pageItems.length === 0) {
+        break
+      }
+
+      const signature = pageItems.map((item) => item.id).join('|')
+      if (seenPageSignatures.has(signature)) {
+        break
+      }
+
+      seenPageSignatures.add(signature)
+      items.push(...pageItems)
+
+      if (pageItems.length < pageSize) {
+        break
+      }
+    }
+
+    return { success: true, data: items }
+  }
+
+  private async searchContentTypePage(
+    request: ScreenpipeSearchRequest,
+    contentType: MemoryDiaryContentType,
+    limit: number,
+    offset: number
+  ): Promise<IpcResponse<MemoryDiaryItem[]>> {
     const params = new URLSearchParams()
     params.set('start_time', request.startTime)
     params.set('end_time', request.endTime)
-    params.set('limit', String(request.limit ?? 1000))
+    params.set('limit', String(limit))
+    params.set('offset', String(offset))
     params.set('content_type', contentType)
 
     const response = await this.fetchImpl(`${this.buildUrl(request.apiUrl, '/search')}?${params.toString()}`, {
@@ -104,7 +144,7 @@ export class ScreenpipeClient {
 
     const payload = await response.json() as { data?: ScreenpipePayloadItem[] }
     const items = (payload.data || [])
-      .map((item, index) => this.mapItem(item, index))
+      .map((item, index) => this.mapItem(item, offset + index))
       .filter((item): item is MemoryDiaryItem => Boolean(item))
 
     return { success: true, data: items }
