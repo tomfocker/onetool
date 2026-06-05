@@ -268,6 +268,9 @@ export function createElectronBridge({ ipcRenderer, webUtils }: CreateElectronBr
     getDefaultPath: (format: 'mp4' | 'gif' = 'mp4') =>
       ipcRenderer.invoke('screen-recorder-get-default-path', format),
     getSession: () => ipcRenderer.invoke('screen-recorder-get-session'),
+    getCompletedTasks: () => ipcRenderer.invoke('screen-recorder-get-completed-tasks'),
+    openCompletedTask: (id: string, action: 'file' | 'folder') =>
+      ipcRenderer.invoke('screen-recorder-open-completed-task', { id, action }),
     getHotkey: () => ipcRenderer.invoke('recorder-hotkey-get'),
     setHotkey: (hotkey: string) => ipcRenderer.invoke('recorder-hotkey-set', hotkey),
     getWindows: () => ipcRenderer.invoke('screen-recorder-get-windows'),

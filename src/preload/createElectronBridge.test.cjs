@@ -456,6 +456,8 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.screenRecorder.openSelection()
   await bridge.screenRecorder.closeSelection({ x: 1, y: 2, width: 3, height: 4 })
   await bridge.screenRecorder.hideSelectionPreview()
+  await bridge.screenRecorder.getCompletedTasks()
+  await bridge.screenRecorder.openCompletedTask('task-1', 'folder')
   await bridge.screenshot.openSelection(null, true)
   await bridge.screenshot.closeSelection(null)
   await bridge.floatBall.setHotkey('Alt+Shift+F')
@@ -494,7 +496,7 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
   await bridge.memoryDiary.saveDiary({ id: 'draft-1' })
   await bridge.memoryDiary.deleteDiary('draft-1')
 
-  assert.deepEqual(mocks.invokeCalls, [
+  assert.deepEqual(normalizeForAssertion(mocks.invokeCalls), [
     ['doctor-run-audit'],
     ['dev-environment-get-overview'],
     ['dev-environment-refresh-one', 'nodejs'],
@@ -563,6 +565,8 @@ test('createElectronBridge maps explicit invoke helpers to the expected IPC chan
     ['recorder-selection-open'],
     ['recorder-selection-close', { x: 1, y: 2, width: 3, height: 4 }],
     ['screen-recorder-hide-selection-preview'],
+    ['screen-recorder-get-completed-tasks'],
+    ['screen-recorder-open-completed-task', { id: 'task-1', action: 'folder' }],
     ['screenshot-selection-open', null, true],
     ['screenshot-selection-close', null],
     ['settings-set-floatball-hotkey', 'Alt+Shift+F'],

@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react'
+import { ExternalLink, FolderOpen, ListVideo, RefreshCw } from 'lucide-react'
 import { useScreenRecorder } from '../hooks/useScreenRecorder'
-import { RECORDER_MIN_SELECTION_SIZE } from '../../../shared/screenRecorderSession'
+import {
+  RECORDER_MIN_SELECTION_SIZE,
+  type CompletedRecordingOpenAction,
+  type CompletedRecordingTask
+} from '../../../shared/screenRecorderSession'
 export { RecorderSelectionOverlay } from '../components/RecorderSelectionOverlay'
 
 const styles = `
@@ -43,9 +48,55 @@ const styles = `
 
 type ToastState = { message: string; type: 'success' | 'error' }
 
+function formatRecordingTaskSize(sizeBytes: number) {
+  if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) {
+    return '未知大小'
+  }
+
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`
+  }
+
+  if (sizeBytes < 1024 * 1024 * 1024) {
+    return `${(sizeBytes / 1024 / 1024).toFixed(1)} MB`
+  }
+
+  return `${(sizeBytes / 1024 / 1024 / 1024).toFixed(2)} GB`
+}
+
+function formatRecordingTaskDate(completedAt: string) {
+  const completedDate = new Date(completedAt)
+  if (Number.isNaN(completedDate.getTime())) {
+    return '完成时间未知'
+  }
+
+  return new Intl.DateTimeFormat('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(completedDate)
+}
+
+function getRecordingTaskMeta(task: CompletedRecordingTask) {
+  const modeLabel = task.mode === 'area' ? '区域录制' : '全屏录制'
+  return [
+    task.format.toUpperCase(),
+    modeLabel,
+    task.duration,
+    formatRecordingTaskSize(task.sizeBytes),
+    formatRecordingTaskDate(task.completedAt)
+  ].join(' · ')
+}
+
 export const ScreenRecorderTool: React.FC = () => {
   const [toast, setToast] = useState<ToastState | null>(null)
   const [localHotkey, setLocalHotkey] = useState('Alt+Shift+R')
+  const [taskPanelOpen, setTaskPanelOpen] = useState(false)
 
   const showToast = useCallback((message: string, type: ToastState['type'] = 'success') => {
     setToast({ message, type })
@@ -70,12 +121,14 @@ export const ScreenRecorderTool: React.FC = () => {
     stopRecording,
     sessionStatus,
     controlsLocked,
-    showPreStartControls,
-    showRecordingControls,
     canStartRecording,
     isPreparingSelection,
     selectionValidationError,
-    startAreaSelection
+    startAreaSelection,
+    completedTasks,
+    completedTasksLoading,
+    loadCompletedTasks,
+    openCompletedTask
   } = useScreenRecorder()
 
   useEffect(() => {
@@ -154,6 +207,7 @@ export const ScreenRecorderTool: React.FC = () => {
     const unsubscribeStopped = window.electron.screenRecorder.onStopped((data) => {
       if (data.success) {
         showToast(`录制完成，文件已保存到: ${data.outputPath}`, 'success')
+        void loadCompletedTasks()
       } else {
         showToast(`录制失败: ${data.error}`, 'error')
       }
@@ -181,7 +235,7 @@ export const ScreenRecorderTool: React.FC = () => {
       unsubscribeStopped()
       if (unsubscribeHotkey) unsubscribeHotkey()
     }
-  }, [sessionStatus, setSelectionRect, showToast, startRecording, stopRecording])
+  }, [loadCompletedTasks, sessionStatus, setSelectionRect, showToast, startRecording, stopRecording])
 
   const handleSelectOutput = async () => {
     try {
@@ -237,452 +291,416 @@ export const ScreenRecorderTool: React.FC = () => {
     }
   }
 
+  const handleToggleTaskPanel = useCallback(() => {
+    setTaskPanelOpen((open) => !open)
+    void loadCompletedTasks()
+  }, [loadCompletedTasks])
+
+  const handleRefreshTasks = useCallback(() => {
+    void loadCompletedTasks()
+  }, [loadCompletedTasks])
+
+  const handleOpenCompletedTask = useCallback(async (
+    task: CompletedRecordingTask,
+    action: CompletedRecordingOpenAction
+  ) => {
+    const result = await openCompletedTask(task.id, action)
+    if (!result.success) {
+      showToast(result.error || '打开录制任务失败', 'error')
+    }
+  }, [openCompletedTask, showToast])
+
   const formatOptions = [
-    { value: 'mp4', label: 'MP4', desc: '高兼容视频' },
-    { value: 'gif', label: 'GIF', desc: '短动画导出' }
+    { value: 'mp4', label: 'MP4' },
+    { value: 'gif', label: 'GIF' }
   ] as const
 
   const qualityOptions = [
-    { value: 'low', label: '低', desc: '更小文件' },
-    { value: 'medium', label: '中', desc: '均衡设置' },
-    { value: 'high', label: '高', desc: '更清晰画质' }
+    { value: 'low', label: '低' },
+    { value: 'medium', label: '中' },
+    { value: 'high', label: '高' }
   ] as const
 
   const statusCopy = {
-    idle: '准备新的录制任务',
-    'selecting-area': '正在等待框选录制区域',
-    'ready-to-record': recordingMode === 'area' ? '区域预览已就绪，可以开始录制' : '录制参数已确认，可以开始录制',
-    recording: '正在录制中，主页面现在作为录制控制台',
-    finishing: '正在结束录制，请稍候保存完成'
+    idle: '待开始',
+    'selecting-area': '框选中',
+    'ready-to-record': '可开始',
+    recording: '录制中',
+    finishing: '保存中'
   }[sessionStatus]
 
   const startButtonDisabled = sessionStatus === 'finishing' || isPreparingSelection || !canStartRecording
-  const stopButtonDisabled = sessionStatus === 'finishing'
+  const primaryButtonDisabled = sessionStatus === 'recording' ? false : startButtonDisabled
+  const primaryButtonLabel = sessionStatus === 'recording'
+    ? '停止录制'
+    : sessionStatus === 'finishing'
+      ? '保存中...'
+      : '开始录制'
   const currentTargetLabel = recordingMode === 'full'
     ? selectedScreen?.name || '未选择屏幕'
     : selectionRect
       ? `区域 ${selectionRect.width} × ${selectionRect.height}`
       : '尚未框选区域'
-  const areaReadinessCopy = selectionRect
-    ? selectionValidationError || '虚线框已在屏幕上显示，可直接开始。'
-    : '请先框选录制区域。'
+  const qualityLabel = qualityOptions.find((option) => option.value === quality)?.label || '中'
+  const outputSummary = `${format.toUpperCase()} · ${fps} FPS · ${qualityLabel}`
+  const statusTone = sessionStatus === 'recording'
+    ? 'border-red-500/25 bg-red-50 text-red-600 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300'
+    : sessionStatus === 'finishing'
+      ? 'border-amber-500/25 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200'
+      : 'border-zinc-200 bg-zinc-50 text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-muted-foreground'
+  const statusDotTone = sessionStatus === 'recording'
+    ? 'bg-red-500 animate-recording-dot'
+    : sessionStatus === 'finishing'
+      ? 'bg-amber-500 animate-recording-dot'
+      : 'bg-zinc-300 dark:bg-white/40'
+  const primaryButtonTone = sessionStatus === 'recording'
+    ? 'bg-red-500 hover:bg-red-600 text-white'
+    : sessionStatus === 'finishing'
+      ? 'bg-amber-500/80 text-white cursor-wait'
+      : 'bg-red-500 hover:bg-red-600 text-white shadow-[0_16px_30px_-18px_rgba(239,68,68,0.7)]'
 
   return (
-    <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
-      <div className="absolute top-0 left-0 w-80 h-80 bg-red-500/6 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 right-0 w-96 h-96 bg-orange-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-background text-foreground">
+      <div className="mx-auto max-w-6xl px-5 py-5 sm:px-6">
+        <header className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">屏幕录制</h1>
+            <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${statusTone}`}>
+              <span className={`h-2 w-2 rounded-full ${statusDotTone}`} />
+              {statusCopy}
+            </span>
+          </div>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            <span className="max-w-[18rem] truncate rounded-full border border-zinc-200 bg-white/70 px-3 py-1.5 dark:border-white/10 dark:bg-white/5">
+              {currentTargetLabel}
+            </span>
+            <span className="rounded-full border border-zinc-200 bg-white/70 px-3 py-1.5 font-medium text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+              {outputSummary}
+            </span>
+          </div>
+        </header>
 
-      <div className="max-w-5xl mx-auto px-6 py-8 relative z-10">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-red-500 to-orange-400 bg-clip-text text-transparent">
-            屏幕录制
-          </h1>
-          <p className="text-muted-foreground">录制屏幕内容并导出为 MP4 或 GIF</p>
-        </div>
-
-        <div className="space-y-6 animate-fade-in-up">
-          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-red-400 mb-1">1. 录制目标</p>
-                <h2 className="text-xl font-semibold">先确定录制范围</h2>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-muted-foreground">当前目标</p>
-                <p className="text-sm font-medium">{currentTargetLabel}</p>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {([
-                { value: 'full', label: '全屏录制', desc: '录制整个屏幕' },
-                { value: 'area', label: '区域录制', desc: '先框选，再精调区域' }
-              ] as const).map((modeOption) => (
+        <div className="space-y-4 animate-fade-in-up">
+          {taskPanelOpen && (
+            <section className="rounded-[1.25rem] border border-zinc-200/80 bg-white/75 p-4 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.45)] dark:border-zinc-800 dark:bg-zinc-900/60">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-base font-semibold">录制任务</h2>
                 <button
-                  key={modeOption.value}
-                  onClick={() => handleModeChange(modeOption.value)}
-                  disabled={controlsLocked}
-                  className={`rounded-xl border px-4 py-4 text-left transition-all ${recordingMode === modeOption.value
-                    ? 'border-red-500 bg-red-500/8 shadow-lg shadow-red-500/10'
-                    : 'border-white/10 bg-white/5 hover:border-white/30'
-                  } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  type="button"
+                  onClick={handleRefreshTasks}
+                  disabled={completedTasksLoading}
+                  title="刷新任务"
+                  aria-label="刷新录制任务"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white/80 transition-all hover:border-zinc-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/8 dark:hover:border-white/30"
                 >
-                  <p className="text-base font-semibold">{modeOption.label}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{modeOption.desc}</p>
+                  <RefreshCw className={`h-4 w-4 ${completedTasksLoading ? 'animate-spin' : ''}`} />
                 </button>
-              ))}
-            </div>
+              </div>
 
-            {recordingMode === 'full' && (
-              <div className="space-y-3 animate-fade-in">
-                <div className="flex items-center justify-between gap-3">
-                  <p className="text-sm text-muted-foreground">选择要录制的屏幕</p>
-                  {selectedScreen && <p className="text-xs text-muted-foreground">已选: {selectedScreen.name}</p>}
+              {completedTasks.length === 0 ? (
+                <div className="mt-3 rounded-xl border border-dashed border-zinc-200 px-4 py-5 text-sm text-muted-foreground dark:border-white/10">
+                  {completedTasksLoading ? '刷新中...' : '暂无任务'}
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {screenList.map((screen) => (
-                    <button
-                      key={screen.id}
-                      onClick={() => setSelectedScreen(screen)}
-                      disabled={controlsLocked}
-                      className={`group rounded-xl overflow-hidden border transition-all ${selectedScreen?.id === screen.id
-                        ? 'border-red-500 shadow-md shadow-red-500/10'
-                        : 'border-white/10 hover:border-white/30'
-                      } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
+              ) : (
+                <div className="mt-3 grid max-h-80 gap-2 overflow-y-auto pr-1">
+                  {completedTasks.map((task) => (
+                    <div
+                      key={task.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-xl border border-zinc-200/80 bg-zinc-50/70 px-4 py-3 dark:border-white/10 dark:bg-white/5"
                     >
-                      <img src={screen.thumbnail} alt={screen.name} className="w-full aspect-video object-cover" />
-                      <div className="px-3 py-2 bg-black/30 text-left">
-                        <p className="text-xs font-medium truncate">{screen.name}</p>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate">{task.fileName}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{getRecordingTaskMeta(task)}</p>
+                        <p className="text-[11px] text-muted-foreground/75 mt-1 truncate">{task.outputPath}</p>
                       </div>
-                    </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenCompletedTask(task, 'file')}
+                          title="打开文件"
+                          aria-label={`打开文件 ${task.fileName}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white transition-all hover:border-zinc-300 active:scale-[0.98] dark:border-white/10 dark:bg-black/20 dark:hover:border-white/30"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleOpenCompletedTask(task, 'folder')}
+                          title="定位文件"
+                          aria-label={`定位文件 ${task.fileName}`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 bg-white transition-all hover:border-zinc-300 active:scale-[0.98] dark:border-white/10 dark:bg-black/20 dark:hover:border-white/30"
+                        >
+                          <FolderOpen className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
                   ))}
                 </div>
-              </div>
-            )}
-
-            {recordingMode === 'area' && (
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 flex flex-col gap-4 animate-fade-in">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-medium">面板驱动区域录制</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      先点击“框选区域”，之后可直接拖动屏幕上的虚线框挪动位置。
-                    </p>
-                  </div>
-                  <button
-                    onClick={handleStartAreaSelection}
-                    disabled={controlsLocked}
-                    className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                  >
-                    {selectionRect ? '重选区域' : '框选区域'}
-                  </button>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                  <span className="px-2 py-1 rounded-full bg-white/8 border border-white/10">
-                    最小尺寸 {RECORDER_MIN_SELECTION_SIZE} × {RECORDER_MIN_SELECTION_SIZE}
-                  </span>
-                  <span className="px-2 py-1 rounded-full bg-white/8 border border-white/10">
-                    {sessionStatus === 'selecting-area' ? '等待框选中' : isPreparingSelection ? '正在同步虚线框' : '支持 1px 微调'}
-                  </span>
-                </div>
-              </div>
-            )}
-          </section>
-
-          <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
-            <div>
-              <p className="text-sm font-semibold text-red-400 mb-1">2. 录制确认</p>
-              <h2 className="text-xl font-semibold">确认输出和区域细节</h2>
-            </div>
-
-            <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_0.9fr] gap-6">
-              <div className="space-y-5">
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">保存位置</label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={outputPath}
-                        readOnly
-                        className="flex-1 bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none"
-                        placeholder="未选择保存位置"
-                      />
-                      <button
-                        onClick={handleSelectOutput}
-                        disabled={controlsLocked}
-                        className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                      >
-                        选择
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">格式</label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {formatOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => setFormat(option.value)}
-                            disabled={controlsLocked}
-                            className={`rounded-lg border px-3 py-2 text-left transition-all ${format === option.value
-                              ? 'border-red-500 bg-red-500/8'
-                              : 'border-white/10 bg-white/5 hover:border-white/30'
-                            } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          >
-                            <p className="text-sm font-semibold">{option.label}</p>
-                            <p className="text-[11px] text-muted-foreground mt-1">{option.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">帧率</label>
-                      <select
-                        value={fps}
-                        onChange={(event) => setFps(parseInt(event.target.value, 10))}
-                        disabled={controlsLocked}
-                        className="w-full bg-black/20 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none disabled:opacity-60"
-                      >
-                        {[15, 24, 30, 60].map((value) => (
-                          <option key={value} value={value}>{value} FPS</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">质量</label>
-                      <div className="grid grid-cols-3 gap-2">
-                        {qualityOptions.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={() => setQuality(option.value)}
-                            disabled={controlsLocked}
-                            className={`rounded-lg border px-2 py-2 text-center transition-all ${quality === option.value
-                              ? 'border-red-500 bg-red-500/8'
-                              : 'border-white/10 bg-white/5 hover:border-white/30'
-                            } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
-                          >
-                            <p className="text-sm font-semibold">{option.label}</p>
-                            <p className="text-[10px] text-muted-foreground mt-1">{option.desc}</p>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {recordingMode === 'area' ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4 animate-fade-in">
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-semibold">区域确认</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          虚线框会保留在屏幕实际位置，坐标调整后会实时同步。
-                        </p>
-                      </div>
-                      <button
-                        onClick={handleStartAreaSelection}
-                        disabled={controlsLocked}
-                        className="px-3 py-2 rounded-lg border border-white/15 bg-white/8 text-sm hover:border-white/30 disabled:opacity-60 disabled:cursor-not-allowed transition-all"
-                      >
-                        重选区域
-                      </button>
-                    </div>
-
-                    <div className="space-y-3">
-                      <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-muted-foreground">
-                        {sessionStatus === 'selecting-area'
-                          ? '正在等待新的框选结果。'
-                          : selectionRect
-                            ? `当前区域 ${selectionRect.x}, ${selectionRect.y} · ${selectionRect.width} × ${selectionRect.height}。可直接拖动屏幕上的虚线框调整位置。`
-                            : '还没有选定区域。'}
-                      </div>
-                      <div className={`rounded-xl border px-3 py-3 text-sm ${selectionValidationError
-                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-200'
-                        : 'border-white/10 bg-white/5 text-muted-foreground'
-                      }`}>
-                        {selectionValidationError
-                          ? selectionValidationError
-                          : `当前选区已满足最小尺寸 ${RECORDER_MIN_SELECTION_SIZE}px。`}
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3 animate-fade-in">
-                    <p className="text-sm font-semibold">全屏确认</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-xs text-muted-foreground mb-1">录制目标</p>
-                        <p className="text-sm font-medium">{selectedScreen?.name || '未选择屏幕'}</p>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-xs text-muted-foreground mb-1">输出格式</p>
-                        <p className="text-sm font-medium">{format.toUpperCase()} · {fps} FPS</p>
-                      </div>
-                      <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <p className="text-xs text-muted-foreground mb-1">画质策略</p>
-                        <p className="text-sm font-medium">
-                          {quality === 'high' ? '高质量' : quality === 'medium' ? '中等质量' : '低质量'}
-                        </p>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      全屏模式会按当前确认的屏幕输出 MP4 或 GIF，录制开始后可直接在下方停止。
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="space-y-5">
-                {showPreStartControls && (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
-                    <div>
-                      <p className="text-sm font-semibold">开始录制</p>
-                      <p className="text-xs text-muted-foreground mt-1">在开始前确认当前录制目标和输出设置。</p>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {recordingMode === 'area' ? areaReadinessCopy : '全屏参数已确认，可直接开始。'}
-                    </p>
-
-                    <button
-                      onClick={handleToggleRecording}
-                      disabled={startButtonDisabled}
-                      className="w-full py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center gap-3 bg-white hover:bg-gray-100 text-black disabled:opacity-60 disabled:cursor-not-allowed"
-                    >
-                      <span className="w-3 h-3 bg-red-500 rounded-full" />
-                      开始录制
-                    </button>
-                  </div>
-                )}
-
-                <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold">热键设置</p>
-                      <p className="text-xs text-muted-foreground mt-1">保留全局开始/停止录制热键</p>
-                    </div>
-                    <span className="text-[10px] bg-red-500/15 text-red-300 px-2 py-1 rounded-full border border-red-500/20 uppercase tracking-wider">
-                      全局生效
-                    </span>
-                  </div>
-
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={isRecordingHotkey ? '正在录入...' : localHotkey.replace('CommandOrControl+', 'Ctrl+')}
-                      readOnly
-                      onClick={() => {
-                        if (!controlsLocked) {
-                          setIsRecordingHotkey(true)
-                        }
-                      }}
-                      disabled={controlsLocked}
-                      className={`flex-1 bg-black/20 border-2 rounded-xl px-4 py-3 text-center font-mono font-bold transition-all cursor-pointer ${isRecordingHotkey
-                        ? 'border-red-500 shadow-lg shadow-red-500/20 text-red-400'
-                        : 'border-white/10 hover:border-white/30'
-                      } ${controlsLocked ? 'opacity-60 cursor-not-allowed' : ''}`}
-                    />
-                    <button
-                      onClick={handleSaveHotkey}
-                      disabled={controlsLocked || isSavingHotkey || isRecordingHotkey}
-                      className="px-4 rounded-xl bg-red-500 hover:bg-red-600 disabled:opacity-60 disabled:cursor-not-allowed text-white font-semibold transition-all"
-                    >
-                      {isSavingHotkey ? '保存中' : '保存'}
-                    </button>
-                  </div>
-
-                  <p className="text-[11px] text-muted-foreground">
-                    {controlsLocked
-                      ? '录制进行中时无法修改热键。'
-                      : isRecordingHotkey
-                        ? '按下新的组合键完成录入。'
-                        : '点击输入框后，按下新的组合键。'}
-                  </p>
-                </div>
-
-                <div className="rounded-xl border border-orange-500/20 bg-orange-500/8 p-4 space-y-2">
-                  <p className="text-sm font-semibold text-orange-200">录制建议</p>
-                  <ul className="text-xs text-muted-foreground space-y-2">
-                    <li>MP4 适合长时间录制，兼容性最好。</li>
-                    <li>GIF 适合短片段演示，体积通常更大。</li>
-                    <li>如果画面卡顿，优先降低 FPS 或质量等级。</li>
-                  </ul>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {showRecordingControls && (
-            <section className="bg-card rounded-2xl border border-white/15 dark:border-white/10 shadow-soft p-6 space-y-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold text-red-400 mb-1">3. 录制中控制</p>
-                <h2 className="text-xl font-semibold">开始后在这里控制录制</h2>
-              </div>
-              <div className={`px-3 py-1.5 rounded-full text-xs font-medium border ${sessionStatus === 'recording'
-                ? 'border-red-500/30 bg-red-500/10 text-red-300'
-                : sessionStatus === 'finishing'
-                  ? 'border-orange-500/30 bg-orange-500/10 text-orange-200'
-                  : 'border-white/10 bg-white/5 text-muted-foreground'
-              }`}>
-                {statusCopy}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[0.9fr_1.1fr] gap-4">
-              <div className={`rounded-2xl border p-5 ${isRecording
-                ? 'border-red-500/25 bg-red-500/10 animate-pulse-glow'
-                : 'border-white/10 bg-white/5'
-              }`}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-3.5 h-3.5 rounded-full ${sessionStatus === 'recording' ? 'bg-red-400 animate-recording-dot' : sessionStatus === 'finishing' ? 'bg-orange-300 animate-recording-dot' : 'bg-white/40'}`} />
-                  <div>
-                    <p className="text-sm font-semibold">
-                      {sessionStatus === 'recording' ? '录制进行中' : sessionStatus === 'finishing' ? '正在收尾保存' : '等待开始'}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">{statusCopy}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-5 text-center">
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">录制计时</p>
-                  <p className="text-3xl font-semibold tracking-[0.15em]">{recordingTime}</p>
-                </div>
-              </div>
-
-              <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-xs text-muted-foreground mb-1">当前模式</p>
-                    <p className="text-sm font-medium">{recordingMode === 'full' ? '全屏录制' : '区域录制'}</p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <p className="text-xs text-muted-foreground mb-1">输出文件</p>
-                    <p className="text-sm font-medium truncate">{outputPath || '未选择保存位置'}</p>
-                  </div>
-                </div>
-
-                <div className="rounded-xl border border-white/10 bg-black/20 p-4">
-                  <p className="text-sm font-semibold mb-2">录制中提示</p>
-                  <ul className="text-xs text-muted-foreground space-y-2">
-                    <li>目标: {currentTargetLabel}</li>
-                    <li>格式: {format.toUpperCase()} · {fps} FPS</li>
-                    <li>{sessionStatus === 'finishing' ? '正在等待编码与文件写入完成。' : '使用下方按钮停止录制并返回文件。'}</li>
-                  </ul>
-                </div>
-
-                <button
-                  onClick={handleToggleRecording}
-                  disabled={stopButtonDisabled}
-                  className={`w-full py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center gap-3 ${sessionStatus === 'recording'
-                    ? 'bg-red-500 hover:bg-red-600 text-white'
-                    : sessionStatus === 'finishing'
-                      ? 'bg-orange-500/70 text-white cursor-wait'
-                      : 'bg-white hover:bg-gray-100 text-black disabled:opacity-60 disabled:cursor-not-allowed'
-                  }`}
-                >
-                  {sessionStatus === 'recording' ? (
-                    <>
-                      <span className="w-3 h-3 bg-white rounded-sm animate-recording-dot" />
-                      停止录制
-                    </>
-                  ) : sessionStatus === 'finishing' ? (
-                    '正在结束录制…'
-                  ) : (
-                    <>
-                      <span className="w-3 h-3 bg-red-500 rounded-full" />
-                      开始录制
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
+              )}
             </section>
           )}
+
+          <div className="recorder-layout-grid grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+            <main className="min-w-0 space-y-4">
+              <section className="rounded-[1.25rem] border border-zinc-200/80 bg-white/75 p-4 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.45)] dark:border-zinc-800 dark:bg-zinc-900/60">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-red-500 dark:text-red-300">录制设置</p>
+                    <h2 className="mt-1 text-lg font-semibold">范围</h2>
+                  </div>
+                  <div className="recorder-segmented-control grid w-full grid-cols-2 rounded-xl bg-zinc-100 p-1 sm:w-56 dark:bg-white/8">
+                    {([
+                      { value: 'full', label: '全屏' },
+                      { value: 'area', label: '区域' }
+                    ] as const).map((modeOption) => (
+                      <button
+                        key={modeOption.value}
+                        type="button"
+                        onClick={() => handleModeChange(modeOption.value)}
+                        disabled={controlsLocked}
+                        className={`h-10 rounded-lg px-3 text-sm font-semibold transition-all active:scale-[0.98] ${recordingMode === modeOption.value
+                          ? 'bg-white text-red-500 shadow-sm dark:bg-zinc-950 dark:text-red-300'
+                          : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                        } ${controlsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                      >
+                        {modeOption.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {recordingMode === 'full' && (
+                  <div className="mt-4 animate-fade-in">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <p className="text-sm font-medium text-muted-foreground">屏幕</p>
+                      {selectedScreen && <p className="text-xs text-muted-foreground">已选: {selectedScreen.name}</p>}
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      {screenList.map((screen) => (
+                        <button
+                          key={screen.id}
+                          type="button"
+                          onClick={() => setSelectedScreen(screen)}
+                          disabled={controlsLocked}
+                          className={`group overflow-hidden rounded-xl border bg-zinc-50/70 text-left transition-all active:scale-[0.99] dark:bg-white/5 ${selectedScreen?.id === screen.id
+                            ? 'border-red-500 shadow-[0_16px_32px_-26px_rgba(239,68,68,0.85)]'
+                            : 'border-zinc-200/80 hover:border-zinc-300 dark:border-white/10 dark:hover:border-white/30'
+                          } ${controlsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                        >
+                          <img src={screen.thumbnail} alt={screen.name} className="aspect-video w-full object-cover" />
+                          <div className="px-3 py-2">
+                            <p className="truncate text-xs font-medium">{screen.name}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {recordingMode === 'area' && (
+                  <div className="mt-4 animate-fade-in rounded-xl border border-zinc-200/80 bg-zinc-50/70 p-4 dark:border-white/10 dark:bg-white/5">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <p className="text-sm font-medium">{selectionRect ? currentTargetLabel : '未框选'}</p>
+                      <button
+                        type="button"
+                        onClick={handleStartAreaSelection}
+                        disabled={controlsLocked}
+                        className="h-10 rounded-lg bg-red-500 px-4 text-sm font-semibold text-white transition-all hover:bg-red-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                      >
+                        {selectionRect ? '重选区域' : '框选区域'}
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <span className="rounded-full border border-zinc-200 bg-white/70 px-2.5 py-1 dark:border-white/10 dark:bg-white/8">
+                        最小 {RECORDER_MIN_SELECTION_SIZE} × {RECORDER_MIN_SELECTION_SIZE}
+                      </span>
+                      <span className="rounded-full border border-zinc-200 bg-white/70 px-2.5 py-1 dark:border-white/10 dark:bg-white/8">
+                        {sessionStatus === 'selecting-area' ? '等待框选' : isPreparingSelection ? '同步中' : '可微调'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-[1.25rem] border border-zinc-200/80 bg-white/75 p-4 shadow-[0_24px_70px_-48px_rgba(15,23,42,0.45)] dark:border-zinc-800 dark:bg-zinc-900/60">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold text-red-500 dark:text-red-300">录制设置</p>
+                    <h2 className="mt-1 text-lg font-semibold">输出</h2>
+                  </div>
+                  <p className="text-sm font-semibold text-zinc-600 dark:text-zinc-200">{outputSummary}</p>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_150px_1fr]">
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">格式</label>
+                    <div className="recorder-segmented-control grid grid-cols-2 rounded-xl bg-zinc-100 p-1 dark:bg-white/8">
+                      {formatOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setFormat(option.value)}
+                          disabled={controlsLocked}
+                          className={`h-10 rounded-lg px-3 text-sm font-semibold transition-all active:scale-[0.98] ${format === option.value
+                            ? 'bg-white text-red-500 shadow-sm dark:bg-zinc-950 dark:text-red-300'
+                            : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                          } ${controlsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">帧率</label>
+                    <select
+                      value={fps}
+                      onChange={(event) => setFps(parseInt(event.target.value, 10))}
+                      disabled={controlsLocked}
+                      className="h-11 w-full rounded-xl border border-zinc-200 bg-zinc-50 px-3 text-sm font-medium outline-none transition-all focus:border-red-300 disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/8"
+                    >
+                      {[15, 24, 30, 60].map((value) => (
+                        <option key={value} value={value}>{value} FPS</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-medium text-muted-foreground">质量</label>
+                    <div className="recorder-segmented-control grid grid-cols-3 rounded-xl bg-zinc-100 p-1 dark:bg-white/8">
+                      {qualityOptions.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setQuality(option.value)}
+                          disabled={controlsLocked}
+                          className={`h-10 rounded-lg px-2 text-sm font-semibold transition-all active:scale-[0.98] ${quality === option.value
+                            ? 'bg-white text-red-500 shadow-sm dark:bg-zinc-950 dark:text-red-300'
+                            : 'text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100'
+                          } ${controlsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                  <div className="min-w-0 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+                    <p className="text-xs text-muted-foreground">保存到</p>
+                    <p className="mt-1 truncate text-sm font-medium">{outputPath || '未选择保存位置'}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleSelectOutput}
+                    disabled={controlsLocked}
+                    className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 text-sm font-semibold transition-all hover:border-zinc-300 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/8 dark:hover:border-white/30"
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    更改
+                  </button>
+                </div>
+
+                <div className={`mt-3 rounded-xl border px-3 py-2.5 text-sm ${selectionValidationError
+                  ? 'border-amber-500/30 bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-200'
+                  : 'border-zinc-200 bg-zinc-50/80 text-muted-foreground dark:border-white/10 dark:bg-white/5'
+                }`}>
+                  {recordingMode === 'area'
+                    ? selectionValidationError || (selectionRect ? currentTargetLabel : '请选择区域')
+                    : currentTargetLabel}
+                </div>
+              </section>
+            </main>
+
+            <aside className="recorder-action-panel self-start rounded-[1.25rem] border border-zinc-200/80 bg-white/85 p-4 shadow-[0_24px_70px_-46px_rgba(15,23,42,0.5)] xl:sticky xl:top-5 dark:border-zinc-800 dark:bg-zinc-900/70">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-lg font-semibold">操作台</h2>
+                <span className={`rounded-full border px-2.5 py-1 text-xs ${statusTone}`}>{statusCopy}</span>
+              </div>
+
+              <div className={`mt-4 rounded-xl border px-4 py-4 ${isRecording
+                ? 'border-red-500/25 bg-red-50 dark:bg-red-500/10'
+                : 'border-zinc-200 bg-zinc-50/80 dark:border-white/10 dark:bg-white/5'
+              }`}>
+                <p className="text-xs text-muted-foreground">计时</p>
+                <p className="mt-2 font-mono text-3xl font-semibold tracking-[0.1em]">{recordingTime}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToggleRecording}
+                disabled={primaryButtonDisabled}
+                className={`mt-4 flex h-14 w-full items-center justify-center gap-3 rounded-2xl text-lg font-semibold transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60 ${primaryButtonTone}`}
+              >
+                {primaryButtonLabel}
+              </button>
+
+              <div className="mt-4 grid gap-2 text-sm">
+                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+                  <span className="text-xs text-muted-foreground">目标</span>
+                  <span className="truncate font-medium">{currentTargetLabel}</span>
+                </div>
+                <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2.5 dark:border-white/10 dark:bg-white/5">
+                  <span className="text-xs text-muted-foreground">输出</span>
+                  <span className="truncate font-medium">{outputSummary}</span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleToggleTaskPanel}
+                className={`mt-4 flex h-11 w-full items-center justify-center gap-2 rounded-xl border text-sm font-semibold transition-all active:scale-[0.98] ${taskPanelOpen
+                  ? 'border-red-500/30 bg-red-50 text-red-600 dark:bg-red-500/10 dark:text-red-300'
+                  : 'border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:bg-white/8 dark:hover:border-white/30'
+                }`}
+              >
+                <ListVideo className="h-4 w-4" />
+                <span>录制任务</span>
+                {completedTasks.length > 0 && (
+                  <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-[11px] dark:bg-white/12">
+                    {completedTasks.length}
+                  </span>
+                )}
+              </button>
+
+              <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-white/10">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold">热键</p>
+                  <span className="rounded-full border border-red-500/20 bg-red-50 px-2 py-1 text-[10px] font-semibold text-red-500 dark:bg-red-500/15 dark:text-red-300">
+                    全局
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
+                  <input
+                    type="text"
+                    value={isRecordingHotkey ? '录入中...' : localHotkey.replace('CommandOrControl+', 'Ctrl+')}
+                    readOnly
+                    onClick={() => {
+                      if (!controlsLocked) {
+                        setIsRecordingHotkey(true)
+                      }
+                    }}
+                    disabled={controlsLocked}
+                    className={`h-11 min-w-0 cursor-pointer rounded-xl border px-3 text-center font-mono text-sm font-semibold outline-none transition-all ${isRecordingHotkey
+                      ? 'border-red-500 bg-red-50 text-red-500 dark:bg-red-500/10 dark:text-red-300'
+                      : 'border-zinc-200 bg-zinc-50/80 hover:border-zinc-300 dark:border-white/10 dark:bg-white/5 dark:hover:border-white/30'
+                    } ${controlsLocked ? 'cursor-not-allowed opacity-60' : ''}`}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSaveHotkey}
+                    disabled={controlsLocked || isSavingHotkey || isRecordingHotkey}
+                    className="h-11 rounded-xl bg-red-500 px-4 text-sm font-semibold text-white transition-all hover:bg-red-600 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isSavingHotkey ? '保存中' : '保存'}
+                  </button>
+                </div>
+              </div>
+            </aside>
+          </div>
         </div>
       </div>
 

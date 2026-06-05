@@ -84,6 +84,10 @@ function loadScreenRecorderServiceModule(options = {}) {
       return electronModule
     }
 
+    if (specifier === 'fs') {
+      return options.fsModule || fs
+    }
+
     if (specifier === 'child_process') {
       return options.childProcessModule || {
         spawn() {
@@ -656,6 +660,157 @@ test('bindRecorderProcess rotates a fresh default output path after a successful
   assert.equal(recorder.session.outputPath, 'C:/tmp/OneTool-Recording-20260420-120001-456.mp4')
   assert.equal(sentEvents.at(-1)[0], 'screen-recorder-stopped')
   assert.equal(sentEvents.at(-1)[1].outputPath, firstAutoPath)
+})
+
+test('bindRecorderProcess records a completed recording task after a graceful stop', () => {
+  const firstAutoPath = 'C:/tmp/OneTool-Recording-20260420-120000-123.mp4'
+  const { ScreenRecorderService } = loadScreenRecorderServiceModule({
+    fsModule: {
+      ...fs,
+      statSync(filePath) {
+        if (filePath === firstAutoPath) {
+          return { size: 345678 }
+        }
+
+        return fs.statSync(filePath)
+      }
+    }
+  })
+  const recorder = new ScreenRecorderService()
+
+  recorder.mainWindow = {
+    isDestroyed: () => false,
+    show() {},
+    webContents: {
+      send() {}
+    }
+  }
+  recorder.recorderProcess = {
+    stderr: { on() {} },
+    on(event, handler) {
+      if (event === 'close') {
+        this.closeHandler = handler
+      }
+    }
+  }
+  recorder.session = {
+    status: 'finishing',
+    mode: 'area',
+    outputPath: firstAutoPath,
+    recordingTime: '00:00:10',
+    selectionBounds: { x: 1, y: 2, width: 300, height: 200 },
+    selectionPreviewDataUrl: null,
+    selectedDisplayId: '1'
+  }
+  recorder.buildDefaultOutputPath = () => 'C:/tmp/OneTool-Recording-20260420-120001-456.mp4'
+
+  recorder.bindRecorderProcess({
+    outputPath: firstAutoPath,
+    format: 'mp4'
+  })
+  recorder.recorderProcess.closeHandler(0)
+
+  const result = recorder.getCompletedTasks()
+  assert.equal(result.success, true)
+  const [task] = result.data.tasks
+  assert.equal(task.outputPath, firstAutoPath)
+  assert.equal(task.fileName, 'OneTool-Recording-20260420-120000-123.mp4')
+  assert.equal(task.format, 'mp4')
+  assert.equal(task.mode, 'area')
+  assert.equal(task.duration, '00:00:10')
+  assert.equal(task.sizeBytes, 345678)
+  assert.match(task.completedAt, /^\d{4}-\d{2}-\d{2}T/)
+})
+
+test('openCompletedTask opens files and reveals folders from recorded tasks', async () => {
+  const calls = []
+  const { ScreenRecorderService } = loadScreenRecorderServiceModule({
+    electronModule: {
+      shell: {
+        async openPath(filePath) {
+          calls.push(['file', filePath])
+          return ''
+        },
+        showItemInFolder(filePath) {
+          calls.push(['folder', filePath])
+        }
+      }
+    }
+  })
+  const recorder = new ScreenRecorderService()
+  recorder.completedTasks = [
+    {
+      id: 'task-1',
+      outputPath: 'C:/tmp/demo.mp4',
+      fileName: 'demo.mp4',
+      format: 'mp4',
+      mode: 'full',
+      completedAt: '2026-06-05T00:00:00.000Z',
+      duration: '00:00:03',
+      sizeBytes: 100
+    }
+  ]
+
+  assert.equal((await recorder.openCompletedTask('task-1', 'file')).success, true)
+  assert.equal((await recorder.openCompletedTask('task-1', 'folder')).success, true)
+  assert.deepEqual(calls, [
+    ['file', 'C:/tmp/demo.mp4'],
+    ['folder', 'C:/tmp/demo.mp4']
+  ])
+})
+
+test('bindRecorderProcess includes a readable error when ffmpeg exits unexpectedly', () => {
+  const recorder = new ScreenRecorderService()
+  const sentEvents = []
+
+  recorder.mainWindow = {
+    isDestroyed: () => false,
+    show() {},
+    webContents: {
+      send: (...args) => sentEvents.push(args)
+    }
+  }
+  recorder.recorderProcess = {
+    stderr: {
+      on(event, handler) {
+        if (event === 'data') {
+          this.dataHandler = handler
+        }
+      }
+    },
+    on(event, handler) {
+      if (event === 'close') {
+        this.closeHandler = handler
+      }
+    }
+  }
+  recorder.session = {
+    status: 'recording',
+    mode: 'full',
+    outputPath: 'C:/tmp/out.mp4',
+    recordingTime: '00:00:05',
+    selectionBounds: null,
+    selectionPreviewDataUrl: null,
+    selectedDisplayId: '1'
+  }
+  recorder.buildCaptureArgs = () => []
+
+  recorder.bindRecorderProcess({
+    outputPath: 'C:/tmp/out.mp4',
+    format: 'mp4'
+  })
+  const originalConsoleError = console.error
+  console.error = () => {}
+  try {
+    recorder.recorderProcess.stderr.dataHandler(Buffer.from('frame=3\nConversion failed\n'))
+    recorder.recorderProcess.closeHandler(255)
+  } finally {
+    console.error = originalConsoleError
+  }
+
+  const stoppedEvent = sentEvents.find(([channel]) => channel === 'screen-recorder-stopped')
+  assert.equal(stoppedEvent[1].success, false)
+  assert.match(stoppedEvent[1].error, /Conversion failed/)
 })
 
 test('buildCaptureArgs converts secondary full-screen bounds through Windows DIP-to-screen coordinates', () => {

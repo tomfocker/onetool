@@ -6,6 +6,7 @@ export type RecorderSessionStatus =
   | 'finishing'
 
 export type RecorderSessionMode = 'full' | 'area'
+export type CompletedRecordingOpenAction = 'file' | 'folder'
 
 export interface RecorderBounds {
   x: number
@@ -22,6 +23,17 @@ export interface RecorderSessionUpdate {
   selectionBounds: RecorderBounds | null
   selectionPreviewDataUrl: string | null
   selectedDisplayId: string | null
+}
+
+export interface CompletedRecordingTask {
+  id: string
+  outputPath: string
+  fileName: string
+  format: 'mp4' | 'gif'
+  mode: RecorderSessionMode
+  completedAt: string
+  duration: string
+  sizeBytes: number
 }
 
 export interface RecorderSessionUpdateInput {

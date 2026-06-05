@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, desktopCapturer, screen } from 'electron'
+import { app, BrowserWindow, dialog, desktopCapturer, screen, shell } from 'electron'
 import { spawn, ChildProcess, execSync } from 'child_process'
 import fs from 'fs'
 import path from 'path'
@@ -14,6 +14,8 @@ import {
   ensureRecorderOutputPath,
   resolveRecorderStartSession,
   toRecorderSessionUpdate,
+  type CompletedRecordingOpenAction,
+  type CompletedRecordingTask,
   type RecorderBounds,
   type RecorderSessionUpdate
 } from '../../shared/screenRecorderSession'
@@ -68,6 +70,7 @@ const SCREEN_PICKER_THUMBNAIL_SIZE = {
   height: 180
 }
 const BORDER_WINDOW_PADDING = 4
+const MAX_COMPLETED_RECORDING_TASKS = 20
 const AUTO_GENERATED_RECORDER_PATH_PATTERN = /OneTool-Recording-\d{8}-\d{6}-\d{3}\.(mp4|gif)$/i
 
 function formatRecorderTimestamp(date: Date) {
@@ -159,6 +162,7 @@ export class ScreenRecorderService {
   private borderWindow: BrowserWindow | null = null
   private session: RecorderSessionUpdate = { ...INITIAL_SESSION }
   private borderRefreshTimer: ReturnType<typeof setTimeout> | null = null
+  private completedTasks: CompletedRecordingTask[] = []
 
   constructor() { }
 
@@ -195,6 +199,44 @@ export class ScreenRecorderService {
       status,
       recordingTime: recordingTime ?? this.session.recordingTime
     })
+  }
+
+  private createCompletedTask(config: ScreenRecorderConfig): CompletedRecordingTask {
+    let sizeBytes = 0
+
+    try {
+      sizeBytes = fs.statSync(config.outputPath).size
+    } catch {
+      sizeBytes = 0
+    }
+
+    return {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      outputPath: config.outputPath,
+      fileName: path.basename(config.outputPath),
+      format: config.format === 'gif' ? 'gif' : 'mp4',
+      mode: this.session.mode,
+      completedAt: new Date().toISOString(),
+      duration: this.session.recordingTime,
+      sizeBytes
+    }
+  }
+
+  private recordCompletedTask(config: ScreenRecorderConfig) {
+    const task = this.createCompletedTask(config)
+    this.completedTasks = [task, ...this.completedTasks].slice(0, MAX_COMPLETED_RECORDING_TASKS)
+    return task
+  }
+
+  private getRecorderCloseFailureMessage(code: number | null, recentStderr: string[]) {
+    const latestError = recentStderr.at(-1)
+    if (latestError) {
+      return `录制保存失败: ${latestError}`
+    }
+
+    return typeof code === 'number'
+      ? `录制保存失败，进程退出码: ${code}`
+      : '录制保存失败，进程已退出'
   }
 
   getFfmpegPath(): string {
@@ -694,6 +736,11 @@ export class ScreenRecorderService {
         })
       }
 
+      const success = wasGracefulStop ? (code === 0 || code === 1 || code === null) : code === 0
+      if (success && wasRecording) {
+        this.recordCompletedTask(config)
+      }
+
       this.recorderProcess = null
       this.destroyIndicatorWindow()
       const nextOutputPath =
@@ -708,10 +755,10 @@ export class ScreenRecorderService {
 
       if (this.mainWindow && !this.mainWindow.isDestroyed()) {
         this.mainWindow.show()
-        const success = wasGracefulStop ? (code === 0 || code === 1 || code === null) : code === 0
         this.mainWindow.webContents.send('screen-recorder-stopped', {
           success,
-          outputPath: config.outputPath
+          outputPath: config.outputPath,
+          ...(success ? {} : { error: this.getRecorderCloseFailureMessage(code, recentStderr) })
         })
       }
     })
@@ -1026,6 +1073,41 @@ export class ScreenRecorderService {
     return {
       success: true,
       data: this.getSessionSnapshot()
+    }
+  }
+
+  getCompletedTasks(): IpcResponse<{ tasks: CompletedRecordingTask[] }> {
+    return {
+      success: true,
+      data: {
+        tasks: this.completedTasks.map((task) => ({ ...task }))
+      }
+    }
+  }
+
+  async openCompletedTask(
+    id: string,
+    action: CompletedRecordingOpenAction = 'file'
+  ): Promise<IpcResponse> {
+    try {
+      const task = this.completedTasks.find((candidate) => candidate.id === id)
+      if (!task) {
+        return { success: false, error: '没有找到这条录制任务' }
+      }
+
+      if (action === 'folder') {
+        shell.showItemInFolder(task.outputPath)
+        return { success: true }
+      }
+
+      const openError = await shell.openPath(task.outputPath)
+      if (openError) {
+        return { success: false, error: openError }
+      }
+
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: (error as Error).message }
     }
   }
 

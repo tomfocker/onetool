@@ -44,6 +44,15 @@ export function registerScreenRecorderIpc(getMainWindow: () => BrowserWindow | n
     return screenRecorderService.getSession()
   })
 
+  ipcMain.handle('screen-recorder-get-completed-tasks', async () => {
+    return screenRecorderService.getCompletedTasks()
+  })
+
+  ipcMain.handle('screen-recorder-open-completed-task', async (_event, payload) => {
+    const action = payload?.action === 'folder' ? 'folder' : 'file'
+    return screenRecorderService.openCompletedTask(String(payload?.id || ''), action)
+  })
+
   ipcMain.handle('screen-recorder-prepare-selection', async (_event, bounds) => {
     try {
       const validBounds = RecorderBoundsSchema.parse(bounds)

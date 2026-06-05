@@ -78,6 +78,10 @@ import type {
   RecorderSessionUpdate
 } from '../../../shared/ipc-schemas'
 import type {
+  CompletedRecordingOpenAction,
+  CompletedRecordingTask
+} from '../../../shared/screenRecorderSession'
+import type {
   RecorderSelectionSessionPayload,
   ScreenshotSelectionSessionPayload
 } from '../../../shared/selectionSession'
@@ -456,6 +460,11 @@ declare global {
         >
         getDefaultPath: (format?: 'mp4' | 'gif') => Promise<IpcResponse<string>>
         getSession: () => Promise<IpcResponse<RecorderSessionUpdate>>
+        getCompletedTasks: () => Promise<IpcResponse<{ tasks: CompletedRecordingTask[] }>>
+        openCompletedTask: (
+          id: string,
+          action: CompletedRecordingOpenAction
+        ) => Promise<IpcResponse>
         onToggleHotkey: (callback: () => void) => () => void
         selectOutput: (
           format?: 'mp4' | 'gif'
