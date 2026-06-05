@@ -128,8 +128,10 @@ src/
   renderer/    前端界面与工具页面
 resources/     应用资源与随包依赖
 website/       官网与 README 预览素材
-docs/          发布与分发文档
+docs/          发布、分发与 UI 规范文档
 ```
+
+工具页界面开发请参考 [OneTool 工具页 UI 规范](./docs/frontend-ui-guidelines.md)。
 
 ## 作者
 
