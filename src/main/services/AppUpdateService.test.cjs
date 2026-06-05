@@ -225,6 +225,50 @@ test('checkForUpdates records an error state when the updater throws', async () 
   assert.equal(service.getState().status, 'error')
 })
 
+test('checkForUpdates surfaces transient GitHub network failures as a compact user message', async () => {
+  const rawUpdaterError = [
+    'Cannot parse releases feed: Error: Unable to find latest version on GitHub',
+    '(https://github.com/tomfocker/onetool/releases/latest), please ensure a production release exists:',
+    'Error: net::ERR_CONNECTION_CLOSED at SimpleURLLoaderWrapper.<anonymous>',
+    'at GitHubProvider.getLatestTagName',
+    'XML: <?xml version="1.0" encoding="UTF-8"?><feed><entry><title>v0.3.4</title></entry></feed>'
+  ].join(' ')
+  const { AppUpdateService } = loadAppUpdateServiceModule({
+    electronModule: {
+      app: {
+        isPackaged: true,
+        getVersion: () => '0.3.3'
+      }
+    },
+    autoUpdater: {
+      autoDownload: false,
+      on(event, handler) {
+        this.listeners = this.listeners || {}
+        this.listeners[event] = handler
+      },
+      emit(event, ...args) {
+        this.listeners?.[event]?.(...args)
+      },
+      checkForUpdates: async () => {
+        throw new Error(rawUpdaterError)
+      },
+      downloadUpdate: async () => {},
+      quitAndInstall: async () => {}
+    }
+  })
+  const service = new AppUpdateService({
+    platform: 'win32',
+    isDevelopment: false
+  })
+
+  const result = await service.checkForUpdates()
+
+  assert.equal(result.success, false)
+  assert.equal(result.error, '网络连接不稳定，请稍后重试')
+  assert.equal(service.getState().status, 'error')
+  assert.equal(service.getState().errorMessage, '网络连接不稳定，请稍后重试')
+})
+
 test('failed re-check preserves available update metadata', async () => {
   const { AppUpdateService, autoUpdater } = loadAppUpdateServiceModule({
     electronModule: {

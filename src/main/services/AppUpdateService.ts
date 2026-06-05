@@ -41,6 +41,24 @@ type AppUpdateServiceDependencies = {
 }
 
 const UNSUPPORTED_AUTO_UPDATE_RUNTIME_ERROR = '当前运行环境不支持自动更新'
+const TRANSIENT_UPDATE_NETWORK_ERROR_MESSAGE = '网络连接不稳定，请稍后重试'
+const RELEASE_FEED_PARSE_ERROR_MESSAGE = '更新信息解析失败，请稍后重试'
+
+const TRANSIENT_UPDATE_NETWORK_ERROR_PATTERNS = [
+  /net::ERR_/i,
+  /ERR_CONNECTION_/i,
+  /ERR_INTERNET_DISCONNECTED/i,
+  /ERR_NAME_NOT_RESOLVED/i,
+  /ECONNRESET/i,
+  /ECONNREFUSED/i,
+  /ETIMEDOUT/i,
+  /ENOTFOUND/i,
+  /EAI_AGAIN/i,
+  /socket hang up/i,
+  /SSL\/TLS connection failed/i,
+  /failed to receive handshake/i,
+  /The SSL connection could not be established/i
+]
 
 export function isSupportedAutoUpdateRuntime(
   platform: NodeJS.Platform,
@@ -148,7 +166,7 @@ function createErrorStateFromCurrentState(state: UpdateState, errorMessage: stri
   }
 }
 
-function getErrorMessage(error: unknown, fallbackMessage = '更新检查失败'): string {
+function getRawErrorMessage(error: unknown, fallbackMessage: string): string {
   if (error instanceof Error && error.message.trim()) {
     return error.message
   }
@@ -165,6 +183,28 @@ function getErrorMessage(error: unknown, fallbackMessage = '更新检查失败')
   }
 
   return fallbackMessage
+}
+
+function isTransientUpdateNetworkError(message: string): boolean {
+  return TRANSIENT_UPDATE_NETWORK_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+}
+
+function isReleaseFeedParseError(message: string): boolean {
+  return /Cannot parse releases feed/i.test(message) || /ERR_UPDATER_INVALID_RELEASE_FEED/i.test(message)
+}
+
+function getErrorMessage(error: unknown, fallbackMessage = '更新检查失败'): string {
+  const rawMessage = getRawErrorMessage(error, fallbackMessage)
+
+  if (isTransientUpdateNetworkError(rawMessage)) {
+    return TRANSIENT_UPDATE_NETWORK_ERROR_MESSAGE
+  }
+
+  if (isReleaseFeedParseError(rawMessage)) {
+    return RELEASE_FEED_PARSE_ERROR_MESSAGE
+  }
+
+  return rawMessage
 }
 
 function createNotAvailableState(currentVersion: string): UpdateState {
