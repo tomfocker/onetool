@@ -1440,7 +1440,8 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
             ATTR_TYPE_ATTRIBUTE_LIST => attribute_list_present = true,
             ATTR_TYPE_FILE_NAME if !non_resident => {
                 if let Some(size) = parse_file_name_attribute(record, offset, record_length)? {
-                    file_name_size = Some(size);
+                    file_name_size =
+                        Some(file_name_size.map_or(size, |existing| existing.max(size)));
                 }
             }
             ATTR_TYPE_DATA if name_length == 0 => {
@@ -1457,14 +1458,19 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
         offset += record_length;
     }
 
-    unnamed_data_size.or(file_name_size).ok_or_else(|| {
-        let detail = if attribute_list_present {
-            "file record size lives outside the base record"
-        } else {
-            "file record did not expose a usable size attribute"
-        };
-        io::Error::other(detail)
-    })
+    match (unnamed_data_size, file_name_size) {
+        (Some(data_size), Some(file_name_size)) => Ok(data_size.max(file_name_size)),
+        (Some(data_size), None) => Ok(data_size),
+        (None, Some(file_name_size)) => Ok(file_name_size),
+        (None, None) => {
+            let detail = if attribute_list_present {
+                "file record size lives outside the base record"
+            } else {
+                "file record did not expose a usable size attribute"
+            };
+            Err(io::Error::other(detail))
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -1786,6 +1792,51 @@ mod tests {
         assert_eq!(
             parse_file_record_size(&record).expect("file record size"),
             1234
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_uses_larger_file_name_size_when_data_extent_is_partial() {
+        let mut record = vec![0u8; 256];
+        record[..4].copy_from_slice(b"FILE");
+        record[20..22].copy_from_slice(&(48u16).to_le_bytes());
+
+        let attribute_list_offset = 48usize;
+        let attribute_list_length = 24usize;
+        record[attribute_list_offset..attribute_list_offset + 4]
+            .copy_from_slice(&(0x20u32).to_le_bytes());
+        record[attribute_list_offset + 4..attribute_list_offset + 8]
+            .copy_from_slice(&(attribute_list_length as u32).to_le_bytes());
+
+        let file_name_offset = attribute_list_offset + attribute_list_length;
+        let file_name_length = 88usize;
+        record[file_name_offset..file_name_offset + 4].copy_from_slice(&(0x30u32).to_le_bytes());
+        record[file_name_offset + 4..file_name_offset + 8]
+            .copy_from_slice(&(file_name_length as u32).to_le_bytes());
+        record[file_name_offset + 8] = 0;
+        record[file_name_offset + 16..file_name_offset + 20]
+            .copy_from_slice(&(64u32).to_le_bytes());
+        record[file_name_offset + 20..file_name_offset + 22]
+            .copy_from_slice(&(24u16).to_le_bytes());
+        let file_name_value_start = file_name_offset + 24;
+        record[file_name_value_start + 48..file_name_value_start + 56]
+            .copy_from_slice(&(200i64).to_le_bytes());
+
+        let data_offset = file_name_offset + file_name_length;
+        let data_length = 64usize;
+        record[data_offset..data_offset + 4].copy_from_slice(&(0x80u32).to_le_bytes());
+        record[data_offset + 4..data_offset + 8]
+            .copy_from_slice(&(data_length as u32).to_le_bytes());
+        record[data_offset + 8] = 1;
+        record[data_offset + 48..data_offset + 56].copy_from_slice(&(40i64).to_le_bytes());
+
+        let end_offset = data_offset + data_length;
+        record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+
+        assert_eq!(
+            parse_file_record_size(&record).expect("file record size"),
+            200
         );
     }
 
