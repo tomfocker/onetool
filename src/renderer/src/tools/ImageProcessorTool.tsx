@@ -3,9 +3,24 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import {
+  resolveImageOutputLayout,
+  sanitizePixelInput,
+  type ImageOutputLayout,
+  type CustomResizeMode,
+  type ImageDimensionMethod
+} from './imageProcessorModel'
+import { createImageProcessorZip } from './imageProcessorArchive'
+import {
+  createIcoBlobFromPngBlob,
+  encodeWithTargetQuality,
+  getTargetWeightBytes,
+  isQualityAdjustableFormat,
+  resolveIcoCanvasSize,
+  type TargetWeightUnit
+} from './imageProcessorEncoding'
 
 type CompressMethod = 'quality' | 'limitWeight'
-type DimensionMethod = 'original' | 'limit'
 type ConvertFormat = 'default' | 'image/jpeg' | 'image/png' | 'image/webp' | 'image/vnd.microsoft.icon'
 
 interface ProcessedImage {
@@ -74,17 +89,123 @@ const animationStyles = `
   .animate-slide-in-right { animation: slide-in-right 0.3s ease-out forwards; will-change: opacity, transform; }
 `
 
+const TARGET_RESIZE_ATTEMPTS = 8
+const MIN_TARGET_SCALE = 0.35
+
+function createCanvasBlob(canvas: HTMLCanvasElement, format: string, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error('压缩失败'))
+      }
+    }, format, quality)
+  })
+}
+
+function drawImageToCanvas(
+  img: HTMLImageElement,
+  layout: ImageOutputLayout,
+  outputFormat: string,
+  width: number,
+  height: number
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas')
+  const ctx = canvas.getContext('2d')
+
+  if (!ctx) {
+    throw new Error('无法获取 canvas 上下文')
+  }
+
+  const scaleX = width / layout.canvasWidth
+  const scaleY = height / layout.canvasHeight
+
+  canvas.width = width
+  canvas.height = height
+
+  if (outputFormat === 'image/jpeg') {
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+  }
+
+  ctx.drawImage(
+    img,
+    layout.sourceX,
+    layout.sourceY,
+    layout.sourceWidth,
+    layout.sourceHeight,
+    Math.round(layout.drawX * scaleX),
+    Math.round(layout.drawY * scaleY),
+    Math.max(1, Math.round(layout.drawWidth * scaleX)),
+    Math.max(1, Math.round(layout.drawHeight * scaleY))
+  )
+
+  return canvas
+}
+
+async function encodeCanvasOutput(
+  canvas: HTMLCanvasElement,
+  outputFormat: string,
+  initialQuality: number,
+  targetBytes: number | null
+): Promise<{ blob: Blob; reachedTarget: boolean }> {
+  if (targetBytes && isQualityAdjustableFormat(outputFormat)) {
+    const result = await encodeWithTargetQuality(
+      (qualityValue) => createCanvasBlob(canvas, outputFormat, qualityValue),
+      {
+        initialQuality,
+        targetBytes,
+        minQuality: 0.1,
+        attempts: 8
+      }
+    )
+
+    return { blob: result.blob, reachedTarget: result.reachedTarget }
+  }
+
+  const blob = await createCanvasBlob(canvas, outputFormat, outputFormat === 'image/png' ? 1 : initialQuality)
+  return { blob, reachedTarget: targetBytes ? blob.size <= targetBytes : true }
+}
+
+async function encodeIcoCanvasOutput(
+  canvas: HTMLCanvasElement,
+  width: number,
+  height: number,
+  targetBytes: number | null
+): Promise<{ blob: Blob; reachedTarget: boolean }> {
+  const pngBlob = await createCanvasBlob(canvas, 'image/png', 1)
+  const icoBlob = await createIcoBlobFromPngBlob(pngBlob, width, height)
+
+  return { blob: icoBlob, reachedTarget: targetBytes ? icoBlob.size <= targetBytes : true }
+}
+
+function getNextTargetCanvasSize(width: number, height: number, currentBytes: number, targetBytes: number) {
+  const rawScale = Math.sqrt(targetBytes / Math.max(1, currentBytes)) * 0.92
+  const scale = Math.max(MIN_TARGET_SCALE, Math.min(0.9, rawScale))
+
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale))
+  }
+}
+
 export const ImageProcessorTool: React.FC = () => {
   const [compressMethod, setCompressMethod] = useState<CompressMethod>('quality')
-  const [dimensionMethod, setDimensionMethod] = useState<DimensionMethod>('original')
+  const [dimensionMethod, setDimensionMethod] = useState<ImageDimensionMethod>('original')
+  const [customResizeMode, setCustomResizeMode] = useState<CustomResizeMode>('fit')
   const [convertFormat, setConvertFormat] = useState<ConvertFormat>('default')
   const [quality, setQuality] = useState(80)
   const [limitDimensions, setLimitDimensions] = useState(1200)
+  const [customWidth, setCustomWidth] = useState(800)
+  const [customHeight, setCustomHeight] = useState(800)
   const [limitWeight, setLimitWeight] = useState(2)
-  const [limitWeightUnit, setLimitWeightUnit] = useState<'MB' | 'KB'>('MB')
+  const [limitWeightUnit, setLimitWeightUnit] = useState<TargetWeightUnit>('MB')
   const [currentSubpage, setCurrentSubpage] = useState<'settings' | 'output'>('settings')
   const [processedImages, setProcessedImages] = useState<ProcessedImage[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isPackaging, setIsPackaging] = useState(false)
+  const [downloadError, setDownloadError] = useState('')
   const [processingProgress, setProcessingProgress] = useState(0)
   const [processingText, setProcessingText] = useState('')
   const [isDragging, setIsDragging] = useState(false)
@@ -137,47 +258,61 @@ export const ImageProcessorTool: React.FC = () => {
         const img = new Image()
         img.onload = async () => {
           try {
-            const canvas = document.createElement('canvas')
-            const ctx = canvas.getContext('2d')
-            if (!ctx) {
-              reject(new Error('无法获取 canvas 上下文'))
-              return
-            }
+            const layout = resolveImageOutputLayout(
+              { width: img.width, height: img.height },
+              {
+                method: dimensionMethod,
+                limitPixels: limitDimensions,
+                customWidth,
+                customHeight,
+                customResizeMode
+              }
+            )
 
-            let finalWidth = img.width
-            let finalHeight = img.height
-
-            if (dimensionMethod === 'limit') {
-              const adjusted = getAdjustedDimensions(img, limitDimensions)
-              finalWidth = adjusted.width
-              finalHeight = adjusted.height
-            }
-
-            canvas.width = finalWidth
-            canvas.height = finalHeight
-            ctx.drawImage(img, 0, 0, finalWidth, finalHeight)
-
-            let outputFormat: string
+            let selectedOutputFormat: string
             if (convertFormat === 'default') {
-              outputFormat = file.type
-              if (!['image/jpeg', 'image/png', 'image/webp'].includes(outputFormat)) {
-                outputFormat = 'image/png'
+              selectedOutputFormat = file.type
+              if (!['image/jpeg', 'image/png', 'image/webp'].includes(selectedOutputFormat)) {
+                selectedOutputFormat = 'image/png'
               }
             } else {
-              outputFormat = convertFormat
+              selectedOutputFormat = convertFormat
             }
 
-            let finalQuality = quality / 100
+            const isIcoOutput = selectedOutputFormat === 'image/vnd.microsoft.icon'
+            const canvasOutputFormat = isIcoOutput ? 'image/png' : selectedOutputFormat
+            const finalOutputFormat = isIcoOutput ? 'image/vnd.microsoft.icon' : canvasOutputFormat
+            const initialQuality = quality / 100
+            const targetBytes = compressMethod === 'limitWeight'
+              ? getTargetWeightBytes(limitWeight, limitWeightUnit)
+              : null
+            const initialCanvasSize = isIcoOutput
+              ? resolveIcoCanvasSize(layout.canvasWidth, layout.canvasHeight)
+              : { width: layout.canvasWidth, height: layout.canvasHeight }
+            let finalWidth = initialCanvasSize.width
+            let finalHeight = initialCanvasSize.height
             let blob: Blob | null = null
 
-            if (outputFormat === 'image/vnd.microsoft.icon') {
-              outputFormat = 'image/png'
-              finalQuality = 1
-            }
+            for (let attempt = 0; attempt < (targetBytes ? TARGET_RESIZE_ATTEMPTS : 1); attempt++) {
+              const canvas = drawImageToCanvas(img, layout, canvasOutputFormat, finalWidth, finalHeight)
+              const encoded = isIcoOutput
+                ? await encodeIcoCanvasOutput(canvas, finalWidth, finalHeight, targetBytes)
+                : await encodeCanvasOutput(canvas, canvasOutputFormat, initialQuality, targetBytes)
 
-            blob = await new Promise((resolveBlob) => {
-              canvas.toBlob(resolveBlob, outputFormat, finalQuality)
-            })
+              blob = encoded.blob
+
+              if (!targetBytes || encoded.reachedTarget || finalWidth <= 1 || finalHeight <= 1) {
+                break
+              }
+
+              const nextSize = getNextTargetCanvasSize(finalWidth, finalHeight, blob.size, targetBytes)
+              if (nextSize.width === finalWidth && nextSize.height === finalHeight) {
+                break
+              }
+
+              finalWidth = nextSize.width
+              finalHeight = nextSize.height
+            }
 
             if (!blob) {
               reject(new Error('压缩失败'))
@@ -206,8 +341,8 @@ export const ImageProcessorTool: React.FC = () => {
 
             const outputUrl = URL.createObjectURL(blob)
             const thumbnailUrl = URL.createObjectURL(thumbnailBlob)
-            const outputExt = getFileExtension(outputFormat)
-            const outputFileName = updateFileExtension(file.name, outputExt, outputFormat)
+            const outputExt = getFileExtension(finalOutputFormat)
+            const outputFileName = updateFileExtension(file.name, outputExt, finalOutputFormat)
 
             resolve({
               id: Math.random().toString(36).substring(2, 10),
@@ -231,7 +366,18 @@ export const ImageProcessorTool: React.FC = () => {
       reader.onerror = () => reject(new Error('无法读取文件'))
       reader.readAsDataURL(file)
     })
-  }, [quality, dimensionMethod, limitDimensions, convertFormat])
+  }, [
+    quality,
+    compressMethod,
+    limitWeight,
+    limitWeightUnit,
+    dimensionMethod,
+    limitDimensions,
+    customWidth,
+    customHeight,
+    customResizeMode,
+    convertFormat
+  ])
 
   const handleFiles = useCallback(async (files: FileList | File[]) => {
     const fileArray = Array.from(files)
@@ -306,11 +452,32 @@ export const ImageProcessorTool: React.FC = () => {
     a.click()
   }, [])
 
-  const handleDownloadAll = useCallback(() => {
-    processedImages.forEach(image => {
-      handleDownloadImage(image)
-    })
-  }, [processedImages, handleDownloadImage])
+  const handleDownloadAll = useCallback(async () => {
+    if (processedImages.length === 0 || isPackaging) return
+
+    setIsPackaging(true)
+    setDownloadError('')
+
+    try {
+      const zipBlob = await createImageProcessorZip(
+        processedImages.map((image) => ({
+          fileName: image.fileName,
+          blob: image.processedBlob
+        }))
+      )
+      const zipUrl = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      const dateStamp = new Date().toISOString().slice(0, 10)
+      a.href = zipUrl
+      a.download = `onetool-images-${dateStamp}.zip`
+      a.click()
+      window.setTimeout(() => URL.revokeObjectURL(zipUrl), 1000)
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : '打包下载失败')
+    } finally {
+      setIsPackaging(false)
+    }
+  }, [processedImages, isPackaging])
 
   const handleDeleteAll = useCallback(() => {
     processedImages.forEach(image => {
@@ -566,14 +733,15 @@ export const ImageProcessorTool: React.FC = () => {
               <CardTitle className="text-sm">尺寸设置</CardTitle>
             </CardHeader>
             <CardContent className="p-4 pt-0">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-2">
                 {[
                   { value: 'original', label: '原始尺寸', desc: '不修改宽高' },
-                  { value: 'limit', label: '限制尺寸', desc: '限制最大宽高' }
+                  { value: 'limit', label: '限制尺寸', desc: '限制最大宽高' },
+                  { value: 'custom', label: '自定义尺寸', desc: '指定宽高' }
                 ].map((method) => (
                   <button
                     key={method.value}
-                    onClick={() => setDimensionMethod(method.value as DimensionMethod)}
+                    onClick={() => setDimensionMethod(method.value as ImageDimensionMethod)}
                     className={cn(
                       "p-3 rounded-lg border transition-all duration-150 text-left",
                       dimensionMethod === method.value
@@ -614,6 +782,79 @@ export const ImageProcessorTool: React.FC = () => {
                     className="pr-10 h-8 text-xs"
                   />
                   <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">px</span>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {dimensionMethod === 'custom' && (
+            <Card className="animate-scale-in">
+              <CardHeader className="p-4 pb-2">
+                <CardTitle className="text-sm">自定义尺寸</CardTitle>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">宽度</span>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        value={customWidth}
+                        onChange={(e) => setCustomWidth(sanitizePixelInput(e.target.value))}
+                        step={50}
+                        min={1}
+                        max={30000}
+                        className="pr-10 h-8 text-xs"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">px</span>
+                    </div>
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">高度</span>
+                    <div className="relative">
+                      <Input
+                        type="number"
+                        value={customHeight}
+                        onChange={(e) => setCustomHeight(sanitizePixelInput(e.target.value))}
+                        step={50}
+                        min={1}
+                        max={30000}
+                        className="pr-10 h-8 text-xs"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground text-xs">px</span>
+                    </div>
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: 'fit', label: '等比适配', desc: '居中留白' },
+                    { value: 'crop', label: '等比裁切', desc: '裁掉多余' },
+                    { value: 'stretch', label: '强制拉伸', desc: '铺满画布' }
+                  ].map((mode) => (
+                    <button
+                      key={mode.value}
+                      onClick={() => setCustomResizeMode(mode.value as CustomResizeMode)}
+                      className={cn(
+                        "p-2.5 rounded-lg border transition-all duration-150 text-left",
+                        customResizeMode === mode.value
+                          ? "border-primary bg-primary/5"
+                          : "border-border/60 hover:border-primary/40 hover:bg-muted/30"
+                      )}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs font-medium">{mode.label}</span>
+                        <div className={cn(
+                          "w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-colors",
+                          customResizeMode === mode.value ? "border-primary" : "border-muted-foreground/50"
+                        )}>
+                          {customResizeMode === mode.value && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">{mode.desc}</p>
+                    </button>
+                  ))}
                 </div>
               </CardContent>
             </Card>
@@ -677,17 +918,22 @@ export const ImageProcessorTool: React.FC = () => {
                     </svg>
                     清空
                   </Button>
-                  <Button size="sm" onClick={handleDownloadAll} className="h-6 px-2 text-xs gap-1">
+                  <Button size="sm" onClick={() => void handleDownloadAll()} disabled={isPackaging} className="h-6 px-2 text-xs gap-1">
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                     </svg>
-                    全部下载
+                    {isPackaging ? '打包中' : '打包下载'}
                   </Button>
                 </div>
               )}
             </div>
           </CardHeader>
           <CardContent className="p-3 pt-0">
+            {downloadError && (
+              <p className="mb-2 rounded-md bg-red-50 px-2 py-1 text-[11px] text-red-600 dark:bg-red-950/30 dark:text-red-300">
+                {downloadError}
+              </p>
+            )}
             {processedImages.length === 0 ? (
               <div className="text-center py-6 animate-scale-in">
                 <div className="w-10 h-10 mx-auto mb-2 rounded-lg bg-muted flex items-center justify-center">
