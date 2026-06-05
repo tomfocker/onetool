@@ -3,7 +3,8 @@ import {
   Package, Terminal, MousePointer, Sparkles, Clock, RefreshCw,
   Globe, Image, Video, Clipboard, Palette, QrCode, Settings,
   Zap, ArrowRight, LayoutGrid, History, Info, Languages, Camera,
-  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText, Wrench, Brain
+  Inbox, Radar, Search, Sun, Moon, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText, Wrench, Brain,
+  Code, HardDrive, Download
 } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -22,11 +23,15 @@ interface DashboardProps {
 }
 
 const iconMap: Record<string, any> = {
-  Package, Terminal, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode, Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2, CalendarDays, FileText, Wrench, Brain
+  Package, Terminal, MousePointer, Image, Globe, Clock, Settings, Video, Clipboard, Palette, QrCode,
+  Languages, Camera, Inbox, Radar, ShieldCheck, TerminalSquare, CloudDownload, PanelTop, Table2,
+  CalendarDays, FileText, Wrench, Brain, Code, HardDrive, Download, LayoutGrid
 }
 
 const toolGradientMap: Record<string, string> = {
   'quick-installer': 'from-blue-500 to-indigo-500',
+  'dev-environment-manager': 'from-sky-500 to-indigo-600',
+  'space-cleanup': 'from-zinc-600 to-slate-800',
   'rename-tool': 'from-violet-500 to-purple-600',
   'autoclicker': 'from-amber-500 to-orange-600',
   'image-processor': 'from-emerald-500 to-teal-600',
@@ -36,18 +41,22 @@ const toolGradientMap: Record<string, string> = {
   'screen-recorder': 'from-red-500 to-rose-600',
   'clipboard-manager': 'from-yellow-500 to-amber-600',
   'color-picker': 'from-pink-500 to-fuchsia-600',
-  'qr-generator': 'from-green-500 to-emerald-600',
   'screenshot-tool': 'from-blue-400 to-cyan-500',
   'file-dropover': 'from-indigo-400 to-purple-500',
+  'download-organizer': 'from-amber-500 to-yellow-600',
   'calendar': 'from-blue-500 to-sky-600',
   'memory-diary': 'from-emerald-500 to-teal-600',
   'model-download': 'from-sky-500 to-blue-700',
   'table-ocr': 'from-emerald-500 to-lime-600',
   'pdf-tool': 'from-blue-500 to-cyan-600',
   'translator': 'from-purple-500 to-pink-500',
+  'qrcode-tool': 'from-green-500 to-emerald-600',
   'network-radar': 'from-blue-600 to-cyan-600',
   'windows-manager': 'from-slate-600 to-zinc-800',
   'local-proxy-manager': 'from-emerald-500 to-teal-600',
+  'bilibili-downloader': 'from-rose-500 to-pink-600',
+  'server-monitor': 'from-cyan-500 to-blue-700',
+  'taskbar-appearance': 'from-slate-500 to-blue-600',
   'troubleshooting': 'from-rose-500 to-red-600',
   'wsl-manager': 'from-cyan-500 to-indigo-600'
 }
