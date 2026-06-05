@@ -6,7 +6,7 @@
 
 - 本地可通过统一脚本产出安装包和便携版
 - GitHub Actions 可手动触发打包
-- 推送 `v*` 标签时会先自动生成草稿 Release，再上传构建产物
+- 推送 `v*` 标签时会自动生成正式 Release，并上传构建产物
 - 如果配置了签名证书，`electron-builder` 会在同一条链路里自动签名
 
 ## 本地构建
@@ -49,9 +49,9 @@ npm run release:win
 2. 执行 `npm run test`
 3. 执行 `npm run release:win`
 4. 上传构建工件
-5. 创建 GitHub 草稿 Release 并附带安装包、便携版和更新元数据
+5. 使用对应的 `docs/distribution/release-notes-<tag>.md` 创建 GitHub 正式 Release，并附带安装包、便携版和更新元数据
 
-草稿 Release 需要在 GitHub 上手动或自动发布为正式 Release 之后，Windows 运行时更新器才会把它当作可见版本。
+Release 工作流成功后，Windows 运行时更新器会把该正式 Release 当作可见版本。
 
 当前仓库已经集成 Windows 运行时更新客户端，行为由设置控制：
 
@@ -87,16 +87,16 @@ npm run release:win
 
 首个正式 Windows 版本建议按下面顺序执行：
 
-1. 确认 [package.json](D:/code/onetool/package.json:1) 里的 `version` 已经是目标版本，例如 `0.3.2`
+1. 确认 [package.json](D:/code/onetool/package.json:1) 里的 `version` 已经是目标版本，例如 `0.3.4`
 2. 执行 `npm run test`
 3. 执行 `npm run build`
-4. 执行 `npm run release:win`，或手动触发 GitHub Actions `Release` 工作流
+4. 执行 `npm run release:win`，或推送版本标签触发 GitHub Actions `Release` 工作流
 5. 分别启动一次 `setup.exe` 和 `portable.exe` 做冒烟验证
 6. 核对自动更新行为：Windows 安装版可检查更新，便携版不触发自动更新
 7. 使用安装版选择一个非默认目录做启动验证，例如 `D:\Apps\One Tool 测试`
-8. 创建并推送标签，例如 `git tag v0.3.2 && git push origin v0.3.2`
-9. 等待 GitHub 自动生成 draft Release，检查产物与说明
-10. 手动发布 draft Release 为正式 Release，之后运行时更新器才会把它视为可见版本
+8. 创建并推送标签，例如 `git tag v0.3.4 && git push origin v0.3.4`
+9. 等待 GitHub Actions 完成打包、上传产物并发布正式 Release
+10. 打开发布页检查产物、更新说明和 `latest.yml`
 
 当前 `v0.3.x` 建议额外确认：
 

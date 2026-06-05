@@ -63,12 +63,13 @@ jobs:
             release_new/latest*.yml
           if-no-files-found: error
 
-      - name: Publish draft release
+      - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
-          generate_release_notes: true
+          draft: false
+          prerelease: false
+          body_path: docs/distribution/release-notes-${{ github.ref_name }}.md
           fail_on_unmatched_files: true
           files: |
             release_new/*.exe

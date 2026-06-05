@@ -2,9 +2,9 @@
 
 Windows 本地高频小工具箱。
 
-`v0.3.2` 准备发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
+`v0.3.4` 已准备发布，当前以 Windows 桌面使用场景为主，提供安装版与便携版下载。
 
-![Version](https://img.shields.io/badge/version-v0.3.2-2563eb.svg)
+![Version](https://img.shields.io/badge/version-v0.3.4-2563eb.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-0f172a.svg)
 ![License](https://img.shields.io/badge/license-MIT-16a34a.svg)
 
@@ -54,15 +54,15 @@ Windows 本地高频小工具箱。
 
 当前发布页提供两种 Windows 包：
 
-- 安装版：`onetool-0.3.2-win-x64-setup.exe`
-- 便携版：`onetool-0.3.2-win-x64-portable.exe`
+- 安装版：`onetool-0.3.4-win-x64-setup.exe`
+- 便携版：`onetool-0.3.4-win-x64-portable.exe`
 
 选择建议：
 
 - 长期使用，优先安装版
 - 临时试用、随身携带或不想安装，使用便携版
 
-当前 `v0.3.2` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
+当前 `v0.3.4` 为未签名构建，Windows 可能出现 `SmartScreen` 或“未知发布者”提示。
 
 更新行为：
 
@@ -71,12 +71,12 @@ Windows 本地高频小工具箱。
 
 ## 当前版本定位
 
-`v0.3.2` 在 `v0.3.1` 的基础能力之上，当前发布重点是：
+`v0.3.4` 在 `v0.3.3` 的基础能力之上，当前发布重点是：
 
-- 新增和完善代理医生，统一诊断 Windows 系统代理、WinHTTP、命令行环境变量、Git、npm 与进程代理状态
-- 新增代理可用性测试，区分端口连通和标准代理请求成功，减少“端口能连但不能当系统代理”的误判
-- 新增代理启动器，可选择单个 `.exe` 或 `.com` 程序并为新进程注入代理环境变量
-- 优化代理医生状态灯和诊断表格布局，让冲突项、当前配置和操作按钮更容易扫读
+- 完善图片处理：支持自定义尺寸、按比例裁切、目标体积压缩、ICO 输出纠偏和批量打包下载
+- 优化屏幕录制：新增录制完成任务入口，整理输出设置和主操作区，让录制流程更易扫读
+- 沉淀工具页 UI 规范，方便后续功能保持一致的布局、按钮和信息密度
+- 补全仪表盘和侧栏图标映射，减少工具入口的默认图标和视觉漂移
 
 暂不承诺：
 
