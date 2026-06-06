@@ -373,6 +373,20 @@ export default function SpaceCleanupTool() {
     setTreeMenu(null)
   }
 
+  const handleOpenDistributionPath = React.useCallback(async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    path: string
+  ) => {
+    event.preventDefault()
+    event.stopPropagation()
+    selectPath(path)
+
+    const result = await window.electron.spaceCleanup.openPath(path)
+    if (!result.success) {
+      showNotification({ type: 'error', message: result.error || '无法打开位置' })
+    }
+  }, [selectPath, showNotification])
+
   const handleAiCleanupSuggestion = async () => {
     if (!session.rootPath) {
       showNotification({ type: 'error', message: '请先完成一次空间扫描' })
@@ -729,15 +743,17 @@ export default function SpaceCleanupTool() {
                   {viewModel.distributionSegments.length > 0 ? (
                     viewModel.distributionSegments.map((segment) => {
                       const isSelected = selectedPath === segment.path
+                      const canOpenDistributionDirectory = segment.canDrill && segment.path !== '__other__'
                       return (
                         <button
                           key={segment.path}
-                          onClick={segment.canDrill && segment.path !== '__other__' ? () => selectPath(segment.path) : undefined}
+                          onClick={canOpenDistributionDirectory ? () => selectPath(segment.path) : undefined}
+                          onContextMenu={canOpenDistributionDirectory ? (event) => void handleOpenDistributionPath(event, segment.path) : undefined}
                           className={`w-full rounded-2xl border px-4 py-3 text-left transition-colors ${
                             isSelected
                               ? 'border-indigo-500 bg-indigo-500/5'
                               : 'border-zinc-200 hover:border-indigo-500/40 hover:bg-indigo-500/5 dark:border-zinc-800'
-                          } ${segment.canDrill && segment.path !== '__other__' ? '' : 'cursor-default'}`}
+                          } ${canOpenDistributionDirectory ? '' : 'cursor-default'}`}
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">
