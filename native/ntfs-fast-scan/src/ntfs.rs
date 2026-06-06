@@ -641,6 +641,30 @@ struct FileRecordQueryBuffer {
 }
 
 #[cfg(windows)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FileRecordSize {
+    size_bytes: Option<u64>,
+    needs_metadata_fallback: bool,
+}
+
+#[cfg(windows)]
+impl FileRecordSize {
+    fn from_record(size_bytes: u64, attribute_list_present: bool) -> Self {
+        Self {
+            size_bytes: Some(size_bytes),
+            needs_metadata_fallback: attribute_list_present,
+        }
+    }
+
+    fn metadata_fallback() -> Self {
+        Self {
+            size_bytes: None,
+            needs_metadata_fallback: true,
+        }
+    }
+}
+
+#[cfg(windows)]
 impl FileRecordQueryBuffer {
     fn new() -> Self {
         Self {
@@ -708,7 +732,20 @@ where
                 volume_handle.raw,
                 record.file_reference_number,
                 &mut file_record_buffer,
-            ),
+            )
+            .and_then(|resolved| {
+                if !resolved.needs_metadata_fallback {
+                    return resolved.size_bytes;
+                }
+
+                resolve_file_size_from_metadata_fallback(
+                    &validated_root.root_path,
+                    root_reference,
+                    &progress_builder.records,
+                    &record,
+                )
+                .or(resolved.size_bytes)
+            }),
             EntryKind::Directory => Some(0),
         };
         progress_builder.observe(&record, size_bytes);
@@ -1312,8 +1349,22 @@ fn resolve_file_size(
     volume_handle: HANDLE,
     file_reference_number: u64,
     file_record_buffer: &mut FileRecordQueryBuffer,
-) -> Option<u64> {
+) -> Option<FileRecordSize> {
     query_file_size_from_file_record(volume_handle, file_reference_number, file_record_buffer).ok()
+}
+
+#[cfg(windows)]
+fn resolve_file_size_from_metadata_fallback(
+    root_path: &str,
+    root_reference: FileReference,
+    records: &HashMap<FileReference, RawRecordDescriptor>,
+    record: &RawRecord,
+) -> Option<u64> {
+    let chain = chain_to_root(record.id, root_reference, records)?;
+    let path = build_path_from_chain(root_path, &chain, records);
+    std::fs::metadata(Path::new(&path))
+        .ok()
+        .map(|metadata| metadata.len())
 }
 
 #[cfg(windows)]
@@ -1321,7 +1372,7 @@ fn query_file_size_from_file_record(
     volume_handle: HANDLE,
     file_reference_number: u64,
     file_record_buffer: &mut FileRecordQueryBuffer,
-) -> io::Result<u64> {
+) -> io::Result<FileRecordSize> {
     let requested_segment_number = file_record_segment_number(file_reference_number);
     let mut input = NTFS_FILE_RECORD_INPUT_BUFFER {
         FileReferenceNumber: requested_segment_number as i64,
@@ -1357,7 +1408,10 @@ fn query_file_size_from_file_record(
 }
 
 #[cfg(windows)]
-fn parse_file_record_output(requested_file_reference_number: u64, bytes: &[u8]) -> io::Result<u64> {
+fn parse_file_record_output(
+    requested_file_reference_number: u64,
+    bytes: &[u8],
+) -> io::Result<FileRecordSize> {
     const OUTPUT_HEADER_SIZE: usize = size_of::<i64>() + size_of::<u32>();
     if bytes.len() < OUTPUT_HEADER_SIZE {
         return Err(io::Error::other("truncated NTFS file record output"));
@@ -1389,7 +1443,7 @@ fn parse_file_record_output(requested_file_reference_number: u64, bytes: &[u8]) 
 }
 
 #[cfg(windows)]
-fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
+fn parse_file_record_size(record: &[u8]) -> io::Result<FileRecordSize> {
     const ATTR_TYPE_ATTRIBUTE_LIST: u32 = 0x20;
     const ATTR_TYPE_FILE_NAME: u32 = 0x30;
     const ATTR_TYPE_DATA: u32 = 0x80;
@@ -1459,16 +1513,26 @@ fn parse_file_record_size(record: &[u8]) -> io::Result<u64> {
     }
 
     match (unnamed_data_size, file_name_size) {
-        (Some(data_size), Some(file_name_size)) => Ok(data_size.max(file_name_size)),
-        (Some(data_size), None) => Ok(data_size),
-        (None, Some(file_name_size)) => Ok(file_name_size),
+        (Some(data_size), Some(file_name_size)) => Ok(FileRecordSize::from_record(
+            data_size.max(file_name_size),
+            attribute_list_present,
+        )),
+        (Some(data_size), None) => Ok(FileRecordSize::from_record(
+            data_size,
+            attribute_list_present,
+        )),
+        (None, Some(file_name_size)) => Ok(FileRecordSize::from_record(
+            file_name_size,
+            attribute_list_present,
+        )),
         (None, None) => {
-            let detail = if attribute_list_present {
-                "file record size lives outside the base record"
+            if attribute_list_present {
+                Ok(FileRecordSize::metadata_fallback())
             } else {
-                "file record did not expose a usable size attribute"
-            };
-            Err(io::Error::other(detail))
+                Err(io::Error::other(
+                    "file record did not expose a usable size attribute",
+                ))
+            }
         }
     }
 }
@@ -1789,10 +1853,9 @@ mod tests {
         let end_offset = attribute_offset + attribute_length;
         record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
 
-        assert_eq!(
-            parse_file_record_size(&record).expect("file record size"),
-            1234
-        );
+        let size = parse_file_record_size(&record).expect("file record size");
+        assert_eq!(size.size_bytes, Some(1234));
+        assert!(!size.needs_metadata_fallback);
     }
 
     #[cfg(windows)]
@@ -1834,10 +1897,39 @@ mod tests {
         let end_offset = data_offset + data_length;
         record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
 
-        assert_eq!(
-            parse_file_record_size(&record).expect("file record size"),
-            200
-        );
+        let size = parse_file_record_size(&record).expect("file record size");
+        assert_eq!(size.size_bytes, Some(200));
+        assert!(size.needs_metadata_fallback);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn parse_file_record_marks_attribute_list_zero_size_for_metadata_fallback() {
+        let mut record = vec![0u8; 192];
+        record[..4].copy_from_slice(b"FILE");
+        record[20..22].copy_from_slice(&(48u16).to_le_bytes());
+
+        let attribute_list_offset = 48usize;
+        let attribute_list_length = 24usize;
+        record[attribute_list_offset..attribute_list_offset + 4]
+            .copy_from_slice(&(0x20u32).to_le_bytes());
+        record[attribute_list_offset + 4..attribute_list_offset + 8]
+            .copy_from_slice(&(attribute_list_length as u32).to_le_bytes());
+
+        let data_offset = attribute_list_offset + attribute_list_length;
+        let data_length = 64usize;
+        record[data_offset..data_offset + 4].copy_from_slice(&(0x80u32).to_le_bytes());
+        record[data_offset + 4..data_offset + 8]
+            .copy_from_slice(&(data_length as u32).to_le_bytes());
+        record[data_offset + 8] = 1;
+        record[data_offset + 48..data_offset + 56].copy_from_slice(&(0i64).to_le_bytes());
+
+        let end_offset = data_offset + data_length;
+        record[end_offset..end_offset + 4].copy_from_slice(&0xFFFF_FFFFu32.to_le_bytes());
+
+        let size = parse_file_record_size(&record).expect("file record size");
+        assert_eq!(size.size_bytes, Some(0));
+        assert!(size.needs_metadata_fallback);
     }
 
     #[cfg(windows)]
@@ -1874,10 +1966,9 @@ mod tests {
     fn parse_file_record_output_accepts_exact_requested_reference() {
         let output = build_test_file_record_output(42);
 
-        assert_eq!(
-            parse_file_record_output(42, &output).expect("matched file record output"),
-            1234
-        );
+        let size = parse_file_record_output(42, &output).expect("matched file record output");
+        assert_eq!(size.size_bytes, Some(1234));
+        assert!(!size.needs_metadata_fallback);
     }
 
     #[cfg(windows)]
@@ -1887,11 +1978,10 @@ mod tests {
         let returned = 0x0002_0000_0000_002A_u64;
         let output = build_test_file_record_output(returned);
 
-        assert_eq!(
-            parse_file_record_output(requested, &output)
-                .expect("matched file record output with different sequence number"),
-            1234
-        );
+        let size = parse_file_record_output(requested, &output)
+            .expect("matched file record output with different sequence number");
+        assert_eq!(size.size_bytes, Some(1234));
+        assert!(!size.needs_metadata_fallback);
     }
 
     #[cfg(windows)]
